@@ -42,12 +42,12 @@ Library
                       , file-embed
                       , temporary
                       , unix-compat
+                      , unordered-containers
+                      , yaml
                       , cryptohash-sha1
                       , bytestring
                       , base16-bytestring
-                      , dhall <= 1.20.1
                       , text
-                      , lens-family-core
   if impl(ghc < 8.2)
     Build-Depends:      ghc-boot
 
