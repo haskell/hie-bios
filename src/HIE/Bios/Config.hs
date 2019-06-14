@@ -1,13 +1,14 @@
-{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
-module HIE.Bios.Config where
+{-# LANGUAGE ViewPatterns #-}
+module HIE.Bios.Config(
+    readConfig,
+    Config(..),
+    CradleConfig(..)
+    ) where
 
-import Dhall
-import qualified Data.Text.IO as T
 import qualified Data.Text as T
--- import Lens.Family ( set )
--- import qualified Dhall.Context as C
+import qualified Data.HashMap.Strict as Map
+import Data.Yaml
 
 
 data CradleConfig = Cabal { component :: Maybe String }
@@ -16,33 +17,25 @@ data CradleConfig = Cabal { component :: Maybe String }
                   | Obelisk
                   | Bios { prog :: FilePath }
                   | Default
-                  deriving (Generic, Show)
+                  deriving (Show)
 
-instance Interpret CradleConfig
+instance FromJSON CradleConfig where
+    parseJSON (Object (Map.toList -> [(key, val)]))
+        | key == "cabal" = case val of
+            Object x | Just (String v) <- Map.lookup "component" x -> return $ Cabal $ Just $ T.unpack v
+            _ -> return $ Cabal Nothing
+        | key == "stack" = return Stack
+        | key == "bazel" = return Bazel
+        | key == "obelisk" = return Obelisk
+        | key == "bios", Object x <- val, Just (String v) <- Map.lookup "program" x = return $ Bios $ T.unpack v
+        | key == "default" = return Default
+    parseJSON _ = fail "Not a known configuration"
 
 data Config = Config { cradle :: CradleConfig }
-    deriving (Generic, Show)
+    deriving (Show)
 
-instance Interpret Config
-
-wrapper :: T.Text -> T.Text
-wrapper t =
-  "let CradleConfig : Type = < Cabal : { component : Optional Text } | Stack : {} | Bazel : {} | Obelisk : {} | Bios : { prog : Text} | Default : {} > in\n" <> t
+instance FromJSON Config where
+    parseJSON x = Config <$> parseJSON x
 
 readConfig :: FilePath -> IO Config
-readConfig fp = T.readFile fp >>= input auto . wrapper
-  where
-    -- ip = (set startingContext sc defaultInputSettings)
-    -- sc = C.insert "CradleConfig" (expected (auto @CradleConfig)) C.empty
-
-{-
-stringToCC :: T.Text -> CradleConfig
-stringToCC t = case t of
-                 "cabal" -> Cabal
-                 "stack" -> Stack
-                 "rules_haskell" -> Bazel
-                 "obelisk" -> Obelisk
-                 "bios"    -> Bios
-                 "default" -> Default
-                 _ -> Default
-                 -}
+readConfig fp = decodeFileThrow fp
