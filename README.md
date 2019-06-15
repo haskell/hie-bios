@@ -29,41 +29,41 @@ The user can place a `hie.dhall` file in the root of the workspace which
 describes how to setup the environment. For example, to explicitly state
 that you want to use `stack` then the configuration file would look like:
 
-```
-{ cradle = CradleConfig.Stack {=} }
+```yaml
+cradle: {stack:}
 ```
 
 If you use `cabal` then you probably need to specify which component you want
 to use.
 
-```
-{ cradle = CradleConfig.Cabal { component = Some "lib:haskell-ide-engine" } }
+```yaml
+cradle: {cabal: {component: "lib:haskell-ide-engine"}}
 ```
 
 Or you can explicitly state the program which should be used to collect
 the options by supplying the path to the program. It is interpreted
 relative to the current working directory if it is not an absolute path.
 
-```
-{ cradle = CradleConfig.Bios { prog = ".hie-bios" } }
+```yaml
+cradle: {bios: {program: ".hie-bios"}}
 ```
 
-The complete dhall configuration is described by the following type
+The complete configuration is a subset of
 
 ```
-< cradle :
-< Cabal : { component : Optional Text }
-  | Stack : {}
-  | Bazel : {}
-  | Obelisk : {}
-  | Bios : { prog : Text}
-  | Default : {} > >
+cradle:
+  cabal: {component: "optional component name"}
+  stack:
+  bazel:
+  obelisk:
+  bios: {program: "program to run"}
+  default:
 ```
 
 ## Implicit Configuration
 
 There are several built in modes which captures most common Haskell development
-scenarios. If no `hie.dhall` configuration file is found then an implicit
+scenarios. If no `hie.yaml` configuration file is found then an implicit
 configuration is searched for.
 
 ### Priority
