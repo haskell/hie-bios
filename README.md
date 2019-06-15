@@ -1,13 +1,18 @@
 # hie-bios
 
-`hie-bios` is the way which `hie` sets up a GHC API session.
+`hie-bios` is the way which
+[`hie`](https://github.com/haskell/haskell-ide-engine) sets up a GHC API session.
+
+Given a Haskell project that is managed by Stack, Cabal, or other package tools,
+`hie` needs to know the full set of flags to pass to GHC in order to build the
+project. `hie-bios` satisfies this need.
 
 Its design is motivated by the guiding principle:
 
 > It is the responsibility of the build tool to describe the environment
 >  which a package should be built in.
 
-This means that it is possible
+Using this principle, it is possible
 to easily support a wide range of tools including `cabal-install`, `stack`,
 `rules_haskell`, `hadrian` and `obelisk` without major contortions.
 `hie-bios` does not depend on the `Cabal` library nor does not
@@ -21,7 +26,7 @@ these flags and then it can set up GHC API session correctly.
 
 Futher it means that any failure to set up the API session is the responsibility
 of the build tool. It is up to them to provide the correct information if they
-want HIE to work correctly.
+want `hie` to work correctly.
 
 ## Explicit Configuration
 
