@@ -59,11 +59,12 @@ implicitConfig fp =
 
 dhallConfig :: FilePath -> MaybeT IO (CradleConfig, FilePath)
 dhallConfig fp = do
-  wdir <- findFileUpwards ("hie.dhall" ==) fp
-  cfg  <- liftIO $ readConfig (wdir </> "hie.dhall")
+  wdir <- findFileUpwards (configFileName ==) fp
+  cfg  <- liftIO $ readConfig (wdir </> configFileName)
   return (cradle cfg, wdir)
 
-
+configFileName :: FilePath
+configFileName = "hie.yaml"
 
 
 ---------------------------------------------------------------
