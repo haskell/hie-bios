@@ -35,7 +35,8 @@ data Config = Config { cradle :: CradleConfig }
     deriving (Show)
 
 instance FromJSON Config where
-    parseJSON x = Config <$> parseJSON x
+    parseJSON (Object (Map.toList -> [("cradle", x)])) = Config <$> parseJSON x
+    parseJSON _ = fail "Expected a cradle: key containing the preferences"
 
 readConfig :: FilePath -> IO Config
 readConfig fp = decodeFileThrow fp
