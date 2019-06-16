@@ -10,7 +10,7 @@ project. `hie-bios` satisfies this need.
 Its design is motivated by the guiding principle:
 
 > It is the responsibility of the build tool to describe the environment
->  which a package should be built in.
+> which a package should be built in.
 
 Using this principle, it is possible
 to easily support a wide range of tools including `cabal-install`, `stack`,
@@ -134,4 +134,3 @@ decisions about a build to the build tool.
 
 `ghcid` could be implemented using `hie-bios` using the `ghci $(./hie-bios Main.hs) Main.hs`
 idiom described earlier.
-
