@@ -22,7 +22,7 @@ import Paths_hie_bios
 ----------------------------------------------------------------
 
 progVersion :: String
-progVersion = "biosc version " ++ showVersion version ++ " compiled by GHC " ++ cProjectVersion ++ "\n"
+progVersion = "hie-bios version " ++ showVersion version ++ " compiled by GHC " ++ cProjectVersion ++ "\n"
 
 ghcOptHelp :: String
 ghcOptHelp = " [-g GHC_opt1 -g GHC_opt2 ...] "
