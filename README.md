@@ -55,13 +55,14 @@ cradle: {bios: {program: ".hie-bios"}}
 
 The complete configuration is a subset of
 
-```
+```yaml
 cradle:
   cabal: {component: "optional component name"}
   stack:
   bazel:
   obelisk:
   bios: {program: "program to run"}
+  direct: {arguments: ["list","of","ghc","arguments"]}
   default:
 ```
 

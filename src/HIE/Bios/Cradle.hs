@@ -47,6 +47,7 @@ getCradle (cc, wdir) = case cc of
                  Bazel -> rulesHaskellCradle wdir
                  Obelisk -> obeliskCradle wdir
                  Bios bios -> biosCradle wdir bios
+                 Direct xs -> directCradle wdir xs
                  Default   -> defaultCradle wdir
 
 implicitConfig :: FilePath -> MaybeT IO (CradleConfig, FilePath)
@@ -77,6 +78,16 @@ defaultCradle cur_dir =
       cradleRootDir = cur_dir
     , cradleOptsProg = CradleAction "default" (const $ return (ExitSuccess, "", []))
     }
+
+-------------------------------------------------------------------------
+
+directCradle :: FilePath -> [String] -> Cradle
+directCradle wdir args =
+  Cradle {
+      cradleRootDir = wdir
+    , cradleOptsProg = CradleAction "direct" (const $ return (ExitSuccess, "", args))
+  }
+
 
 -------------------------------------------------------------------------
 
@@ -280,6 +291,3 @@ findFile p dir = getFiles >>= filterM doesPredFileExist
   where
     getFiles = filter p <$> getDirectoryContents dir
     doesPredFileExist file = doesFileExist $ dir </> file
-
-
-
