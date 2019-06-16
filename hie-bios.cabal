@@ -44,6 +44,7 @@ Library
                       , unix-compat
                       , unordered-containers
                       , yaml
+                      , vector
                       , cryptohash-sha1
                       , bytestring
                       , base16-bytestring

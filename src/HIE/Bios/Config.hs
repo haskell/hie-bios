@@ -7,6 +7,7 @@ module HIE.Bios.Config(
     ) where
 
 import qualified Data.Text as T
+import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as Map
 import Data.Yaml
 
@@ -16,6 +17,7 @@ data CradleConfig = Cabal { component :: Maybe String }
                   | Bazel
                   | Obelisk
                   | Bios { prog :: FilePath }
+                  | Direct { arguments :: [String] }
                   | Default
                   deriving (Show)
 
@@ -28,6 +30,7 @@ instance FromJSON CradleConfig where
         | key == "bazel" = return Bazel
         | key == "obelisk" = return Obelisk
         | key == "bios", Object x <- val, Just (String v) <- Map.lookup "program" x = return $ Bios $ T.unpack v
+        | key == "direct", Object x <- val, Just (Array v) <- Map.lookup "arguments" x = return $ Direct [T.unpack s | String s <- V.toList v]
         | key == "default" = return Default
     parseJSON _ = fail "Not a known configuration"
 
