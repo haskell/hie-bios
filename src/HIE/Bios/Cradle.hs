@@ -127,7 +127,7 @@ cabalAction work_dir mc _fp = do
   setFileMode wrapper_fp accessModes
   check <- readFile wrapper_fp
   traceM check
-  let cab_args = ["v2-repl", "-v0", "-w", wrapper_fp]
+  let cab_args = ["v2-repl", "-v0", "--with-compiler", wrapper_fp]
                   ++ [component_name | Just component_name <- [mc]]
   (ex, args, stde) <-
       withCurrentDirectory work_dir (readProcessWithExitCode "cabal" cab_args [])
