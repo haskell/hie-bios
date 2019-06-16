@@ -15,6 +15,7 @@ import Control.Monad.Trans.Maybe
 import System.FilePath
 import Control.Monad
 import Control.Monad.IO.Class
+import System.Info.Extra
 import Control.Applicative ((<|>))
 import Data.FileEmbed
 import System.IO.Temp
@@ -115,9 +116,13 @@ cabalCradle wdir mc = do
 cabalWrapper :: String
 cabalWrapper = $(embedStringFile "wrappers/cabal")
 
+cabalWrapperBat :: String
+cabalWrapperBat = $(embedStringFile "wrappers/cabal.bat")
+
 cabalAction :: FilePath -> Maybe String -> FilePath -> IO (ExitCode, String, [String])
 cabalAction work_dir mc _fp = do
-  wrapper_fp <- writeSystemTempFile "wrapper" cabalWrapper
+  wrapper_fp <- writeSystemTempFile "wrapper.bat" $
+    if isWindows then cabalWrapperBat else cabalWrapper
   -- TODO: This isn't portable for windows
   setFileMode wrapper_fp accessModes
   check <- readFile wrapper_fp
