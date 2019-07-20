@@ -50,6 +50,7 @@ Library
                       , cryptohash-sha1
                       , bytestring
                       , base16-bytestring
+                      , time
                       , text
   if impl(ghc < 8.2)
     Build-Depends:      ghc-boot

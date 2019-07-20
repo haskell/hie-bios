@@ -10,6 +10,7 @@ import qualified GhcMake as G
 import qualified HscMain as G
 import HscTypes
 import Outputable
+import Control.Monad.IO.Class
 
 import Data.IORef
 
@@ -23,6 +24,8 @@ import HscMain
 import Debug.Trace
 import Data.List
 
+import Data.Time.Clock
+
 #if __GLASGOW_HASKELL__ < 806
 pprTraceM x s = pprTrace x s (return ())
 #endif
@@ -35,11 +38,12 @@ loadFileWithMessage :: GhcMonad m
 loadFileWithMessage msg file = do
   dir <- liftIO $ getCurrentDirectory
   pprTraceM "loadFile:2" (text dir)
-  withDynFlags (setWarnTypedHoles . setDeferTypeErrors . setNoWaringFlags) $ do
+  withDynFlags (setWarnTypedHoles . setNoWaringFlags) $ do
 
     df <- getSessionDynFlags
     pprTraceM "loadFile:3" (ppr $ optLevel df)
-    (_, tcs) <- collectASTs (setTargetFilesWithMessage msg [file])
+    (_, tcs) <- collectASTs $ do
+      (setTargetFilesWithMessage msg [file])
     pprTraceM "loaded" (text (fst file) $$ text (snd file))
     let get_fp = ml_hs_file . ms_location . pm_mod_summary . tm_parsed_module
     traceShowM ("tms", (map get_fp tcs))
@@ -72,28 +76,51 @@ setWarnTypedHoles dflag = wopt_set dflag Opt_WarnTypedHoles
 setTargetFiles :: GhcMonad m => [(FilePath, FilePath)] -> m ()
 setTargetFiles = setTargetFilesWithMessage (Just G.batchMsg)
 
+msTargetIs :: ModSummary -> Target -> Bool
+msTargetIs ms t = case targetId t of
+  TargetModule m -> moduleName (ms_mod ms) == m
+  TargetFile f _ -> ml_hs_file (ms_location ms) == Just f
+
+-- | We bump the times for any ModSummary's that are Targets, to
+-- fool the recompilation checker so that we can get the typechecked modules
+updateTime :: MonadIO m => [Target] -> ModuleGraph -> m ModuleGraph
+updateTime ts graph = liftIO $ do
+  cur_time <- getCurrentTime
+  let go ms
+        | any (msTargetIs ms) ts = ms {ms_hs_date = cur_time}
+        | otherwise = ms
+  pure $ mapMG go graph
+
 -- | Set the files as targets and load them.
 setTargetFilesWithMessage :: (GhcMonad m)  => Maybe G.Messager -> [(FilePath, FilePath)] -> m ()
 setTargetFilesWithMessage msg files = do
     targets <- forM files guessTargetMapped
-    pprTrace "setTargets" (vcat (map ppr files) $$ ppr targets) (return ())
+    pprTrace "setTargets" (vcat (map (\(a,b) -> parens $ text a <+> text "," <+> text b) files) $$ ppr targets) (return ())
     G.setTargets (map (\t -> t { G.targetAllowObjCode = False }) targets)
-    mod_graph <- depanal [] False
+    mod_graph <- updateTime targets =<< depanal [] False
+    pprTrace "modGraph" (ppr $ mgModSummaries mod_graph) (return ())
+    pprTrace "modGraph" (ppr $ map ms_location $ mgModSummaries mod_graph) (return ())
+    dflags1 <- getSessionDynFlags
+    case hscFrontendHook (hooks dflags1) of Just _ -> pure ()
+    pprTrace "hidir" (ppr $ hiDir dflags1) (return ())
     void $ G.load' LoadAllTargets msg mod_graph
 
 collectASTs :: (GhcMonad m) => m a -> m (a, [TypecheckedModule])
 collectASTs action = do
+  traceShowM "Here***"
   dflags0 <- getSessionDynFlags
   ref1 <- liftIO $ newIORef []
   let dflags1 = dflags0 { hooks = (hooks dflags0)
-                          { hscFrontendHook = Just (astHook ref1) } }
-  void $ setSessionDynFlags dflags1
+                          { hscFrontendHook = traceShow "Use hook" $ Just (astHook ref1) }
+                        }
+  void $ setSessionDynFlags $ dflags1 -- gopt_set dflags1 Opt_ForceRecomp
   res <- action
   tcs <- liftIO $ readIORef ref1
   return (res, tcs)
 
 astHook :: IORef [TypecheckedModule] -> ModSummary -> Hsc FrontendResult
 astHook tc_ref ms = ghcInHsc $ do
+  traceShowM "In Hook###########################"
   p <- G.parseModule ms
   tcm <- G.typecheckModule p
   let tcg_env = fst (tm_internals_ tcm)
@@ -105,8 +132,6 @@ ghcInHsc gm = do
   hsc_session <- getHscEnv
   session <- liftIO $ newIORef hsc_session
   liftIO $ reflectGhc gm (Session session)
-
-
 
 
 guessTargetMapped :: (GhcMonad m) => (FilePath, FilePath) -> m Target
