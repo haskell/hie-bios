@@ -42,7 +42,7 @@ check :: (GhcMonad m)
       => Options
       -> [FilePath]  -- ^ The target files.
       -> m (Either String String)
-check opt fileNames = withLogger opt setAllWaringFlags $ setTargetFiles (map dup fileNames)
+check opt fileNames = withLogger opt setAllWarningFlags $ setTargetFiles (map dup fileNames)
 
 dup :: a -> (a, a)
 dup x = (x, x)
@@ -69,7 +69,7 @@ expandTemplate opt cradle files = withGHC sessionName $ do
 expand :: Options
       -> [FilePath]  -- ^ The target files.
       -> Ghc (Either String String)
-expand opt fileNames = withLogger opt (setDumpSplices . setNoWaringFlags) $ setTargetFiles (map dup fileNames)
+expand opt fileNames = withLogger opt (setDumpSplices . setNoWarningFlags) $ setTargetFiles (map dup fileNames)
 
 setDumpSplices :: DynFlags -> DynFlags
 setDumpSplices dflag = dopt_set dflag Opt_D_dump_splices
