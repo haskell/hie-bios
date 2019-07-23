@@ -10,8 +10,9 @@ module HIE.Bios.GHCApi (
   , getSystemLibDir
   , withDynFlags
   , withCmdFlags
-  , setNoWaringFlags
-  , setAllWaringFlags
+  , setNoWarningFlags
+  , setAllWarningFlags
+  , setDeferTypeErrors
   , CradleError(..)
   ) where
 
@@ -263,13 +264,21 @@ withCmdFlags flags body = G.gbracket setup teardown (\_ -> body)
 
 ----------------------------------------------------------------
 
+setDeferTypeErrors :: DynFlags -> DynFlags
+setDeferTypeErrors
+  = foldDFlags (flip wopt_set) [Opt_WarnTypedHoles, Opt_WarnDeferredTypeErrors, Opt_WarnDeferredOutOfScopeVariables]
+  . foldDFlags setGeneralFlag' [Opt_DeferTypedHoles, Opt_DeferTypeErrors, Opt_DeferOutOfScopeVariables]
+
+foldDFlags :: (a -> DynFlags -> DynFlags) -> [a] -> DynFlags -> DynFlags
+foldDFlags f xs x = foldr f x xs
+
 -- | Set 'DynFlags' equivalent to "-w:".
-setNoWaringFlags :: DynFlags -> DynFlags
-setNoWaringFlags df = df { warningFlags = Gap.emptyWarnFlags}
+setNoWarningFlags :: DynFlags -> DynFlags
+setNoWarningFlags df = df { warningFlags = Gap.emptyWarnFlags}
 
 -- | Set 'DynFlags' equivalent to "-Wall".
-setAllWaringFlags :: DynFlags -> DynFlags
-setAllWaringFlags df = df { warningFlags = allWarningFlags }
+setAllWarningFlags :: DynFlags -> DynFlags
+setAllWarningFlags df = df { warningFlags = allWarningFlags }
 
 disableOptimisation :: DynFlags -> DynFlags
 disableOptimisation df = updOptLevel 0 df
