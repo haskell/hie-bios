@@ -130,6 +130,14 @@ cabalWrapper = $(embedStringFile "wrappers/cabal")
 cabalWrapperBat :: String
 cabalWrapperBat = $(embedStringFile "wrappers/cabal.bat")
 
+processCabalWrapperArgs :: String -> Maybe [String]
+processCabalWrapperArgs args =
+    case lines args of
+        [dir, ghc_args] ->
+            let final_args = removeInteractive $ map (fixImportDirs dir) (words ghc_args)
+            in trace dir $ Just final_args
+        _ -> Nothing
+
 cabalAction :: FilePath -> Maybe String -> FilePath -> IO (ExitCode, String, [String])
 cabalAction work_dir mc _fp = do
   wrapper_fp <- writeSystemTempFile "wrapper.bat" $
@@ -142,12 +150,9 @@ cabalAction work_dir mc _fp = do
                   ++ [component_name | Just component_name <- [mc]]
   (ex, args, stde) <-
       withCurrentDirectory work_dir (readProcessWithExitCode "cabal" cab_args [])
-  case lines args of
-    [dir, ghc_args] -> do
-      let final_args = removeInteractive $ map (fixImportDirs dir) (words ghc_args)
-      traceM dir
-      return (ex, stde, final_args)
-    _ -> error (show (ex, args, stde))
+  case processCabalWrapperArgs args of
+      Nothing -> error (show (ex, stde, args))
+      Just final_args -> pure (ex, stde, final_args)
 
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
@@ -194,8 +199,9 @@ stackAction work_dir fp = do
       withCurrentDirectory work_dir (readProcessWithExitCode "stack" ["path", "--ghc-package-path"] [])
   let split_pkgs = splitSearchPath (init pkg_args)
       pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
-      ghc_args = words args ++ pkg_ghc_args
-  return (combineExitCodes [ex1, ex2], stde ++ stdr, ghc_args)
+  case processCabalWrapperArgs args of
+      Nothing -> error (show (ex1, stde, args))
+      Just ghc_args -> return (combineExitCodes [ex1, ex2], stde ++ stdr, ghc_args ++ pkg_ghc_args)
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess
