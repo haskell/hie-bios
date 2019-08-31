@@ -11,7 +11,12 @@ import HscTypes
 import Outputable
 import Control.Monad.IO.Class
 
+#if __GLASGOW_HASKELL__ >= 806
+import DynamicLoading
+#endif
+
 import Data.IORef
+import Data.Traversable
 
 import System.Directory
 import Hooks
@@ -88,11 +93,22 @@ setTargetFilesWithMessage msg files = do
     pprTrace "setTargets" (vcat (map (\(a,b) -> parens $ text a <+> text "," <+> text b) files) $$ ppr targets) (return ())
     G.setTargets (map (\t -> t { G.targetAllowObjCode = False }) targets)
     mod_graph <- updateTime targets =<< depanal [] False
-    pprTrace "modGraph" (ppr $ mgModSummaries mod_graph) (return ())
-    pprTrace "modGraph" (ppr $ map ms_location $ mgModSummaries mod_graph) (return ())
+
+    summaries <- for (mgModSummaries mod_graph) $ \mod_summary -> do
+#if __GLASGOW_HASKELL__ >= 806
+      hscEnv <- getSession
+      dynFlags <- liftIO $ initializePlugins hscEnv $ ms_hspp_opts mod_summary
+#else
+      dynFlags <- return dflags
+#endif
+      pure $ mod_summary { GHC.ms_hspp_opts = dynFlags }
+
+    let mod_graph' = mkModuleGraph summaries
+    pprTrace "modGraph" (ppr $ mgModSummaries mod_graph') (return ())
+    pprTrace "modGraph" (ppr $ map ms_location $ mgModSummaries mod_graph') (return ())
     dflags1 <- getSessionDynFlags
     pprTrace "hidir" (ppr $ hiDir dflags1) (return ())
-    void $ G.load' LoadAllTargets msg mod_graph
+    void $ G.load' LoadAllTargets msg mod_graph'
 
 collectASTs :: (GhcMonad m) => m a -> m (a, [TypecheckedModule])
 collectASTs action = do
