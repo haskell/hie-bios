@@ -35,7 +35,7 @@ describes how to setup the environment. For example, to explicitly state
 that you want to use `stack` then the configuration file would look like:
 
 ```yaml
-cradle: {stack:}
+cradle: {stack}
 ```
 
 If you use `cabal` then you probably need to specify which component you want
