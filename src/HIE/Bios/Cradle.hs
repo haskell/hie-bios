@@ -127,8 +127,8 @@ cabalCradle wdir mc = do
 cabalWrapper :: String
 cabalWrapper = $(embedStringFile "wrappers/cabal")
 
-cabalWrapperBat :: String
-cabalWrapperBat = $(embedStringFile "wrappers/cabal.bat")
+cabalWrapperHs :: String
+cabalWrapperHs = $(embedStringFile "wrappers/cabal.hs")
 
 processCabalWrapperArgs :: String -> Maybe [String]
 processCabalWrapperArgs args =
@@ -138,14 +138,24 @@ processCabalWrapperArgs args =
             in trace dir $ Just final_args
         _ -> Nothing
 
+-- generate a fake GHC that can be passed to cabal
+-- when run with --interactive, it will print out its
+-- command-line arguments and exit
 getCabalWrapperTool :: IO FilePath
 getCabalWrapperTool = do
-  wrapper_fp <- writeSystemTempFile "wrapper.bat" $
-    if isWindows then cabalWrapperBat else cabalWrapper
+  wrapper_fp <-
+    if isWindows
+      then do
+        wrapper_hs <- writeSystemTempFile "wrapper.hs" cabalWrapperHs
+        -- the initial contents will be overwritten immediately after by ghc
+        wrapper_fp <- writeSystemTempFile "wrapper.exe" ""
+        callProcess "ghc" ["-o", wrapper_fp, wrapper_hs]
+        return wrapper_fp
+      else do
+        writeSystemTempFile "wrapper.bat" cabalWrapper
   -- TODO: This isn't portable for windows
   setFileMode wrapper_fp accessModes
-  check <- readFile wrapper_fp
-  traceM check
+  _check <- readFile wrapper_fp
   return wrapper_fp
 
 cabalAction :: FilePath -> Maybe String -> FilePath -> IO (ExitCode, String, [String])
