@@ -20,10 +20,12 @@ import CoreMonad (liftIO)
 import Exception (ghandle, SomeException(..), ExceptionMonad(..), throwIO, Exception(..))
 import GHC (Ghc, DynFlags(..), GhcLink(..), HscTarget(..), LoadHowMuch(..), GhcMonad, GhcT)
 import qualified GHC as G
+import qualified DriverPhases as G
 import qualified Outputable as G
 import qualified MonadUtils as G
 import qualified HscMain as G
 import qualified GhcMake as G
+import qualified Util as G
 import DynFlags
 
 import Control.Monad (void, when)
@@ -214,8 +216,11 @@ addCmdOpts cmdOpts df1 = do
           cur_dir = '.' : [pathSeparator]
           nfp = normalise fp
     normal_fileish_paths = map (normalise_hyp . G.unLoc) leftovers
-  ts <- mapM (flip G.guessTarget Nothing) normal_fileish_paths
-  return (df2, ts)
+  let
+   (srcs, objs) = partition_args normal_fileish_paths [] []
+   df3 = df2 { ldInputs = map (FileOption "") objs ++ ldInputs df2 }
+  ts <- mapM (uncurry G.guessTarget) srcs
+  return (df3, ts)
     -- TODO: Need to handle these as well
     -- Ideally it requires refactoring to work in GHCi monad rather than
     -- Ghc monad and then can just use newDynFlags.
@@ -261,6 +266,48 @@ withCmdFlags flags body = G.gbracket setup teardown (\_ -> body)
         void $ G.setSessionDynFlags dflag
         return dflag
     teardown = void . G.setSessionDynFlags
+
+-- partition_args, along with some of the other code in this file,
+-- was copied from ghc/Main.hs
+-- -----------------------------------------------------------------------------
+-- Splitting arguments into source files and object files.  This is where we
+-- interpret the -x <suffix> option, and attach a (Maybe Phase) to each source
+-- file indicating the phase specified by the -x option in force, if any.
+partition_args :: [String] -> [(String, Maybe G.Phase)] -> [String]
+               -> ([(String, Maybe G.Phase)], [String])
+partition_args [] srcs objs = (reverse srcs, reverse objs)
+partition_args ("-x":suff:args) srcs objs
+  | "none" <- suff      = partition_args args srcs objs
+  | G.StopLn <- phase     = partition_args args srcs (slurp ++ objs)
+  | otherwise           = partition_args rest (these_srcs ++ srcs) objs
+        where phase = G.startPhase suff
+              (slurp,rest) = break (== "-x") args
+              these_srcs = zip slurp (repeat (Just phase))
+partition_args (arg:args) srcs objs
+  | looks_like_an_input arg = partition_args args ((arg,Nothing):srcs) objs
+  | otherwise               = partition_args args srcs (arg:objs)
+
+    {-
+      We split out the object files (.o, .dll) and add them
+      to ldInputs for use by the linker.
+      The following things should be considered compilation manager inputs:
+       - haskell source files (strings ending in .hs, .lhs or other
+         haskellish extension),
+       - module names (not forgetting hierarchical module names),
+       - things beginning with '-' are flags that were not recognised by
+         the flag parser, and we want them to generate errors later in
+         checkOptions, so we class them as source files (#5921)
+       - and finally we consider everything without an extension to be
+         a comp manager input, as shorthand for a .hs or .lhs filename.
+      Everything else is considered to be a linker object, and passed
+      straight through to the linker.
+    -}
+looks_like_an_input :: String -> Bool
+looks_like_an_input m =  G.isSourceFilename m
+                      || G.looksLikeModuleName m
+                      || "-" `isPrefixOf` m
+                      || not (hasExtension m)
+
 
 ----------------------------------------------------------------
 
