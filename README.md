@@ -30,7 +30,7 @@ want `hie` to work correctly.
 
 ## Explicit Configuration
 
-The user can place a `hie.dhall` file in the root of the workspace which
+The user can place a `hie.yaml` file in the root of the workspace which
 describes how to setup the environment. For example, to explicitly state
 that you want to use `stack` then the configuration file would look like:
 
@@ -90,7 +90,7 @@ The workspace root is the first folder containing a `cabal.project` file.
 The arguments are collected by running `cabal v2-repl`.
 
 If `cabal v2-repl` fails, then the user needs to configure the correct
-target to use by writing a `hie.dhall` file.
+target to use by writing a `hie.yaml` file.
 
 ### `rules_haskell`
 
