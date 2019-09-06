@@ -25,6 +25,7 @@ import Data.List
 import Data.Time.Clock
 
 #if __GLASGOW_HASKELL__ < 806
+pprTraceM :: Monad m => String -> SDoc -> m ()
 pprTraceM x s = pprTrace x s (return ())
 #endif
 

@@ -152,6 +152,9 @@ initSessionWithMessage msg CompilerOptions {..} = do
       $ setLinkerOptions df'
       )
     G.setLogAction (\_df _wr _s _ss _pp _m -> return ())
+#if __GLASGOW_HASKELL__ < 806
+        (\_df -> return ())
+#endif
     G.setTargets targets
     -- Get the module graph using the function `getModuleGraph`
     mod_graph <- G.depanal [] True
