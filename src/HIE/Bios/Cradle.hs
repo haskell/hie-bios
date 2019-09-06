@@ -138,14 +138,19 @@ processCabalWrapperArgs args =
             in trace dir $ Just final_args
         _ -> Nothing
 
-cabalAction :: FilePath -> Maybe String -> FilePath -> IO (ExitCode, String, [String])
-cabalAction work_dir mc _fp = do
+getCabalWrapperTool :: IO FilePath
+getCabalWrapperTool = do
   wrapper_fp <- writeSystemTempFile "wrapper.bat" $
     if isWindows then cabalWrapperBat else cabalWrapper
   -- TODO: This isn't portable for windows
   setFileMode wrapper_fp accessModes
   check <- readFile wrapper_fp
   traceM check
+  return wrapper_fp
+
+cabalAction :: FilePath -> Maybe String -> FilePath -> IO (ExitCode, String, [String])
+cabalAction work_dir mc _fp = do
+  wrapper_fp <- getCabalWrapperTool
   let cab_args = ["v2-repl", "-v0", "--with-compiler", wrapper_fp]
                   ++ [component_name | Just component_name <- [mc]]
   (ex, args, stde) <-
