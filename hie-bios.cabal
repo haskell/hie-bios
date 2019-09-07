@@ -14,7 +14,7 @@ Build-Type:             Simple
 Extra-Source-Files:     ChangeLog
                         wrappers/bazel
                         wrappers/cabal
-                        wrappers/cabal.bat
+                        wrappers/cabal.hs
 
 Library
   Default-Language:     Haskell2010
