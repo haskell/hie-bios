@@ -21,7 +21,6 @@ import Data.FileEmbed
 import System.IO.Temp
 import Data.List
 
-import Debug.Trace
 import System.PosixCompat.Files
 
 ----------------------------------------------------------------
@@ -118,7 +117,7 @@ biosAction _wdir bios fp = do
 -- yet.
 
 cabalCradle :: FilePath -> Maybe String -> Cradle
-cabalCradle wdir mc = do
+cabalCradle wdir mc =
   Cradle {
       cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction "cabal" (cabalAction wdir mc)
@@ -135,7 +134,7 @@ processCabalWrapperArgs args =
     case lines args of
         [dir, ghc_args] ->
             let final_args = removeInteractive $ map (fixImportDirs dir) (words ghc_args)
-            in trace dir $ Just final_args
+            in Just final_args
         _ -> Nothing
 
 -- generate a fake GHC that can be passed to cabal
@@ -205,8 +204,9 @@ stackAction work_dir fp = do
   wrapper_fp <- writeSystemTempFile "wrapper" stackWrapper
   -- TODO: This isn't portable for windows
   setFileMode wrapper_fp accessModes
-  check <- readFile wrapper_fp
-  traceM check
+  -- TODO: this is for debugging
+  -- check <- readFile wrapper_fp
+  -- traceM check
   (ex1, args, stde) <-
       withCurrentDirectory work_dir (readProcessWithExitCode "stack" ["repl", "--silent", "--no-load", "--with-ghc", wrapper_fp, fp ] [])
   (ex2, pkg_args, stdr) <-
@@ -255,10 +255,7 @@ rulesHaskellAction work_dir fp = do
   wrapper_fp <- writeSystemTempFile "wrapper" bazelCommand
   -- TODO: This isn't portable for windows
   setFileMode wrapper_fp accessModes
-  check <- readFile wrapper_fp
-  traceM check
   let rel_path = makeRelative work_dir fp
-  traceM rel_path
   (ex, args, stde) <-
       withCurrentDirectory work_dir (readProcessWithExitCode wrapper_fp [rel_path] [])
   let args'  = filter (/= '\'') args

@@ -6,12 +6,14 @@ import Config (cProjectVersion)
 
 import Control.Exception (Exception, Handler(..), ErrorCall(..))
 import qualified Control.Exception as E
+import           Control.Monad                  ( forM )
 import Data.Typeable (Typeable)
 import Data.Version (showVersion)
 import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 import System.IO (hPutStr, hPutStrLn, stdout, stderr, hSetEncoding, utf8)
+import System.FilePath( (</>) )
 
 import HIE.Bios
 import HIE.Bios.Types
@@ -31,6 +33,7 @@ usage :: String
 usage =    progVersion
         ++ "Usage:\n"
         ++ "\t biosc check" ++ ghcOptHelp ++ "<HaskellFiles...>\n"
+        ++ "\t biosc flags <HaskellFiles...>\n"
         ++ "\t biosc version\n"
         ++ "\t biosc help\n"
 
@@ -52,7 +55,7 @@ main = flip E.catches handlers $ do
     args <- getArgs
     cradle <- getCurrentDirectory >>= \cwd ->
         -- find cradle does a takeDirectory on the argument, so make it into a file
-        findCradle $ cwd ++ "/File.hs"
+        findCradle $ cwd </> "File.hs"
     let cmdArg0 = args !. 0
         remainingArgs = tail args
         opt = defaultOptions
@@ -62,6 +65,14 @@ main = flip E.catches handlers $ do
       "debug"   -> debugInfo opt cradle
       "root"    -> rootInfo opt cradle
       "version" -> return progVersion
+      "flags"   -> do
+        res <- forM remainingArgs $ \fp -> do
+                res <- getCompilerOptions fp cradle
+                case res of
+                    Left err -> return $ "Failed to show flags for: " ++ show err
+                    Right opts -> return $ "CompilerOptions: " ++ show (ghcOptions opts)
+        return (unlines res)
+
       cmd       -> E.throw (NoSuchCommand cmd)
     putStr res
   where

@@ -1,5 +1,11 @@
-module HIE.Bios.Flags where
+module HIE.Bios.Flags (getCompilerOptions, CradleError) where
 
+import Control.Monad.IO.Class
+import Control.Exception ( Exception )
+
+import System.Exit (ExitCode(..))
+
+import HIE.Bios.Types (Cradle, CompilerOptions(..), getOptions, cradleOptsProg)
 
 -- | Initialize the 'DynFlags' relating to the compilation of a single
 -- file or GHC session according to the 'Cradle' and 'Options'
@@ -7,22 +13,17 @@ module HIE.Bios.Flags where
 getCompilerOptions ::
     FilePath -- The file we are loading it because of
     -> Cradle
-    -> IO CompilerOptions
+    -> IO (Either CradleError CompilerOptions)
 getCompilerOptions fp cradle = do
   (ex, err, ghcOpts) <- liftIO $ getOptions (cradleOptsProg cradle) fp
-  G.pprTrace "res" (G.text (show (ex, err, ghcOpts, fp))) (return ())
   case ex of
-    ExitFailure _ -> throwCradleError err
-    _ -> return ()
-  let compOpts = CompilerOptions ghcOpts
-  liftIO $ hPrint stderr ghcOpts
-  return compOpts
+    ExitFailure _ -> return $ Left (CradleError err)
+    _ -> do
+        let compOpts = CompilerOptions ghcOpts
+        return $ Right compOpts
 
 data CradleError = CradleError String deriving (Show)
 
 instance Exception CradleError where
-
-throwCradleError :: GhcMonad m => String -> m ()
-throwCradleError = liftIO . throwIO . CradleError
 
 ----------------------------------------------------------------
