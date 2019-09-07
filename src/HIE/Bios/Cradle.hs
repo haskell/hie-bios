@@ -152,8 +152,7 @@ getCabalWrapperTool = do
         callProcess "ghc" ["-o", wrapper_fp, wrapper_hs]
         return wrapper_fp
       else do
-        writeSystemTempFile "wrapper.bat" cabalWrapper
-  -- TODO: This isn't portable for windows
+        writeSystemTempFile "bios-wrapper" cabalWrapper
   setFileMode wrapper_fp accessModes
   _check <- readFile wrapper_fp
   return wrapper_fp
