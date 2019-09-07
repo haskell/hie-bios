@@ -5,18 +5,14 @@ module HIE.Bios (
     Cradle(..)
   , findCradle
   , defaultCradle
-  , initializeFlagsWithCradle
-  , initializeFlagsWithCradleWithMessage
-  -- * Load a module into a session
-  , loadFile
-  , loadFileWithMessage
-  -- * Eliminate a session to IO
-  , withGhcT
+  -- * Compiler Options
+  , CompilerOptions(..)
   , getCompilerOptions
+  -- * Init session
+  , initSession
   ) where
 
 import HIE.Bios.Cradle
 import HIE.Bios.Types
 import HIE.Bios.Flags
-import HIE.Bios.Ghc.Api
-import HIE.Bios.Ghc.Load
+import HIE.Bios.Environment
