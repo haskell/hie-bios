@@ -149,7 +149,9 @@ getCabalWrapperTool = do
         wrapper_hs <- writeSystemTempFile "wrapper.hs" cabalWrapperHs
         -- the initial contents will be overwritten immediately after by ghc
         wrapper_fp <- writeSystemTempFile "wrapper.exe" ""
-        callProcess "ghc" ["-o", wrapper_fp, wrapper_hs]
+        let ghc = (proc "ghc" ["-o", wrapper_fp, wrapper_hs])
+                    { cwd = Just (takeDirectory wrapper_hs) }
+        readCreateProcess ghc "" >>= putStr
         return wrapper_fp
       else do
         writeSystemTempFile "bios-wrapper" cabalWrapper
