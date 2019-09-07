@@ -1,2 +1,8 @@
-2019-10-06 - 0.1.0
+2019-09-07 - 0.1.1
+
+	* Compat with GHC 8.4
+	* Fix long paths issue on windows
+	* Handle projects with .o files
+
+2019-09-06 - 0.1.0
 	* First release

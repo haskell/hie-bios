@@ -1,5 +1,5 @@
 Name:                   hie-bios
-Version:                0.1.0
+Version:                0.1.1
 Author:                 Matthew Pickering <matthewtpickering@gmail.com>
 Maintainer:             Matthew Pickering <matthewtpickering@gmail.com>
 License:                BSD3
@@ -43,7 +43,7 @@ Library
                         filepath             >= 1.4.2 && < 1.5,
                         time                 >= 1.8.0 && < 1.9,
                         extra                >= 1.6.18 && < 1.7,
-                        process              >= 1.6.3 && < 1.7,
+                        process              >= 1.6.1 && < 1.7,
                         file-embed           >= 0.0.11 && < 0.1,
                         ghc                  >= 8.4.1 && < 8.7,
                         transformers         >= 0.5.5 && < 0.6,
