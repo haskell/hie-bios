@@ -100,13 +100,7 @@ initializeFlagsWithCradleWithMessage ::
         -> Cradle
         -> m ()
 initializeFlagsWithCradleWithMessage msg fp cradle = do
-      (ex, err, ghcOpts) <- liftIO $ getOptions (cradleOptsProg cradle) fp
-      G.pprTrace "res" (G.text (show (ex, err, ghcOpts, fp))) (return ())
-      case ex of
-        ExitFailure _ -> throwCradleError err
-        _ -> return ()
-      let compOpts = CompilerOptions ghcOpts
-      liftIO $ hPrint stderr ghcOpts
+      compOpts <- getCompilerOptions fp cradle
       initSessionWithMessage msg compOpts
 
 data CradleError = CradleError String deriving (Show)

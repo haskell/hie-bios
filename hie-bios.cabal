@@ -24,6 +24,7 @@ Library
                         HIE.Bios.Config
                         HIE.Bios.Cradle
                         HIE.Bios.Debug
+                        HIE.Bios.Flags
                         HIE.Bios.Types
                         HIE.Bios.Ghc.Api
                         HIE.Bios.Ghc.Check
