@@ -15,7 +15,7 @@ import System.IO (hPutStr, hPutStrLn, stdout, stderr, hSetEncoding, utf8)
 
 import HIE.Bios
 import HIE.Bios.Types
-import HIE.Bios.Check
+import HIE.Bios.Ghc.Check
 import HIE.Bios.Debug
 import Paths_hie_bios
 

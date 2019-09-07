@@ -1,6 +1,6 @@
 -- | The Happy Haskell Programming library in low level.
 
-module HIE.Bios.Internal (
+module HIE.Bios.Ghc.Internal (
   -- * Types
   CompilerOptions(..)
   -- * IO
@@ -13,6 +13,6 @@ module HIE.Bios.Internal (
   , setAllWaringFlags
   ) where
 
-import HIE.Bios.GHCApi
-import HIE.Bios.Logger
+import HIE.Bios.Ghc.Api
+import HIE.Bios.Ghc.Logger
 import HIE.Bios.Types
