@@ -160,7 +160,7 @@ getCabalWrapperTool = do
 cabalAction :: FilePath -> Maybe String -> FilePath -> IO (ExitCode, String, [String])
 cabalAction work_dir mc _fp = do
   wrapper_fp <- getCabalWrapperTool
-  let cab_args = ["v2-repl", "-v0", "--with-compiler", wrapper_fp]
+  let cab_args = ["v2-repl", "-v0", "--disable-documentation", "--with-compiler", wrapper_fp]
                   ++ [component_name | Just component_name <- [mc]]
   (ex, args, stde) <-
       withCurrentDirectory work_dir (readProcessWithExitCode "cabal" cab_args [])
