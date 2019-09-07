@@ -12,9 +12,11 @@ module HIE.Bios (
   , loadFileWithMessage
   -- * Eliminate a session to IO
   , withGhcT
+  , getCompilerOptions
   ) where
 
 import HIE.Bios.Cradle
 import HIE.Bios.Types
+import HIE.Bios.Flags
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Load

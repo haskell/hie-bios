@@ -4,11 +4,6 @@
 
 module HIE.Bios.Types where
 
-import qualified Exception as GE
-import GHC (Ghc)
-
-import Control.Exception (IOException)
-import Control.Applicative (Alternative(..))
 import System.Exit
 import System.IO
 
@@ -172,7 +167,3 @@ instance Show CradleAction where
 data CompilerOptions = CompilerOptions {
     ghcOptions  :: [String]  -- ^ Command line options
   } deriving (Eq, Show)
-
-instance Alternative Ghc where
-    x <|> y = x `GE.gcatch` (\(_ :: IOException) -> y)
-    empty = undefined
