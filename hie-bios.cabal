@@ -14,24 +14,25 @@ Build-Type:             Simple
 Extra-Source-Files:     ChangeLog
                         wrappers/bazel
                         wrappers/cabal
-                        wrappers/cabal.bat
+                        wrappers/cabal.hs
 
 Library
   Default-Language:     Haskell2010
   GHC-Options:          -Wall
   HS-Source-Dirs:       src
   Exposed-Modules:      HIE.Bios
-                        HIE.Bios.Check
+                        HIE.Bios.Config
                         HIE.Bios.Cradle
                         HIE.Bios.Debug
-                        HIE.Bios.GHCApi
-                        HIE.Bios.Gap
-                        HIE.Bios.Doc
-                        HIE.Bios.Load
-                        HIE.Bios.Logger
                         HIE.Bios.Types
-                        HIE.Bios.Things
-                        HIE.Bios.Config
+                        HIE.Bios.Ghc.Api
+                        HIE.Bios.Ghc.Check
+                        HIE.Bios.Ghc.Doc
+                        HIE.Bios.Ghc.Gap
+                        HIE.Bios.Ghc.Load
+                        HIE.Bios.Ghc.Logger
+                        HIE.Bios.Ghc.Things
+                        HIE.Bios.Ghc.Types
   Build-Depends:
                         base >= 4.8 && < 5,
                         base16-bytestring    >= 0.1.1 && < 0.2,

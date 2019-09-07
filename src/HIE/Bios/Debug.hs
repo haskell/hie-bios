@@ -1,10 +1,10 @@
 module HIE.Bios.Debug (debugInfo, rootInfo) where
 
-import CoreMonad (liftIO)
+import Control.Monad.IO.Class (liftIO)
 
 import Data.Maybe (fromMaybe)
 
-import HIE.Bios.GHCApi
+import HIE.Bios.Ghc.Api
 import HIE.Bios.Types
 
 ----------------------------------------------------------------

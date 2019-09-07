@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
-module HIE.Bios.Load ( loadFileWithMessage, loadFile, setTargetFiles, setTargetFilesWithMessage) where
+module HIE.Bios.Ghc.Load ( loadFileWithMessage, loadFile, setTargetFiles, setTargetFilesWithMessage) where
 
 import CoreMonad (liftIO)
 import GHC

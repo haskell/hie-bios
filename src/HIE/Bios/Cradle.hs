@@ -96,7 +96,7 @@ directCradle wdir args =
 -- | Find a cradle by finding an executable `hie-bios` file which will
 -- be executed to find the correct GHC options to use.
 biosCradle :: FilePath -> FilePath -> Cradle
-biosCradle wdir bios = do
+biosCradle wdir bios =
   Cradle {
       cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction "bios" (biosAction wdir bios)
@@ -240,7 +240,7 @@ rulesHaskellWorkDir fp =
   findFileUpwards (== "WORKSPACE") fp
 
 rulesHaskellCradle :: FilePath -> Cradle
-rulesHaskellCradle wdir = do
+rulesHaskellCradle wdir =
   Cradle {
       cradleRootDir  = wdir
     , cradleOptsProg   = CradleAction "bazel" (rulesHaskellAction wdir)

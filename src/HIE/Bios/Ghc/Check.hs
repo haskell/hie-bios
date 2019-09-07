@@ -1,4 +1,4 @@
-module HIE.Bios.Check (
+module HIE.Bios.Ghc.Check (
     checkSyntax
   , check
   , expandTemplate
@@ -8,10 +8,10 @@ module HIE.Bios.Check (
 import DynFlags (dopt_set, DumpFlag(Opt_D_dump_splices))
 import GHC (Ghc, DynFlags(..), GhcMonad)
 
-import HIE.Bios.GHCApi
-import HIE.Bios.Logger
+import HIE.Bios.Ghc.Api
+import HIE.Bios.Ghc.Logger
 import HIE.Bios.Types
-import HIE.Bios.Load
+import HIE.Bios.Ghc.Load
 import Outputable
 
 ----------------------------------------------------------------

@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 
-module HIE.Bios.Logger (
+module HIE.Bios.Ghc.Logger (
     withLogger
   , checkErrorPrefix
   , getSrcSpan
@@ -22,8 +22,8 @@ import Data.List (isPrefixOf)
 import Data.Maybe (fromMaybe)
 import System.FilePath (normalise)
 
-import HIE.Bios.Doc (showPage, getStyle)
-import HIE.Bios.GHCApi (withDynFlags, withCmdFlags)
+import HIE.Bios.Ghc.Doc (showPage, getStyle)
+import HIE.Bios.Ghc.Api (withDynFlags, withCmdFlags)
 import HIE.Bios.Types (Options(..), convert)
 
 ----------------------------------------------------------------

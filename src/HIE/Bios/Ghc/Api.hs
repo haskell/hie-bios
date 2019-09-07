@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables, RecordWildCards, CPP #-}
 
-module HIE.Bios.GHCApi (
+module HIE.Bios.Ghc.Api (
     withGHC
   , withGHC'
   , withGhcT
@@ -37,7 +37,7 @@ import System.Process (readProcess)
 import System.Directory
 import System.FilePath
 
-import qualified HIE.Bios.Gap as Gap
+import qualified HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Types
 import Debug.Trace
 import qualified Crypto.Hash.SHA1 as H
