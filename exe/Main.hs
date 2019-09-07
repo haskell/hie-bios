@@ -6,7 +6,7 @@ import Config (cProjectVersion)
 
 import Control.Exception (Exception, Handler(..), ErrorCall(..))
 import qualified Control.Exception as E
-import           Control.Monad                  ( forM )
+import Control.Monad ( forM )
 import Data.Typeable (Typeable)
 import Data.Version (showVersion)
 import System.Directory (getCurrentDirectory)
@@ -69,7 +69,7 @@ main = flip E.catches handlers $ do
         res <- forM remainingArgs $ \fp -> do
                 res <- getCompilerOptions fp cradle
                 case res of
-                    Left err -> return $ "Failed to show flags for: " ++ show err
+                    Left err -> return $ "Failed to show flags for \"" ++ fp ++ "\": " ++ show err
                     Right opts -> return $ "CompilerOptions: " ++ show (ghcOptions opts)
         return (unlines res)
 

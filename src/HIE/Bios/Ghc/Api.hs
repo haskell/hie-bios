@@ -70,7 +70,7 @@ initializeFlagsWithCradle ::
     => FilePath -- The file we are loading it because of
     -> Cradle
     -> m ()
-initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage Nothing
+initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMsg)
 
 initializeFlagsWithCradleWithMessage ::
   GhcMonad m
