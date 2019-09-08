@@ -184,7 +184,7 @@ cabalAction work_dir mc _fp = do
   let cab_args = ["v2-repl", "-v0", "--disable-documentation", "--with-compiler", wrapper_fp]
                   ++ [component_name | Just component_name <- [mc]]
   (ex, args, stde) <-
-      withCurrentDirectory work_dir (readProcessWithExitCode "cabal" cab_args [])
+    readProcessWithExitCodeInDirectory work_dir "cabal" cab_args []
   case processCabalWrapperArgs args of
       Nothing -> error (show (ex, stde, args))
       Just final_args -> pure (ex, stde, final_args)
@@ -230,9 +230,9 @@ stackAction work_dir fp = do
   -- check <- readFile wrapper_fp
   -- traceM check
   (ex1, args, stde) <-
-      withCurrentDirectory work_dir (readProcessWithExitCode "stack" ["repl", "--silent", "--no-load", "--with-ghc", wrapper_fp, fp ] [])
+      readProcessWithExitCodeInDirectory work_dir "stack" ["repl", "--silent", "--no-load", "--with-ghc", wrapper_fp, fp ] []
   (ex2, pkg_args, stdr) <-
-      withCurrentDirectory work_dir (readProcessWithExitCode "stack" ["path", "--ghc-package-path"] [])
+      readProcessWithExitCodeInDirectory work_dir "stack" ["path", "--ghc-package-path"] []
   let split_pkgs = splitSearchPath (init pkg_args)
       pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
   case processCabalWrapperArgs args of
@@ -279,7 +279,7 @@ rulesHaskellAction work_dir fp = do
   setFileMode wrapper_fp accessModes
   let rel_path = makeRelative work_dir fp
   (ex, args, stde) <-
-      withCurrentDirectory work_dir (readProcessWithExitCode wrapper_fp [rel_path] [])
+      readProcessWithExitCodeInDirectory work_dir wrapper_fp [rel_path] []
   let args'  = filter (/= '\'') args
   let args'' = filter (/= "\"$GHCI_LOCATION\"") (words args')
   return (ex, stde, args'')
@@ -309,7 +309,7 @@ obeliskCradle wdir =
 obeliskAction :: FilePath -> FilePath -> IO (ExitCode, String, [String])
 obeliskAction work_dir _fp = do
   (ex, args, stde) <-
-      withCurrentDirectory work_dir (readProcessWithExitCode "ob" ["ide-args"] [])
+      readProcessWithExitCodeInDirectory work_dir "ob" ["ide-args"] []
   return (ex, stde, words args)
 
 
@@ -335,3 +335,11 @@ findFile p dir = getFiles >>= filterM doesPredFileExist
   where
     getFiles = filter p <$> getDirectoryContents dir
     doesPredFileExist file = doesFileExist $ dir </> file
+
+-- | Call a process with the given arguments and the given stdin
+-- in the given working directory.
+readProcessWithExitCodeInDirectory
+  :: FilePath -> FilePath -> [String] -> String -> IO (ExitCode, String, String)
+readProcessWithExitCodeInDirectory work_dir fp args stdin =
+  let process = (proc fp args) { cwd = Just work_dir }
+  in  readCreateProcessWithExitCode process stdin
