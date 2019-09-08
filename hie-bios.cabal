@@ -34,7 +34,6 @@ Library
                         HIE.Bios.Ghc.Load
                         HIE.Bios.Ghc.Logger
                         HIE.Bios.Ghc.Things
-                        HIE.Bios.Ghc.Types
   Build-Depends:
                         base >= 4.8 && < 5,
                         base16-bytestring    >= 0.1.1 && < 0.2,
