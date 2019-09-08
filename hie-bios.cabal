@@ -16,6 +16,8 @@ Extra-Source-Files:     ChangeLog
                         wrappers/cabal
                         wrappers/cabal.hs
 
+tested-with: GHC==8.6.4, GHC==8.4.4
+
 Library
   Default-Language:     Haskell2010
   GHC-Options:          -Wall
