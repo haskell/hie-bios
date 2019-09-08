@@ -38,7 +38,7 @@ initSession  CompilerOptions {..} = do
         (disableOptimisation
         $ setIgnoreInterfacePragmas
         $ resetPackageDb
-        -- $ ignorePackageEnv
+        -- --  $ ignorePackageEnv
         $ writeInterfaceFiles (Just fp)
         $ setVerbosity 0
 
