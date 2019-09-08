@@ -1,14 +1,16 @@
 -- | The HIE Bios
 
 module HIE.Bios (
-  -- * Initialise a session
+  -- * Find and load a Cradle
     Cradle(..)
   , findCradle
+  , loadCradle
+  , loadImplicitCradle
   , defaultCradle
   -- * Compiler Options
   , CompilerOptions(..)
   , getCompilerOptions
-  -- * Init session
+  -- * Initialise session
   , initSession
   ) where
 
