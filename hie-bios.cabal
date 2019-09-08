@@ -6,7 +6,7 @@ License:                BSD3
 License-File:           LICENSE
 Homepage:               https://github.com/mpickering/hie-bios
 Synopsis:               Set up a GHC API session
-Description:
+Description:            Set up a GHC API session and obtain flags required to compile a source file
 
 Category:               Development
 Cabal-Version:          >= 1.10
