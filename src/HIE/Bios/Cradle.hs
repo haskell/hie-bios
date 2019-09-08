@@ -2,7 +2,8 @@
 {-# LANGUAGE TupleSections #-}
 module HIE.Bios.Cradle (
       findCradle
-    , findCradleWithOpts
+    , loadCradle
+    , loadImplicitCradle
     , defaultCradle
   ) where
 
@@ -24,21 +25,34 @@ import Data.List
 import System.PosixCompat.Files
 
 ----------------------------------------------------------------
-findCradle :: FilePath -> IO Cradle
-findCradle = findCradleWithOpts defaultCradleOpts
+
+-- | Given root/foo/bar.hs, return root/hie.yaml, or wherever the yaml file was found
+findCradle :: FilePath -> IO (Maybe FilePath)
+findCradle wfile = do
+    let wdir = takeDirectory wfile
+    runMaybeT (yamlConfig wdir)
+
+-- | Given root/hie.yaml load the Cradle
+loadCradle :: FilePath -> IO Cradle
+loadCradle = loadCradleWithOpts defaultCradleOpts
+
+-- | Given root/foo/bar.hs, load an implicit cradle
+loadImplicitCradle :: FilePath -> IO Cradle
+loadImplicitCradle wfile = do
+  let wdir = takeDirectory wfile
+  cfg <- runMaybeT (implicitConfig wdir)
+  return $ case cfg of
+    Just bc -> getCradle bc
+    Nothing -> defaultCradle wdir
 
 -- | Finding 'Cradle'.
 --   Find a cabal file by tracing ancestor directories.
 --   Find a sandbox according to a cabal sandbox config
 --   in a cabal directory.
-findCradleWithOpts :: CradleOpts -> FilePath -> IO Cradle
-findCradleWithOpts _copts wfile = do
-    let wdir = takeDirectory wfile
-    cfg <- runMaybeT (dhallConfig wdir <|> implicitConfig wdir)
-    return $ case cfg of
-      Just bc -> getCradle bc
-      Nothing -> (defaultCradle wdir)
-
+loadCradleWithOpts :: CradleOpts -> FilePath -> IO Cradle
+loadCradleWithOpts _copts wfile = do
+    cradleConfig <- readCradleConfig wfile
+    return $ getCradle (cradleConfig, takeDirectory wfile)
 
 getCradle :: (CradleConfig, FilePath) -> Cradle
 getCradle (cc, wdir) = case cc of
@@ -58,11 +72,19 @@ implicitConfig fp =
      <|> (Stack,) <$> stackWorkDir fp
      <|> ((Cabal Nothing,) <$> cabalWorkDir fp)
 
-dhallConfig :: FilePath -> MaybeT IO (CradleConfig, FilePath)
-dhallConfig fp = do
-  wdir <- findFileUpwards (configFileName ==) fp
-  cfg  <- liftIO $ readConfig (wdir </> configFileName)
-  return (cradle cfg, wdir)
+
+yamlConfig :: FilePath ->  MaybeT IO FilePath
+yamlConfig fp = do
+  configDir <- yamlConfigDirectory fp
+  return (configDir </> configFileName)
+
+yamlConfigDirectory :: FilePath -> MaybeT IO FilePath
+yamlConfigDirectory = findFileUpwards (configFileName ==)
+
+readCradleConfig :: FilePath -> IO CradleConfig
+readCradleConfig yamlHie = do
+  cfg  <- liftIO $ readConfig yamlHie
+  return (cradle cfg)
 
 configFileName :: FilePath
 configFileName = "hie.yaml"
