@@ -149,7 +149,8 @@ quote opt str = ("\"" ++) .  (quote' str ++) . ("\"" ++)
 data Cradle = Cradle
   { cradleRootDir    :: FilePath -- ^  The project root directory.
   , cradleDependencies :: [FilePath] -- ^ Dependencies of a cradle.
-  -- E.g. for cabal, '*.cabal' files, for stack "stack.yaml"
+  -- E.g. for cabal, "*.cabal" files, for stack "stack.yaml".
+  -- Files included here may not exist and are relative to the cradleRootDir.
 
   , cradleOptsProg   :: CradleAction -- ^ The action which needs to be executed to get the correct
                                      -- command line arguments
