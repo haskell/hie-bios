@@ -109,7 +109,7 @@ directCradle :: FilePath -> [String] -> Cradle
 directCradle wdir args =
   Cradle {
       cradleRootDir = wdir
-    , cradleDependencies = ["hie.yaml"] -- ^ Flags are supplied via 'hie.yaml'
+    , cradleDependencies = [] -- ^ Flags are supplied via 'hie.yaml'
     , cradleOptsProg = CradleAction "direct" (const $ return (ExitSuccess, "", args))
   }
 
