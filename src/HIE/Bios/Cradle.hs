@@ -41,9 +41,9 @@ loadImplicitCradle :: FilePath -> IO Cradle
 loadImplicitCradle wfile = do
   let wdir = takeDirectory wfile
   cfg <- runMaybeT (implicitConfig wdir)
-  return $ case cfg of
+  case cfg of
     Just bc -> getCradle bc
-    Nothing -> defaultCradle wdir
+    Nothing -> return $ defaultCradle wdir
 
 -- | Finding 'Cradle'.
 --   Find a cabal file by tracing ancestor directories.
@@ -52,17 +52,18 @@ loadImplicitCradle wfile = do
 loadCradleWithOpts :: CradleOpts -> FilePath -> IO Cradle
 loadCradleWithOpts _copts wfile = do
     cradleConfig <- readCradleConfig wfile
-    return $ getCradle (cradleConfig, takeDirectory wfile)
+    getCradle (cradleConfig, takeDirectory wfile)
 
-getCradle :: (CradleConfig, FilePath) -> Cradle
+-- | For the given config and root directory, find a suitable cradle.
+getCradle :: (CradleConfig, FilePath) -> IO Cradle
 getCradle (cc, wdir) = case cc of
                  Cabal mc -> cabalCradle wdir mc
                  Stack -> stackCradle wdir
-                 Bazel -> rulesHaskellCradle wdir
-                 Obelisk -> obeliskCradle wdir
-                 Bios bios -> biosCradle wdir bios
-                 Direct xs -> directCradle wdir xs
-                 Default   -> defaultCradle wdir
+                 Bazel -> return $ rulesHaskellCradle wdir
+                 Obelisk -> return $ obeliskCradle wdir
+                 Bios bios -> return $ biosCradle wdir bios
+                 Direct xs -> return $ directCradle wdir xs
+                 Default   -> return $ defaultCradle wdir
 
 implicitConfig :: FilePath -> MaybeT IO (CradleConfig, FilePath)
 implicitConfig fp =
@@ -98,6 +99,7 @@ defaultCradle :: FilePath -> Cradle
 defaultCradle cur_dir =
   Cradle {
       cradleRootDir = cur_dir
+    , cradleDependencies = []
     , cradleOptsProg = CradleAction "default" (const $ return (ExitSuccess, "", []))
     }
 
@@ -107,6 +109,7 @@ directCradle :: FilePath -> [String] -> Cradle
 directCradle wdir args =
   Cradle {
       cradleRootDir = wdir
+    , cradleDependencies = ["hie.yaml"] -- ^ Flags are supplied via 'hie.yaml'
     , cradleOptsProg = CradleAction "direct" (const $ return (ExitSuccess, "", args))
   }
 
@@ -119,8 +122,9 @@ directCradle wdir args =
 biosCradle :: FilePath -> FilePath -> Cradle
 biosCradle wdir bios =
   Cradle {
-      cradleRootDir    = wdir
-    , cradleOptsProg   = CradleAction "bios" (biosAction wdir bios)
+      cradleRootDir      = wdir
+    , cradleDependencies = [bios] -- ^ If the executable changes, compile flags might become stale
+    , cradleOptsProg     = CradleAction "bios" (biosAction wdir bios)
   }
 
 biosWorkDir :: FilePath -> MaybeT IO FilePath
@@ -138,12 +142,19 @@ biosAction _wdir bios fp = do
 -- Works for new-build by invoking `v2-repl` does not support components
 -- yet.
 
-cabalCradle :: FilePath -> Maybe String -> Cradle
-cabalCradle wdir mc =
-  Cradle {
+cabalCradle :: FilePath -> Maybe String -> IO Cradle
+cabalCradle wdir mc = do
+  cabalFiles <- findCabalFiles wdir
+  return Cradle {
       cradleRootDir    = wdir
+    , cradleDependencies = ["cabal.project", "cabal.project.local"] ++ cabalFiles
     , cradleOptsProg   = CradleAction "cabal" (cabalAction wdir mc)
   }
+
+-- | Find all files that have the extension '.cabal'.
+findCabalFiles :: FilePath -> IO [FilePath]
+findCabalFiles wdir =
+  fmap (filter ((== ".cabal") . takeExtension)) (listDirectory wdir)
 
 cabalWrapper :: String
 cabalWrapper = $(embedStringFile "wrappers/cabal")
@@ -212,10 +223,12 @@ cabalWorkDir = findFileUpwards isCabal
 -- Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
 
-stackCradle :: FilePath -> Cradle
-stackCradle wdir =
-  Cradle {
+stackCradle :: FilePath -> IO Cradle
+stackCradle wdir = do
+  cabalFiles <- findCabalFiles wdir
+  return Cradle {
       cradleRootDir    = wdir
+    , cradleDependencies = ["stack.yaml", "package.yaml"] ++ cabalFiles
     , cradleOptsProg   = CradleAction "stack" (stackAction wdir)
   }
 
@@ -267,6 +280,7 @@ rulesHaskellCradle :: FilePath -> Cradle
 rulesHaskellCradle wdir =
   Cradle {
       cradleRootDir  = wdir
+    , cradleDependencies = ["BUILD.bazel", "WORKSPACE"]
     , cradleOptsProg   = CradleAction "bazel" (rulesHaskellAction wdir)
     }
 
@@ -305,6 +319,7 @@ obeliskCradle :: FilePath -> Cradle
 obeliskCradle wdir =
   Cradle {
       cradleRootDir  = wdir
+    , cradleDependencies = []
     , cradleOptsProg = CradleAction "obelisk" (obeliskAction wdir)
     }
 

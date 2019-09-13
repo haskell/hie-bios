@@ -146,12 +146,13 @@ quote opt str = ("\"" ++) .  (quote' str ++) . ("\"" ++)
 ----------------------------------------------------------------
 
 -- | The environment where this library is used.
-data Cradle = Cradle {
-  -- | The project root directory.
-    cradleRootDir    :: FilePath
-  -- | The action which needs to be executed to get the correct
-  -- command line arguments
-  , cradleOptsProg   :: CradleAction
+data Cradle = Cradle
+  { cradleRootDir    :: FilePath -- ^  The project root directory.
+  , cradleDependencies :: [FilePath] -- ^ Dependencies of a cradle.
+  -- E.g. for cabal, '*.cabal' files, for stack "stack.yaml"
+
+  , cradleOptsProg   :: CradleAction -- ^ The action which needs to be executed to get the correct
+                                     -- command line arguments
   } deriving (Show)
 
 data CradleAction = CradleAction {
