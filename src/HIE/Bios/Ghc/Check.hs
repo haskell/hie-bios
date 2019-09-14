@@ -24,7 +24,7 @@ checkSyntax :: Options
             -> IO String
 checkSyntax _   _      []    = return ""
 checkSyntax opt cradle files = withGhcT $ do
-    pprTrace "cradble" (text $ show cradle) (return ())
+    pprTrace "cradle" (text $ show cradle) (return ())
     initializeFlagsWithCradle (head files) cradle
     either id id <$> check opt files
   where

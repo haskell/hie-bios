@@ -32,10 +32,12 @@ ghcOptHelp = " [-g GHC_opt1 -g GHC_opt2 ...] "
 usage :: String
 usage =    progVersion
         ++ "Usage:\n"
-        ++ "\t biosc check" ++ ghcOptHelp ++ "<HaskellFiles...>\n"
-        ++ "\t biosc flags <HaskellFiles...>\n"
-        ++ "\t biosc version\n"
-        ++ "\t biosc help\n"
+        ++ "\t hie-bios check" ++ ghcOptHelp ++ "<HaskellFiles...>\n"
+        ++ "\t hie-bios expand <HaskellFiles...>\n"
+        ++ "\t hie-bios flags <HaskellFiles...>\n"
+        ++ "\t hie-bios debug\n"
+        ++ "\t hie-bios root\n"
+        ++ "\t hie-bios version\n"
 
 ----------------------------------------------------------------
 
@@ -75,6 +77,10 @@ main = flip E.catches handlers $ do
                     Right opts -> return $ "CompilerOptions: " ++ show (ghcOptions opts)
         return (unlines res)
 
+      "help"    -> return usage
+      "--help"  -> return usage
+      "-h"      -> return usage
+
       cmd       -> E.throw (NoSuchCommand cmd)
     putStr res
   where
@@ -83,11 +89,13 @@ main = flip E.catches handlers $ do
     handler1 :: ErrorCall -> IO ()
     handler1 = print -- for debug
     handler2 :: HhpcError -> IO ()
-    handler2 SafeList = return ()
+    handler2 SafeList = hPutStr stderr usage
     handler2 (TooManyArguments cmd) = do
         hPutStrLn stderr $ "\"" ++ cmd ++ "\": Too many arguments"
     handler2 (NoSuchCommand cmd) = do
         hPutStrLn stderr $ "\"" ++ cmd ++ "\" not supported"
+        hPutStrLn stderr ""
+        hPutStr stderr usage
     handler2 (CmdArg errs) = do
         mapM_ (hPutStr stderr) errs
     handler2 (FileNotExist file) = do
