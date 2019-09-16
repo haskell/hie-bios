@@ -13,10 +13,12 @@ module HIE.Bios.Ghc.Gap (
   , LPattern
   , inTypes
   , outType
+  , mapMG
+  , mgModSummaries
   ) where
 
 import DynFlags (DynFlags)
-import GHC(LHsBind, LHsExpr, LPat, Type)
+import GHC(LHsBind, LHsExpr, LPat, Type, ModSummary, ModuleGraph)
 import HsExpr (MatchGroup)
 import Outputable (PrintUnqualified, PprStyle, Depth(AllTheWay), mkUserStyle)
 
@@ -31,7 +33,7 @@ import GHC.PackageDb (ExposedModule(..))
 #if __GLASGOW_HASKELL__ >= 804
 import DynFlags (WarningFlag)
 import qualified EnumSet as E (EnumSet, empty)
-import GHC (mgModSummaries, ModSummary, ModuleGraph)
+import GHC (mgModSummaries, mapMG)
 #else
 import qualified Data.IntSet as I (IntSet, empty)
 #endif
@@ -126,4 +128,16 @@ inTypes :: MatchGroup Id LExpression -> [Type]
 inTypes = mg_arg_tys
 outType :: MatchGroup Id LExpression -> Type
 outType = mg_res_ty
+#endif
+
+#if __GLASGOW_HASKELL__ >= 804
+#else
+mapMG :: (ModSummary -> ModSummary) -> ModuleGraph -> ModuleGraph
+mapMG = map
+#endif
+
+#if __GLASGOW_HASKELL__ >= 804
+#else
+mgModSummaries :: ModuleGraph -> [ModSummary]
+mgModSummaries = id
 #endif

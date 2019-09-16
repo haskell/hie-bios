@@ -23,6 +23,7 @@ import Debug.Trace
 import Data.List
 
 import Data.Time.Clock
+import qualified HIE.Bios.Ghc.Gap as Gap
 
 #if __GLASGOW_HASKELL__ < 806
 pprTraceM :: Monad m => String -> SDoc -> m ()
@@ -80,7 +81,7 @@ updateTime ts graph = liftIO $ do
   let go ms
         | any (msTargetIs ms) ts = ms {ms_hs_date = cur_time}
         | otherwise = ms
-  pure $ mapMG go graph
+  pure $ Gap.mapMG go graph
 
 -- | Set the files as targets and load them.
 setTargetFilesWithMessage :: (GhcMonad m)  => Maybe G.Messager -> [(FilePath, FilePath)] -> m ()
@@ -89,8 +90,8 @@ setTargetFilesWithMessage msg files = do
     pprTrace "setTargets" (vcat (map (\(a,b) -> parens $ text a <+> text "," <+> text b) files) $$ ppr targets) (return ())
     G.setTargets (map (\t -> t { G.targetAllowObjCode = False }) targets)
     mod_graph <- updateTime targets =<< depanal [] False
-    pprTrace "modGraph" (ppr $ mgModSummaries mod_graph) (return ())
-    pprTrace "modGraph" (ppr $ map ms_location $ mgModSummaries mod_graph) (return ())
+    pprTrace "modGraph" (ppr $ Gap.mgModSummaries mod_graph) (return ())
+    pprTrace "modGraph" (ppr $ map ms_location $ Gap.mgModSummaries mod_graph) (return ())
     dflags1 <- getSessionDynFlags
     pprTrace "hidir" (ppr $ hiDir dflags1) (return ())
     void $ G.load' LoadAllTargets msg mod_graph
