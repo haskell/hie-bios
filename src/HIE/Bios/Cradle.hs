@@ -136,7 +136,7 @@ biosCradle wdir biosProg biosDepsProg deps =
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "bios"
-        , getDependencies = fmap (deps \\) (biosDepsAction biosDepsProg)
+        , getDependencies = fmap (deps `union`) (biosDepsAction biosDepsProg)
         -- Execute the bios action and add dependencies of the cradle.
         -- Removes all duplicates.
         , getOptions = biosAction wdir biosProg
@@ -172,7 +172,7 @@ cabalCradle wdir mc deps =
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "cabal"
-        , getDependencies = fmap (deps \\) (cabalCradleDependencies wdir)
+        , getDependencies = fmap (deps `union`) (cabalCradleDependencies wdir)
         , getOptions = cabalAction wdir mc
         }
     }
@@ -260,7 +260,7 @@ stackCradle wdir deps =
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "stack"
-        , getDependencies = fmap (deps \\) (stackCradleDependencies wdir)
+        , getDependencies = fmap (deps `union`) (stackCradleDependencies wdir)
         , getOptions = stackAction wdir
         }
     }
@@ -318,7 +318,7 @@ rulesHaskellCradle wdir deps =
     { cradleRootDir  = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "bazel"
-        , getDependencies = fmap (deps \\) (rulesHaskellCradleDependencies wdir)
+        , getDependencies = fmap (deps `union`) (rulesHaskellCradleDependencies wdir)
         , getOptions = rulesHaskellAction wdir
         }
     }
@@ -364,7 +364,7 @@ obeliskCradle wdir deps =
     { cradleRootDir  = wdir
     , cradleOptsProg = CradleAction
         { actionName = "obelisk"
-        , getDependencies = fmap (deps \\) (obeliskCradleDependencies wdir)
+        , getDependencies = fmap (deps `union`) (obeliskCradleDependencies wdir)
         , getOptions = obeliskAction wdir
         }
     }
