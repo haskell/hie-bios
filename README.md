@@ -53,17 +53,71 @@ relative to the current working directory if it is not an absolute path.
 cradle: {bios: {program: ".hie-bios"}}
 ```
 
+### Cradle Dependencies
+
+Sometimes it is necessary to reload a cradle, for example when a package
+dependency is added to the project. Each type of cradle defines a list of
+files that might cause an existing cradle to no longer provide accurate
+diagnostics if changed. These are expected to be relative to the root of
+the cradle.
+
+This makes it possible to watch for changes to these files and reload the
+cradle appropiately.
+However, if there are files that are not covered by
+the cradle dependency resolution, you can add these files explicitly to
+`hie.yaml`.
+These files are not required to actually exist, since it can be useful
+to know when these files are created, e.g. if there was no `cabal.project`
+in the project before and now there is, it might change how a file in the
+project is compiled.
+
+As an example how you would add cradle dependencies that may not be covered
+by the `cabal` cradle.
+
+```yaml
+cradle:
+  cabal:
+    component: "lib:hie-bios"
+  dependencies:
+    - package.yaml
+    - shell.nix
+    - default.nix
+```
+
+For the `Bios` cradle type, there is an optional field to specify a program
+to obtain cradle dependencies from:
+
+```yaml
+cradle:
+  bios:
+    program: ./flags.sg
+    dependency-program: ./dependency.sh
+```
+
+The program `./dependency.sh` is executed with no paramaters and it is
+expected to output on stdout on each line exactly one filepath relative
+to the root of the cradle, not relative to the location of the program.
+
+## Configuration specification
+
 The complete configuration is a subset of
 
 ```yaml
 cradle:
-  cabal: {component: "optional component name"}
+  cabal:
+    component: "optional component name"
   stack:
   bazel:
   obelisk:
-  bios: {program: "program to run"}
-  direct: {arguments: ["list","of","ghc","arguments"]}
+  bios:
+    program: "program to run"
+    dependency-program: "optional program to run"
+  direct:
+    arguments: ["list","of","ghc","arguments"]
   default:
+
+  dependencies:
+    - someDep
 ```
 
 ## Implicit Configuration
@@ -80,8 +134,8 @@ The targets are searched for in following order.
 2. An `obelisk` project
 3. A `rules_haskell` project
 4. A `stack` project
-4. A `cabal` project
-5. The default cradle which has no specific options.
+5. A `cabal` project
+6. The default cradle which has no specific options.
 
 ### `cabal-install`
 
