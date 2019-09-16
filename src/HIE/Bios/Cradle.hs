@@ -155,9 +155,20 @@ processCabalWrapperArgs :: String -> Maybe [String]
 processCabalWrapperArgs args =
     case lines args of
         [dir, ghc_args] ->
-            let final_args = removeInteractive $ map (fixImportDirs dir) (words ghc_args)
+            let final_args =
+                    removeInteractive
+                    $ map (fixImportDirs dir)
+                    $ limited ghc_args
             in Just final_args
         _ -> Nothing
+  where
+    limited :: String -> [String]
+    limited = unfoldr $ \argstr ->
+        if null argstr
+        then Nothing
+        else
+            let (arg, argstr') = break (== '\NUL') argstr
+            in Just (arg, drop 1 argstr')
 
 -- generate a fake GHC that can be passed to cabal
 -- when run with --interactive, it will print out its
