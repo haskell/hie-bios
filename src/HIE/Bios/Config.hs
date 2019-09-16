@@ -48,7 +48,7 @@ instance FromJSON CradleConfig where
         crdType <- parseCradleType o
         return $ CradleConfig deps crdType
 
-    parseJSON _ = error "me"
+    parseJSON _ = fail "Not a valid cradle config, expected an Object."
 
 instance FromJSON CradleType where
     parseJSON (Object o) = parseCradleType o
@@ -66,36 +66,42 @@ parseCradleType o
 parseCradleType o = fail $ "Unknown cradle type: " ++ show o
 
 parseCabal :: Value -> Parser CradleType
-parseCabal cabalValue
-    | Object x <- cabalValue
+parseCabal (Object x)
+    | Map.size x == 1
     , Just (String cabalComponent) <- Map.lookup "component" x
     = return $ Cabal $ Just $ T.unpack cabalComponent
 
-    | Object _ <- cabalValue
+    | Map.null x
     = return $ Cabal Nothing
 
     | otherwise
-    = fail $ "Could not parse Cabal component for value: " ++ show cabalValue
+    = fail "Not a valid Bios Configuration type, following keys are allowed: component"
+parseCabal _ = fail "Cabal Configuration is expected to be an object."
 
 parseBios :: Value -> Parser CradleType
-parseBios biosValue
-    | Object x <- biosValue
+parseBios (Object x)
+    | 2 == Map.size x
     , Just (String biosProgram) <- Map.lookup "program" x
-    = case  Map.lookup "dependency-program" x of
-        Just (String deps) -> return $ Bios (T.unpack biosProgram) (Just (T.unpack deps))
-        _ -> return $ Bios (T.unpack biosProgram) Nothing
+    , Just (String biosDepsProgram) <- Map.lookup "dependency-program" x
+    = return $ Bios (T.unpack biosProgram) (Just (T.unpack biosDepsProgram))
+
+    | 1 == Map.size x
+    , Just (String biosProgram) <- Map.lookup "program" x
+    = return $ Bios (T.unpack biosProgram) Nothing
 
     | otherwise
-    = fail "Not a valid Bios Configuration type"
+    = fail "Not a valid Bios Configuration type, following keys are allowed: program, dependency-program"
+parseBios _ = fail "Bios Configuration is expected to be an object."
 
 parseDirect :: Value -> Parser CradleType
-parseDirect directValue
-    | Object x <- directValue
+parseDirect (Object x)
+    | Map.size x == 1
     , Just (Array v) <- Map.lookup "arguments" x
     = return $ Direct [T.unpack s | String s <- V.toList v]
 
     | otherwise
-    = fail "Not a correct Direct Configuration type"
+    = fail "Not a valid Direct Configuration type, following keys are allowed: arguments"
+parseDirect _ = fail "Direct Configuration is expected to be an object."
 
 data Config = Config { cradle :: CradleConfig }
     deriving (Show)
