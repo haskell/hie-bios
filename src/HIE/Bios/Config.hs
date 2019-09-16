@@ -75,7 +75,7 @@ parseCabal (Object x)
     = return $ Cabal Nothing
 
     | otherwise
-    = fail "Not a valid Bios Configuration type, following keys are allowed: component"
+    = fail "Not a valid Cabal Configuration type, following keys are allowed: component"
 parseCabal _ = fail "Cabal Configuration is expected to be an object."
 
 parseBios :: Value -> Parser CradleType
