@@ -136,7 +136,9 @@ biosCradle wdir biosProg biosDepsProg deps =
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "bios"
-        , getDependencies = return deps
+        , getDependencies = fmap (deps \\) (biosDepsAction biosDepsProg)
+        -- Execute the bios action and add dependencies of the cradle.
+        -- Removes all duplicates.
         , getOptions = biosAction wdir biosProg
         }
     }
@@ -144,13 +146,14 @@ biosCradle wdir biosProg biosDepsProg deps =
 biosWorkDir :: FilePath -> MaybeT IO FilePath
 biosWorkDir = findFileUpwards (".hie-bios" ==)
 
-biosDepsAction :: [FilePath] -> FilePath -> IO [FilePath]
-biosDepsAction configDeps biosDepsProg = do
+biosDepsAction :: Maybe FilePath -> IO [FilePath]
+biosDepsAction (Just biosDepsProg) = do
   biosDeps' <- canonicalizePath biosDepsProg
   (ex, sout, serr) <- readProcessWithExitCode biosDeps' [] []
   case ex of
     ExitFailure _ ->  error $ show (ex, sout, serr)
-    ExitSuccess -> return (configDeps \\ lines sout)
+    ExitSuccess -> return (lines sout)
+biosDepsAction Nothing = return []
 
 biosAction :: FilePath -> FilePath -> FilePath -> IO (ExitCode, String, [String])
 biosAction _wdir bios fp = do
@@ -169,10 +172,20 @@ cabalCradle wdir mc deps =
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "cabal"
-        , getDependencies = return deps
+        , getDependencies = fmap (deps \\) (cabalCradleDependencies wdir)
         , getOptions = cabalAction wdir mc
         }
     }
+
+cabalCradleDependencies :: FilePath -> IO [FilePath]
+cabalCradleDependencies rootDir = do
+    cabalFiles <- findCabalFiles rootDir
+    return $ cabalFiles ++ ["cabal.project"]
+
+findCabalFiles :: FilePath -> IO [FilePath]
+findCabalFiles wdir = do
+  dirContent <- listDirectory wdir
+  return $ filter ((== ".cabal") . takeExtension) dirContent
 
 cabalWrapper :: String
 cabalWrapper = $(embedStringFile "wrappers/cabal")
@@ -247,10 +260,15 @@ stackCradle wdir deps =
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "stack"
-        , getDependencies = return deps
+        , getDependencies = fmap (deps \\) (stackCradleDependencies wdir)
         , getOptions = stackAction wdir
         }
     }
+
+stackCradleDependencies :: FilePath -> IO [FilePath]
+stackCradleDependencies wdir = do
+    cabalFiles <- findCabalFiles wdir
+    return $ cabalFiles ++ ["package.yaml", "stack.yaml"]
 
 -- Same wrapper works as with cabal
 stackWrapper :: String
@@ -281,12 +299,10 @@ combineExitCodes = foldr go ExitSuccess
     go a _ = a
 
 
-
 stackWorkDir :: FilePath -> MaybeT IO FilePath
 stackWorkDir = findFileUpwards isStack
   where
     isStack name = name == "stack.yaml"
-
 
 ----------------------------------------------------------------------------
 -- rules_haskell - Thanks for David Smith for helping with this one.
@@ -302,11 +318,13 @@ rulesHaskellCradle wdir deps =
     { cradleRootDir  = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "bazel"
-        , getDependencies = return deps
+        , getDependencies = fmap (deps \\) (rulesHaskellCradleDependencies wdir)
         , getOptions = rulesHaskellAction wdir
         }
     }
 
+rulesHaskellCradleDependencies :: FilePath -> IO [FilePath]
+rulesHaskellCradleDependencies _wdir = return ["BUILD.bazel", "WORKSPACE"]
 
 bazelCommand :: String
 bazelCommand = $(embedStringFile "wrappers/bazel")
@@ -337,6 +355,8 @@ obeliskWorkDir fp = do
   unless check (fail "Not obelisk dir")
   return wdir
 
+obeliskCradleDependencies :: FilePath -> IO [FilePath]
+obeliskCradleDependencies _wdir = return []
 
 obeliskCradle :: FilePath -> [FilePath] -> Cradle
 obeliskCradle wdir deps =
@@ -344,7 +364,7 @@ obeliskCradle wdir deps =
     { cradleRootDir  = wdir
     , cradleOptsProg = CradleAction
         { actionName = "obelisk"
-        , getDependencies = return deps
+        , getDependencies = fmap (deps \\) (obeliskCradleDependencies wdir)
         , getOptions = obeliskAction wdir
         }
     }

@@ -165,7 +165,8 @@ data CradleAction = CradleAction {
                       -- to which this CradleAction belongs to.
                       -- Files returned by this action might not actually exist.
                       -- This is useful, because, sometimes, adding specific files
-                      -- changes the options that a Cradle may return.
+                      -- changes the options that a Cradle may return, thus, needs reload
+                      -- as soon as these files are created.
                       , getOptions :: FilePath -> IO (ExitCode, String, [String])
                       -- ^ Options to compile the given file with.
                       -- The result consists of the return code of the operation
