@@ -198,7 +198,7 @@ fixImportDirs :: FilePath -> String -> String
 fixImportDirs base_dir arg =
   if "-i" `isPrefixOf` arg
     then let dir = drop 2 arg
-         in if isRelative dir then ("-i" <> base_dir <> "/" <> dir)
+         in if isRelative dir then ("-i" ++ base_dir ++ "/" ++ dir)
                               else arg
     else arg
 
