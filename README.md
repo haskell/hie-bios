@@ -78,10 +78,11 @@ by the `cabal` cradle.
 cradle:
   cabal:
     component: "lib:hie-bios"
-  dependencies:
-    - package.yaml
-    - shell.nix
-    - default.nix
+
+dependencies:
+  - package.yaml
+  - shell.nix
+  - default.nix
 ```
 
 For the `Bios` cradle type, there is an optional field to specify a program
@@ -116,8 +117,8 @@ cradle:
     arguments: ["list","of","ghc","arguments"]
   default:
 
-  dependencies:
-    - someDep
+dependencies:
+  - someDep
 ```
 
 ## Implicit Configuration

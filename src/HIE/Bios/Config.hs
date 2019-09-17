@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ViewPatterns #-}
 module HIE.Bios.Config(
     readConfig,
     Config(..),
@@ -42,17 +41,9 @@ data CradleType
     | Default
     deriving (Show)
 
-instance FromJSON CradleConfig where
-    parseJSON (Object o) = do
-        deps <- o .:? "dependencies" .!= []
-        crdType <- parseCradleType o
-        return $ CradleConfig deps crdType
-
-    parseJSON _ = fail "Not a valid cradle config, expected an Object."
-
 instance FromJSON CradleType where
     parseJSON (Object o) = parseCradleType o
-    parseJSON _ = fail "Not a known configuration"
+    parseJSON _ = fail "Not a known cradle type. Possible are: cabal, stack, bazel, obelisk, bios, direct, default"
 
 parseCradleType :: Object -> Parser CradleType
 parseCradleType o
@@ -107,8 +98,16 @@ data Config = Config { cradle :: CradleConfig }
     deriving (Show)
 
 instance FromJSON Config where
-    parseJSON (Object (Map.toList -> [("cradle", x)])) = Config <$> parseJSON x
-    parseJSON _ = fail "Expected a cradle: key containing the preferences"
+    parseJSON (Object val) = do
+        crd     <- val .: "cradle"
+        crdDeps <- val .:? "dependencies" .!= []
+        return Config
+            { cradle = CradleConfig { cradleType         = crd
+                                    , cradleDependencies = crdDeps
+                                    }
+            }
+
+    parseJSON _ = fail "Expected a cradle: key containing the preferences, possible values: cradle, dependencies"
 
 readConfig :: FilePath -> IO Config
-readConfig fp = decodeFileThrow fp
+readConfig = decodeFileThrow
