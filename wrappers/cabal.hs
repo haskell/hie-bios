@@ -17,4 +17,4 @@ main = do
       exitWith code
 
 delimited :: [String] -> String
-delimited = (++) "-here " . foldr (\a as -> a ++ '\NUL' : as) ""
+delimited = foldr (\a as -> a ++ '\NUL' : as) ""
