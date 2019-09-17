@@ -99,13 +99,17 @@ data Config = Config { cradle :: CradleConfig }
 
 instance FromJSON Config where
     parseJSON (Object val) = do
-        crd     <- val .: "cradle"
-        crdDeps <- val .:? "dependencies" .!= []
-        return Config
-            { cradle = CradleConfig { cradleType         = crd
-                                    , cradleDependencies = crdDeps
-                                    }
-            }
+            crd     <- val .: "cradle"
+            crdDeps <- case Map.size val of
+                1 -> return []
+                2 -> val .: "dependencies"
+                _ -> fail "Unknown key, following keys are allowed: cradle, dependencies"
+
+            return Config
+                { cradle = CradleConfig { cradleType         = crd
+                                        , cradleDependencies = crdDeps
+                                        }
+                }
 
     parseJSON _ = fail "Expected a cradle: key containing the preferences, possible values: cradle, dependencies"
 
