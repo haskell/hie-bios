@@ -10,9 +10,11 @@ main = do
   case args of
     "--interactive":_ -> do
       getCurrentDirectory >>= putStrLn
-      -- note this probably breaks if paths have spaces in
-      putStrLn $ unwords args
+      putStrLn $ delimited args
     _ -> do
       ph <- spawnProcess "ghc" args
       code <- waitForProcess ph
       exitWith code
+
+delimited :: [String] -> String
+delimited = concatMap (++ "\NUL")

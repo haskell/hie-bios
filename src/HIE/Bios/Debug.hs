@@ -2,6 +2,7 @@ module HIE.Bios.Debug (debugInfo, rootInfo) where
 
 import Control.Monad.IO.Class (liftIO)
 
+import qualified Data.Char as Char
 import Data.Maybe (fromMaybe)
 
 import HIE.Bios.Ghc.Api
@@ -18,11 +19,14 @@ debugInfo opt cradle = convert opt <$> do
     mglibdir <- liftIO getSystemLibDir
     return [
         "Root directory:      " ++ rootDir
-      , "GHC options:         " ++ unwords gopts
+      , "GHC options:         " ++ unwords (map quoteIfNeeded gopts)
       , "System libraries:    " ++ fromMaybe "" mglibdir
       ]
   where
     rootDir    = cradleRootDir cradle
+    quoteIfNeeded option
+      | any Char.isSpace option = "\"" ++ option ++ "\""
+      | otherwise = option
 
 ----------------------------------------------------------------
 

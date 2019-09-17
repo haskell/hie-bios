@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 if [ "$1" == "--interactive" ]; then
   pwd
-  echo "$@"
+  for arg in "$@"; do
+    echo -ne "$arg\x00"
+  done
+  echo -ne "\n"
 else
   ghc "$@"
 fi
