@@ -17,4 +17,4 @@ main = do
       exitWith code
 
 delimited :: [String] -> String
-delimited = foldr (\a as -> a ++ '\NUL' : as) ""
+delimited = concatMap (++ "\NUL")
