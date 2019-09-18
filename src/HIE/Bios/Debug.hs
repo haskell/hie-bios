@@ -16,11 +16,13 @@ debugInfo :: Options
           -> IO String
 debugInfo opt cradle = convert opt <$> do
     (_ex, _sterr, gopts) <- getOptions (cradleOptsProg cradle) (cradleRootDir cradle)
+    deps  <- getDependencies (cradleOptsProg cradle)
     mglibdir <- liftIO getSystemLibDir
     return [
         "Root directory:      " ++ rootDir
       , "GHC options:         " ++ unwords (map quoteIfNeeded gopts)
       , "System libraries:    " ++ fromMaybe "" mglibdir
+      , "Dependencies:        " ++ unwords deps
       ]
   where
     rootDir    = cradleRootDir cradle
