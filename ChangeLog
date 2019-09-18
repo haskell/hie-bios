@@ -1,3 +1,12 @@
+2019-09-18 - 0.2
+
+	* Compat with 8.2 and 8.8
+	* Add support for explicitly specifying dependencies for a cradle
+	* Separate arguments by null bytes, so arguments can contain spaces
+	(cabal/stack wrapper)
+	* Add --help to CLI
+	* Fix the directories that certain processes run in
+
 2019-09-07 - 0.1.1
 
 	* Compat with GHC 8.4
