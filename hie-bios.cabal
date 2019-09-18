@@ -46,17 +46,17 @@ Library
                         directory            >= 1.3.0 && < 1.4,
                         filepath             >= 1.4.1 && < 1.5,
                         time                 >= 1.8.0 && < 1.10,
-                        extra                >= 1.6.18 && < 1.7,
+                        extra                >= 1.6.14 && < 1.7,
                         process              >= 1.6.1 && < 1.7,
-                        file-embed           >= 0.0.11 && < 0.1,
+                        file-embed           >= 0.0.10 && < 0.1,
                         ghc                  >= 8.2.2 && < 8.9,
                         transformers         >= 0.5.2 && < 0.6,
                         temporary            >= 1.2 && < 1.4,
                         text                 >= 1.2.3 && < 1.3,
-                        unix-compat          >= 0.5.2 && < 0.6,
-                        unordered-containers >= 0.2.10 && < 0.3,
+                        unix-compat          >= 0.5.1 && < 0.6,
+                        unordered-containers >= 0.2.9 && < 0.3,
                         vector               >= 0.12.0 && < 0.13,
-                        yaml                 >= 0.11.1 && < 0.12
+                        yaml                 >= 0.8.32 && < 0.12
 
 Executable hie-bios
   Default-Language:     Haskell2010
