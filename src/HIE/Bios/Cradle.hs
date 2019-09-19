@@ -229,7 +229,7 @@ getCabalWrapperTool = do
         return wrapper_fp
       else do
         writeSystemTempFile "bios-wrapper" cabalWrapper
-  -- TODO: This isn't portable for windows
+
   setFileMode wrapper_fp accessModes
   _check <- readFile wrapper_fp
   return wrapper_fp
@@ -339,7 +339,6 @@ bazelCommand = $(embedStringFile "wrappers/bazel")
 rulesHaskellAction :: FilePath -> FilePath -> IO (ExitCode, String, [String])
 rulesHaskellAction work_dir fp = do
   wrapper_fp <- writeSystemTempFile "wrapper" bazelCommand
-  -- TODO: This isn't portable for windows
   setFileMode wrapper_fp accessModes
   let rel_path = makeRelative work_dir fp
   (ex, args, stde) <-
