@@ -229,6 +229,7 @@ getCabalWrapperTool = do
         return wrapper_fp
       else do
         writeSystemTempFile "bios-wrapper" cabalWrapper
+  -- TODO: This isn't portable for windows
   setFileMode wrapper_fp accessModes
   _check <- readFile wrapper_fp
   return wrapper_fp
@@ -281,15 +282,10 @@ stackCradleDependencies wdir = do
     cabalFiles <- findCabalFiles wdir
     return $ cabalFiles ++ ["package.yaml", "stack.yaml"]
 
--- Same wrapper works as with cabal
-stackWrapper :: String
-stackWrapper = $(embedStringFile "wrappers/cabal")
-
 stackAction :: FilePath -> FilePath -> IO (ExitCode, String, [String])
 stackAction work_dir fp = do
-  wrapper_fp <- writeSystemTempFile "wrapper" stackWrapper
-  -- TODO: This isn't portable for windows
-  setFileMode wrapper_fp accessModes
+  -- Same wrapper works as with cabal
+  wrapper_fp <- getCabalWrapperTool
   -- TODO: this is for debugging
   -- check <- readFile wrapper_fp
   -- traceM check
