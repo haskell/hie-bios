@@ -1,4 +1,9 @@
-2019-09-18 - 0.2
+2019-09-19 - 0.2.1
+
+	* Make stack cradle use the same wrappers as cabal cradle. Fixes some issues
+		on windows.
+
+2019-09-18 - 0.2.0
 
 	* Compat with 8.2 and 8.8
 	* Add support for explicitly specifying dependencies for a cradle
