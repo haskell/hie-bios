@@ -7,12 +7,14 @@ module HIE.Bios.Ghc.Check (
 
 import DynFlags (dopt_set, DumpFlag(Opt_D_dump_splices))
 import GHC (Ghc, DynFlags(..), GhcMonad)
+import Exception
 
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Logger
 import HIE.Bios.Types
 import HIE.Bios.Ghc.Load
 import Outputable
+import Control.Monad.IO.Class
 
 ----------------------------------------------------------------
 
@@ -25,8 +27,15 @@ checkSyntax :: Options
 checkSyntax _   _      []    = return ""
 checkSyntax opt cradle files = withGhcT $ do
     pprTrace "cradle" (text $ show cradle) (return ())
-    initializeFlagsWithCradle (head files) cradle
-    either id id <$> check opt files
+    res <- initializeFlagsWithCradle (head files) cradle
+    case res of
+      CradleSuccess ini -> do
+        ini
+        either id id <$> check opt files
+      CradleFail ce -> liftIO $ throwIO ce
+      CradleNone -> return "No cradle"
+
+
   where
     {-
     sessionName = case files of
@@ -56,8 +65,13 @@ expandTemplate :: Options
                -> IO String
 expandTemplate _   _      []    = return ""
 expandTemplate opt cradle files = withGHC sessionName $ do
-    initializeFlagsWithCradle (head files) cradle
-    either id id <$> expand opt files
+    res <- initializeFlagsWithCradle (head files) cradle
+    case res of
+      CradleSuccess ini -> do
+        ini
+        either id id <$> expand opt files
+      CradleNone -> return "<no cradle>"
+      CradleFail err -> liftIO $ throwIO err
   where
     sessionName = case files of
       [file] -> file

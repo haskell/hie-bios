@@ -16,7 +16,7 @@ module HIE.Bios.Ghc.Api (
   ) where
 
 import CoreMonad (liftIO)
-import Exception (ghandle, SomeException(..), ExceptionMonad(..), throwIO)
+import Exception (ghandle, SomeException(..), ExceptionMonad(..))
 import GHC (Ghc, LoadHowMuch(..), GhcMonad, GhcT)
 import DynFlags
 
@@ -63,13 +63,11 @@ withGhcT body = do
 
 ----------------------------------------------------------------
 
-
-
 initializeFlagsWithCradle ::
     GhcMonad m
     => FilePath -- The file we are loading it because of
     -> Cradle
-    -> m ()
+    -> m (CradleLoadResult (m ()))
 initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMsg)
 
 initializeFlagsWithCradleWithMessage ::
@@ -77,12 +75,10 @@ initializeFlagsWithCradleWithMessage ::
   => Maybe G.Messager
   -> FilePath -- The file we are loading it because of
   -> Cradle
-  -> m ()
+  -> m (CradleLoadResult (m ())) -- ^ Whether we actually initialised a session or not
 initializeFlagsWithCradleWithMessage msg fp cradle = do
-    compOpts <- liftIO $ getCompilerOptions fp cradle
-    case compOpts of
-      Left err -> liftIO $ throwIO err
-      Right opts -> initSessionWithMessage msg opts
+    fmap (initSessionWithMessage msg) <$> (liftIO $ getCompilerOptions fp cradle)
+
 
 initSessionWithMessage :: (GhcMonad m)
             => Maybe G.Messager

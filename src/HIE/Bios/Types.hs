@@ -1,11 +1,13 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module HIE.Bios.Types where
 
 import System.Exit
 import System.IO
+import Control.Exception ( Exception )
 
 data BIOSVerbosity = Silent | Verbose
 
@@ -167,7 +169,7 @@ data CradleAction = CradleAction {
                       -- This is useful, because, sometimes, adding specific files
                       -- changes the options that a Cradle may return, thus, needs reload
                       -- as soon as these files are created.
-                      , getOptions :: FilePath -> IO (ExitCode, String, [String])
+                      , getOptions :: FilePath -> IO (CradleLoadResult CompilerOptions)
                       -- ^ Options to compile the given file with.
                       -- The result consists of the return code of the operation
                       -- that has been run, the stdout of the process, and a list of
@@ -176,6 +178,16 @@ data CradleAction = CradleAction {
 
 instance Show CradleAction where
   show CradleAction { actionName = name } = "CradleAction: " ++ name
+
+data CradleLoadResult r = CradleSuccess r -- ^ The cradle succeeded and returned these options
+                      | CradleFail CradleError -- ^ We tried to load the cradle and it failed
+                      | CradleNone -- ^ No attempt was made to load the cradle
+                      deriving (Functor)
+
+
+data CradleError = CradleError ExitCode String deriving (Show)
+
+instance Exception CradleError where
 ----------------------------------------------------------------
 
 -- | Option information for GHC

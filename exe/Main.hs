@@ -73,8 +73,12 @@ main = flip E.catches handlers $ do
         res <- forM remainingArgs $ \fp -> do
                 res <- getCompilerOptions fp cradle
                 case res of
-                    Left err -> return $ "Failed to show flags for \"" ++ fp ++ "\": " ++ show err
-                    Right opts -> return $ "CompilerOptions: " ++ show (ghcOptions opts)
+                    CradleFail (CradleError _ex err) ->
+                      return $ "Failed to show flags for \""
+                                                ++ fp
+                                                ++ "\": " ++ show err
+                    CradleSuccess opts -> return $ "CompilerOptions: " ++ show (ghcOptions opts)
+                    CradleNone -> return "No flags: this component should not be loaded"
         return (unlines res)
 
       "help"    -> return usage

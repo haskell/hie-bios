@@ -108,7 +108,7 @@ defaultCradle cur_dir deps =
     , cradleOptsProg = CradleAction
         { actionName = "default"
         , getDependencies = return deps
-        , getOptions = const $ return (ExitSuccess, "", [])
+        , getOptions = const $ return (CradleSuccess (CompilerOptions []))
         }
     }
 
@@ -121,7 +121,7 @@ directCradle wdir args deps =
     , cradleOptsProg = CradleAction
         { actionName = "direct"
         , getDependencies = return deps
-        , getOptions = const $ return (ExitSuccess, "", args)
+        , getOptions = const $ return (CradleSuccess (CompilerOptions args))
         }
     }
 
@@ -155,11 +155,11 @@ biosDepsAction (Just biosDepsProg) = do
     ExitSuccess -> return (lines sout)
 biosDepsAction Nothing = return []
 
-biosAction :: FilePath -> FilePath -> FilePath -> IO (ExitCode, String, [String])
+biosAction :: FilePath -> FilePath -> FilePath -> IO (CradleLoadResult CompilerOptions)
 biosAction _wdir bios fp = do
   bios' <- canonicalizePath bios
   (ex, res, std) <- readProcessWithExitCode bios' [fp] []
-  return (ex, std, words res)
+  return $ makeCradleResult (ex, std, words res)
 
 ------------------------------------------------------------------------
 -- Cabal Cradle
@@ -234,7 +234,7 @@ getCabalWrapperTool = do
   _check <- readFile wrapper_fp
   return wrapper_fp
 
-cabalAction :: FilePath -> Maybe String -> FilePath -> IO (ExitCode, String, [String])
+cabalAction :: FilePath -> Maybe String -> FilePath -> IO (CradleLoadResult CompilerOptions)
 cabalAction work_dir mc _fp = do
   wrapper_fp <- getCabalWrapperTool
   let cab_args = ["v2-repl", "-v0", "--disable-documentation", "--with-compiler", wrapper_fp]
@@ -242,8 +242,11 @@ cabalAction work_dir mc _fp = do
   (ex, args, stde) <-
     readProcessWithExitCodeInDirectory work_dir "cabal" cab_args []
   case processCabalWrapperArgs args of
-      Nothing -> error (show (ex, stde, args))
-      Just final_args -> pure (ex, stde, final_args)
+      Nothing -> pure $ CradleFail (CradleError ex
+                  (unlines ["Failed to parse result of calling cabal"
+                           , stde
+                           , args]))
+      Just final_args -> pure $ makeCradleResult (ex, stde, final_args)
 
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
@@ -282,7 +285,7 @@ stackCradleDependencies wdir = do
     cabalFiles <- findCabalFiles wdir
     return $ cabalFiles ++ ["package.yaml", "stack.yaml"]
 
-stackAction :: FilePath -> FilePath -> IO (ExitCode, String, [String])
+stackAction :: FilePath -> FilePath -> IO (CradleLoadResult CompilerOptions)
 stackAction work_dir fp = do
   -- Same wrapper works as with cabal
   wrapper_fp <- getCabalWrapperTool
@@ -295,9 +298,13 @@ stackAction work_dir fp = do
       readProcessWithExitCodeInDirectory work_dir "stack" ["path", "--ghc-package-path"] []
   let split_pkgs = splitSearchPath (init pkg_args)
       pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
-  case processCabalWrapperArgs args of
-      Nothing -> error (show (ex1, stde, args))
-      Just ghc_args -> return (combineExitCodes [ex1, ex2], stde ++ stdr, ghc_args ++ pkg_ghc_args)
+  return $ case processCabalWrapperArgs args of
+      Nothing -> CradleFail (CradleError ex1
+                  (unlines ["Failed to parse result of calling cabal"
+                           , stde
+                           , args]))
+
+      Just ghc_args -> makeCradleResult (combineExitCodes [ex1, ex2], stde ++ stdr, ghc_args ++ pkg_ghc_args)
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess
@@ -336,7 +343,7 @@ rulesHaskellCradleDependencies _wdir = return ["BUILD.bazel", "WORKSPACE"]
 bazelCommand :: String
 bazelCommand = $(embedStringFile "wrappers/bazel")
 
-rulesHaskellAction :: FilePath -> FilePath -> IO (ExitCode, String, [String])
+rulesHaskellAction :: FilePath -> FilePath -> IO (CradleLoadResult CompilerOptions)
 rulesHaskellAction work_dir fp = do
   wrapper_fp <- writeSystemTempFile "wrapper" bazelCommand
   setFileMode wrapper_fp accessModes
@@ -345,7 +352,7 @@ rulesHaskellAction work_dir fp = do
       readProcessWithExitCodeInDirectory work_dir wrapper_fp [rel_path] []
   let args'  = filter (/= '\'') args
   let args'' = filter (/= "\"$GHCI_LOCATION\"") (words args')
-  return (ex, stde, args'')
+  return $ makeCradleResult (ex, stde, args'')
 
 
 ------------------------------------------------------------------------------
@@ -375,11 +382,11 @@ obeliskCradle wdir deps =
         }
     }
 
-obeliskAction :: FilePath -> FilePath -> IO (ExitCode, String, [String])
+obeliskAction :: FilePath -> FilePath -> IO (CradleLoadResult CompilerOptions)
 obeliskAction work_dir _fp = do
   (ex, args, stde) <-
       readProcessWithExitCodeInDirectory work_dir "ob" ["ide-args"] []
-  return (ex, stde, words args)
+  return (makeCradleResult (ex, stde, words args))
 
 
 ------------------------------------------------------------------------------
@@ -412,3 +419,11 @@ readProcessWithExitCodeInDirectory
 readProcessWithExitCodeInDirectory work_dir fp args stdin =
   let process = (proc fp args) { cwd = Just work_dir }
   in  readCreateProcessWithExitCode process stdin
+
+makeCradleResult :: (ExitCode, String, [String]) -> CradleLoadResult CompilerOptions
+makeCradleResult (ex, err, gopts) =
+  case ex of
+    ExitFailure _ -> CradleFail (CradleError ex err)
+    _ ->
+        let compOpts = CompilerOptions gopts
+        in CradleSuccess compOpts
