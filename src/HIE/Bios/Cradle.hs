@@ -63,6 +63,7 @@ getCradle (cc, wdir) = case cradleType cc of
     Bios bios deps  -> biosCradle wdir bios deps cradleDeps
     Direct xs -> directCradle wdir xs cradleDeps
     Default   -> defaultCradle wdir cradleDeps
+    None      -> noneCradle wdir
     where
       cradleDeps = cradleDependencies cc
 
@@ -109,6 +110,20 @@ defaultCradle cur_dir deps =
         { actionName = "default"
         , getDependencies = return deps
         , getOptions = const $ return (CradleSuccess (CompilerOptions []))
+        }
+    }
+
+---------------------------------------------------------------
+-- The none cradle tells us not to even attempt to load a certain directory
+
+noneCradle :: FilePath -> Cradle
+noneCradle cur_dir =
+  Cradle
+    { cradleRootDir = cur_dir
+    , cradleOptsProg = CradleAction
+        { actionName = "default"
+        , getDependencies = return []
+        , getOptions = const $ return CradleNone
         }
     }
 

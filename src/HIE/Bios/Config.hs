@@ -39,6 +39,7 @@ data CradleType
         }
     | Direct { arguments :: [String] }
     | Default
+    | None
     deriving (Show)
 
 instance FromJSON CradleType where
@@ -54,6 +55,7 @@ parseCradleType o
     | Just val <- Map.lookup "bios" o = parseBios val
     | Just val <- Map.lookup "direct" o = parseDirect val
     | Just _val <- Map.lookup "default" o = return Default
+    | Just _val <- Map.lookup "none" o = return None
 parseCradleType o = fail $ "Unknown cradle type: " ++ show o
 
 parseCabal :: Value -> Parser CradleType
