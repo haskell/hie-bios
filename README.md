@@ -116,6 +116,7 @@ cradle:
   direct:
     arguments: ["list","of","ghc","arguments"]
   default:
+  none:
 
 dependencies:
   - someDep
