@@ -64,6 +64,7 @@ getCradle (cc, wdir) = case cradleType cc of
     Direct xs -> directCradle wdir xs cradleDeps
     Default   -> defaultCradle wdir cradleDeps
     None      -> noneCradle wdir
+    Multi ms  -> multiCradle wdir ms
     where
       cradleDeps = cradleDependencies cc
 
@@ -126,6 +127,35 @@ noneCradle cur_dir =
         , getOptions = const $ return CradleNone
         }
     }
+
+---------------------------------------------------------------
+-- The multi cradle selects a cradle based on the filepath
+
+multiCradle :: FilePath -> [(FilePath, CradleConfig)] -> Cradle
+multiCradle cur_dir cs =
+  Cradle
+    { cradleRootDir = cur_dir
+    , cradleOptsProg = CradleAction
+        { actionName = "multi"
+        , getDependencies = return []
+        , getOptions = canonicalizePath >=> multiAction cur_dir cs
+        }
+    }
+
+multiAction :: FilePath
+            -> [(FilePath, CradleConfig)]
+            -> FilePath
+            -> IO (CradleLoadResult CompilerOptions)
+multiAction cur_dir cs cur_fp = selectCradle cs
+
+  where
+    selectCradle [] = error "None matched"
+    selectCradle ((p, c): css) = do
+        prefix_path <- canonicalizePath (cur_dir </> p)
+        if prefix_path `isPrefixOf` cur_fp
+          then getOptions (cradleOptsProg (getCradle (c, cur_dir))) cur_fp
+          else selectCradle css
+
 
 -------------------------------------------------------------------------
 

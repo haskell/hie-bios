@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 module HIE.Bios.Config(
     readConfig,
     Config(..),
@@ -40,6 +41,7 @@ data CradleType
     | Direct { arguments :: [String] }
     | Default
     | None
+    | Multi [ (FilePath, CradleConfig) ]
     deriving (Show)
 
 instance FromJSON CradleType where
@@ -56,6 +58,7 @@ parseCradleType o
     | Just val <- Map.lookup "direct" o = parseDirect val
     | Just _val <- Map.lookup "default" o = return Default
     | Just _val <- Map.lookup "none" o = return None
+    | Just val  <- Map.lookup "multi" o = parseMulti val
 parseCradleType o = fail $ "Unknown cradle type: " ++ show o
 
 parseCabal :: Value -> Parser CradleType
@@ -96,10 +99,25 @@ parseDirect (Object x)
     = fail "Not a valid Direct Configuration type, following keys are allowed: arguments"
 parseDirect _ = fail "Direct Configuration is expected to be an object."
 
+parseMulti :: Value -> Parser CradleType
+parseMulti (Array x)
+    = Multi <$> mapM parsePath (V.toList x)
+--    = fail "Not a valid Direct Configuration type, following keys are allowed: arguments"
+parseMulti _ = fail "Multi Configuration is expected to be an array."
+
+parsePath :: Value -> Parser (FilePath, CradleConfig)
+parsePath (Object v)
+  | Just (String path) <- Map.lookup "path" v
+  , Just c <- Map.lookup "config" v
+  = do
+      (T.unpack path,) <$> parseJSON c
+parsePath o = fail ("Multi component is expected to be an object." ++ show o)
+
+
 data Config = Config { cradle :: CradleConfig }
     deriving (Show)
 
-instance FromJSON Config where
+instance FromJSON CradleConfig where
     parseJSON (Object val) = do
             crd     <- val .: "cradle"
             crdDeps <- case Map.size val of
@@ -107,13 +125,15 @@ instance FromJSON Config where
                 2 -> val .: "dependencies"
                 _ -> fail "Unknown key, following keys are allowed: cradle, dependencies"
 
-            return Config
-                { cradle = CradleConfig { cradleType         = crd
-                                        , cradleDependencies = crdDeps
-                                        }
-                }
+            return $ CradleConfig { cradleType         = crd
+                                      , cradleDependencies = crdDeps
+                                      }
 
     parseJSON _ = fail "Expected a cradle: key containing the preferences, possible values: cradle, dependencies"
+
+
+instance FromJSON Config where
+    parseJSON o = Config <$> parseJSON o
 
 readConfig :: FilePath -> IO Config
 readConfig = decodeFileThrow
