@@ -430,7 +430,9 @@ findFileUpwards p dir = do
 
 -- | Sees if any file in the directory matches the predicate
 findFile :: (FilePath -> Bool) -> FilePath -> IO [FilePath]
-findFile p dir = getFiles >>= filterM doesPredFileExist
+findFile p dir = do
+  b <- doesDirectoryExist dir
+  if b then getFiles >>= filterM doesPredFileExist else return []
   where
     getFiles = filter p <$> getDirectoryContents dir
     doesPredFileExist file = doesFileExist $ dir </> file
