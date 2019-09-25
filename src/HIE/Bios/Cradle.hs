@@ -247,7 +247,7 @@ getCabalWrapperTool = do
             writeFile wrapper_hs cabalWrapperHs
             createDirectoryIfMissing True cacheDir
             let ghc = (proc "ghc" ["-o", wrapper_fp, wrapper_hs])
-                      { cwd = Just (takeDirectory wrapper_hs) }
+                        { cwd = Just (takeDirectory wrapper_hs) }
             readCreateProcess ghc "" >>= putStr
         return wrapper_fp
       else do
