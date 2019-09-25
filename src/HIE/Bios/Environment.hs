@@ -22,18 +22,18 @@ import Data.List
 import HIE.Bios.Types
 
 initSession :: (GhcMonad m)
-    => CompilerOptions
+    => ComponentOptions
     -> m [G.Target]
-initSession  CompilerOptions {..} = do
+initSession  ComponentOptions {..} = do
     df <- G.getSessionDynFlags
     -- traceShowM (length ghcOptions)
 
-    let opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init (map B.pack ghcOptions)
+    let opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init (map B.pack componentOptions)
     fp <- liftIO $ getCacheDir opts_hash
     -- For now, clear the cache initially rather than persist it across
     -- sessions
     liftIO $ clearInterfaceCache opts_hash
-    (df', targets) <- addCmdOpts ghcOptions df
+    (df', targets) <- addCmdOpts componentOptions df
     void $ G.setSessionDynFlags
         (disableOptimisation
         $ setIgnoreInterfacePragmas

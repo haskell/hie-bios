@@ -8,7 +8,7 @@ module HIE.Bios (
   , loadImplicitCradle
   , defaultCradle
   -- * Compiler Options
-  , CompilerOptions(..)
+  , ComponentOptions(..)
   , getCompilerOptions
   -- * Initialise session
   , initSession

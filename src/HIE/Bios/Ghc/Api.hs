@@ -82,7 +82,7 @@ initializeFlagsWithCradleWithMessage msg fp cradle = do
 
 initSessionWithMessage :: (GhcMonad m)
             => Maybe G.Messager
-            -> CompilerOptions
+            -> ComponentOptions
             -> m ()
 initSessionWithMessage msg compOpts = do
     targets <- initSession compOpts
