@@ -238,11 +238,13 @@ getCabalWrapperTool = do
     if isWindows
       then do
         cacheDir <- getXdgDirectory XdgCache "hie-bios"
-        let exeName = ("wrapper-" ++ showVersion version) <.> "exe"
-        let wrapper_fp = cacheDir </> exeName
+        let wrapper_name = "wrapper-" ++ showVersion version
+        let wrapper_fp = cacheDir </> wrapper_name <.> "exe"
         exists <- doesFileExist wrapper_fp
         unless exists $ do
-            wrapper_hs <- writeSystemTempFile "wrapper.hs" cabalWrapperHs
+            tempDir <- getTemporaryDirectory
+            let wrapper_hs = tempDir </> wrapper_name <.> "hs"
+            writeFile wrapper_hs cabalWrapperHs
             createDirectoryIfMissing True cacheDir
             let ghc = (proc "ghc" ["-o", wrapper_fp, wrapper_hs])
                       { cwd = Just (takeDirectory wrapper_hs) }
