@@ -69,7 +69,7 @@ initializeFlagsWithCradle ::
     GhcMonad m
     => FilePath -- The file we are loading it because of
     -> Cradle
-    -> m ()
+    -> m (Maybe CradleError)
 initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMsg)
 
 initializeFlagsWithCradleWithMessage ::
@@ -77,12 +77,12 @@ initializeFlagsWithCradleWithMessage ::
   => Maybe G.Messager
   -> FilePath -- The file we are loading it because of
   -> Cradle
-  -> m ()
+  -> m (Maybe CradleError)
 initializeFlagsWithCradleWithMessage msg fp cradle = do
     compOpts <- liftIO $ getCompilerOptions fp cradle
     case compOpts of
-      Left err -> liftIO $ throwIO err
-      Right opts -> initSessionWithMessage msg opts
+      Left err -> return $ Just err
+      Right opts -> initSessionWithMessage msg opts >> return Nothing
 
 initSessionWithMessage :: (GhcMonad m)
             => Maybe G.Messager

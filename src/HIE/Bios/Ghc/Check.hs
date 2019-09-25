@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module HIE.Bios.Ghc.Check (
     checkSyntax
   , check
@@ -5,6 +7,8 @@ module HIE.Bios.Ghc.Check (
   , expand
   ) where
 
+import Control.Exception (throwIO)
+import Control.Monad.IO.Class (liftIO)
 import DynFlags (dopt_set, DumpFlag(Opt_D_dump_splices))
 import GHC (Ghc, DynFlags(..), GhcMonad)
 
@@ -25,8 +29,9 @@ checkSyntax :: Options
 checkSyntax _   _      []    = return ""
 checkSyntax opt cradle files = withGhcT $ do
     pprTrace "cradle" (text $ show cradle) (return ())
-    initializeFlagsWithCradle (head files) cradle
-    either id id <$> check opt files
+    initializeFlagsWithCradle (head files) cradle >>= \case
+      Just crdlErr -> liftIO $ throwIO crdlErr
+      Nothing -> either id id <$> check opt files
   where
     {-
     sessionName = case files of
@@ -55,9 +60,10 @@ expandTemplate :: Options
                -> [FilePath]  -- ^ The target files.
                -> IO String
 expandTemplate _   _      []    = return ""
-expandTemplate opt cradle files = withGHC sessionName $ do
-    initializeFlagsWithCradle (head files) cradle
-    either id id <$> expand opt files
+expandTemplate opt cradle files = withGHC sessionName $
+    initializeFlagsWithCradle (head files) cradle >>= \case
+      Just crdlErr -> liftIO $ throwIO crdlErr
+      Nothing -> either id id <$> expand opt files
   where
     sessionName = case files of
       [file] -> file
