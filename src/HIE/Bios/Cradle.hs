@@ -24,6 +24,8 @@ import Data.List
 
 import System.PosixCompat.Files
 
+import Data.Version (showVersion)
+import Paths_hie_bios
 ----------------------------------------------------------------
 
 -- | Given root/foo/bar.hs, return root/hie.yaml, or wherever the yaml file was found
@@ -235,12 +237,16 @@ getCabalWrapperTool = do
   wrapper_fp <-
     if isWindows
       then do
-        wrapper_hs <- writeSystemTempFile "wrapper.hs" cabalWrapperHs
-        -- the initial contents will be overwritten immediately after by ghc
-        wrapper_fp <- writeSystemTempFile "wrapper.exe" ""
-        let ghc = (proc "ghc" ["-o", wrapper_fp, wrapper_hs])
-                    { cwd = Just (takeDirectory wrapper_hs) }
-        readCreateProcess ghc "" >>= putStr
+        cacheDir <- getXdgDirectory XdgCache "hie-bios"
+        let exeName = ("wrapper-" ++ showVersion version) <.> "exe"
+        let wrapper_fp = cacheDir </> exeName
+        exists <- doesFileExist wrapper_fp
+        unless exists $ do
+            wrapper_hs <- writeSystemTempFile "wrapper.hs" cabalWrapperHs
+            createDirectoryIfMissing True cacheDir
+            let ghc = (proc "ghc" ["-o", wrapper_fp, wrapper_hs])
+                      { cwd = Just (takeDirectory wrapper_hs) }
+            readCreateProcess ghc "" >>= putStr
         return wrapper_fp
       else do
         writeSystemTempFile "bios-wrapper" cabalWrapper
