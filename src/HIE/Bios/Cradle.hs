@@ -2,6 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 module HIE.Bios.Cradle (
       loadCradle
+    , findCradle
     , cradleConfig
   ) where
 
@@ -23,6 +24,12 @@ import Data.List
 import System.PosixCompat.Files
 
 ----------------------------------------------------------------
+
+-- | Given root/foo/bar.hs, return root/hie.yaml, or wherever the yaml file was found
+findCradle :: FilePath -> IO (Maybe FilePath)
+findCradle wfile = do
+    let wdir = takeDirectory wfile
+    runMaybeT (yamlConfig wdir)
 
 -- | Given root/foo/bar.hs return Cradle
 loadCradle :: FilePath -> IO Cradle

@@ -5,6 +5,7 @@ module HIE.Bios (
     Cradle(..)
   , cradleConfig
   , loadCradle
+  , findCradle
   -- * Compiler Options
   , CompilerOptions(..)
   , getCompilerOptions
