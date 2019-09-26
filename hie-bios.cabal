@@ -36,6 +36,7 @@ Library
                         HIE.Bios.Ghc.Load
                         HIE.Bios.Ghc.Logger
                         HIE.Bios.Ghc.Things
+  Other-Modules:        Paths_hie_bios
   Build-Depends:
                         base >= 4.8 && < 5,
                         base16-bytestring    >= 0.1.1 && < 0.2,
