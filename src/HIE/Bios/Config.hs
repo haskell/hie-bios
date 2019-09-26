@@ -21,7 +21,7 @@ data CradleConfig =
         -- ^ Type of the cradle to use. Actions to obtain
         -- compiler flags from are dependant on this field.
         }
-        deriving (Show)
+        deriving (Show, Eq)
 
 data CradleType
     = Cabal { component :: Maybe String }
@@ -40,7 +40,7 @@ data CradleType
     | Direct { arguments :: [String] }
     | Default
     | None
-    deriving (Show)
+    deriving (Show, Eq)
 
 instance FromJSON CradleType where
     parseJSON (Object o) = parseCradleType o
@@ -97,7 +97,7 @@ parseDirect (Object x)
 parseDirect _ = fail "Direct Configuration is expected to be an object."
 
 data Config = Config { cradle :: CradleConfig }
-    deriving (Show)
+    deriving (Show, Eq)
 
 instance FromJSON Config where
     parseJSON (Object val) = do
