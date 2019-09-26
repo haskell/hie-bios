@@ -34,21 +34,22 @@ findCradle wfile = do
 -- | Given root/foo/bar.hs return Cradle
 loadCradle :: FilePath -> IO Cradle
 loadCradle wfile = do
-  mConfig <- cradleConfig (takeDirectory wfile)
+  mConfig <- cradleConfig wfile
   return $ maybe defCradle getCradle mConfig
   where
   defCradle = defaultCradle (takeDirectory wfile) []
 
--- | Given root/hie-bios.yaml return the Cradle configuration and yaml directory
+-- | Given root/foo/bar.hs return the Cradle configuration and yaml directory
 cradleConfig :: FilePath -> IO (Maybe (CradleConfig, FilePath))
-cradleConfig wdir = do
-  mConfigPath <- runMaybeT $ yamlConfig wdir
+cradleConfig wfile = do
+  mConfigPath <- findCradle wfile
 
   rConf <- sequence $ coupleConfAndConfPath <$> mConfigPath
   iConf <- runMaybeT $ implicitConfig wdir
 
   pure $ rConf <|> iConf
   where
+  wdir = takeDirectory wfile
   coupleConfAndConfPath confPath = (,takeDirectory confPath)
                                <$> readCradleConfig confPath
 
