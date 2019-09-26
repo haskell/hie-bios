@@ -97,6 +97,7 @@ script:
 
   # build & run tests, build benchmarks
   - ${CABAL} new-build -w ${HC} ${TEST} ${BENCH} all
+  - ${CABAL} new-test -w ${HC} all
 
   # cabal check
   - (cd hie-bios-* && ${CABAL} check)
