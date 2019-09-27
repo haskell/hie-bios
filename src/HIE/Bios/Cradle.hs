@@ -247,7 +247,7 @@ getCabalWrapperTool = do
       let ghc = (proc "ghc" ["-o", wrapper_fp, wrapper_hs])
                   { cwd = Just (takeDirectory wrapper_hs) }
       readCreateProcess ghc "" >>= putStr
-    turn wrapper_fp
+    return wrapper_fp
 
   setFileMode wrapper_fp accessModes
   _check <- readFile wrapper_fp
