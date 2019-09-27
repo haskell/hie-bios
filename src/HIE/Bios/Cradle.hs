@@ -234,24 +234,20 @@ processCabalWrapperArgs args =
 -- command-line arguments and exit
 getCabalWrapperTool :: IO FilePath
 getCabalWrapperTool = do
-  wrapper_fp <-
-    if isWindows
-      then do
-        cacheDir <- getXdgDirectory XdgCache "hie-bios"
-        let wrapper_name = "wrapper-" ++ showVersion version
-        let wrapper_fp = cacheDir </> wrapper_name <.> "exe"
-        exists <- doesFileExist wrapper_fp
-        unless exists $ do
-            tempDir <- getTemporaryDirectory
-            let wrapper_hs = tempDir </> wrapper_name <.> "hs"
-            writeFile wrapper_hs cabalWrapperHs
-            createDirectoryIfMissing True cacheDir
-            let ghc = (proc "ghc" ["-o", wrapper_fp, wrapper_hs])
-                        { cwd = Just (takeDirectory wrapper_hs) }
-            readCreateProcess ghc "" >>= putStr
-        return wrapper_fp
-      else do
-        writeSystemTempFile "bios-wrapper" cabalWrapper
+  wrapper_fp <- do
+    cacheDir <- getXdgDirectory XdgCache "hie-bios"
+    let wrapper_name = "wrapper-" ++ showVersion version
+    let wrapper_fp = cacheDir </> wrapper_name <.> "exe"
+    exists <- doesFileExist wrapper_fp
+    unless exists $ do
+      tempDir <- getTemporaryDirectory
+      let wrapper_hs = tempDir </> wrapper_name <.> "hs"
+      writeFile wrapper_hs cabalWrapperHs
+      createDirectoryIfMissing True cacheDir
+      let ghc = (proc "ghc" ["-o", wrapper_fp, wrapper_hs])
+                  { cwd = Just (takeDirectory wrapper_hs) }
+      readCreateProcess ghc "" >>= putStr
+    turn wrapper_fp
 
   setFileMode wrapper_fp accessModes
   _check <- readFile wrapper_fp

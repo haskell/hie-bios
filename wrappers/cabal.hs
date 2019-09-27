@@ -4,15 +4,16 @@ import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs)
 import System.Exit (exitWith)
 import System.Process (spawnProcess, waitForProcess)
+import Data.List (nub)
 
 main = do
   args <- getArgs
   case args of
     "--interactive":_ -> do
       getCurrentDirectory >>= putStrLn
-      putStrLn $ delimited args
+      putStrLn $ delimited $ nub args
     _ -> do
-      ph <- spawnProcess "ghc" args
+      ph <- spawnProcess "ghc" $ nub args
       code <- waitForProcess ph
       exitWith code
 
