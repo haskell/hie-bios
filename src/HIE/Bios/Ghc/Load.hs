@@ -103,9 +103,20 @@ collectASTs action = do
   let dflags1 = dflags0 { hooks = (hooks dflags0)
                           { hscFrontendHook = traceShow "Use hook" $ Just (astHook ref1) }
                         }
-  void $ setSessionDynFlags $ dflags1 -- gopt_set dflags1 Opt_ForceRecomp
+  -- Modify session is much faster than `setSessionDynFlags`.
+  modifySession $ \h -> h{ hsc_dflags = dflags1 }
   res <- action
   tcs <- liftIO $ readIORef ref1
+  -- Unset the hook so that we don't retain the reference ot the IORef so it can be gced.
+  -- This stops the typechecked modules being retained in some cases.
+  liftIO $ writeIORef ref1 []
+  dflags0 <- getSessionDynFlags
+  let dflags2 = dflags1 { hooks = (hooks dflags0)
+                          { hscFrontendHook = Nothing }
+                        }
+
+  modifySession $ \h -> h{ hsc_dflags = dflags2 }
+
   return (res, tcs)
 
 astHook :: IORef [TypecheckedModule] -> ModSummary -> Hsc FrontendResult
