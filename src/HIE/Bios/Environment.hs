@@ -26,7 +26,6 @@ initSession :: (GhcMonad m)
     -> m [G.Target]
 initSession  ComponentOptions {..} = do
     df <- G.getSessionDynFlags
-    -- traceShowM (length ghcOptions)
 
     let opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init (map B.pack componentOptions)
     fp <- liftIO $ getCacheDir opts_hash
@@ -112,9 +111,6 @@ addCmdOpts :: (GhcMonad m)
            => [String] -> DynFlags -> m (DynFlags, [G.Target])
 addCmdOpts cmdOpts df1 = do
   (df2, leftovers, _warns) <- G.parseDynamicFlags df1 (map G.noLoc cmdOpts)
-  -- TODO: remove this trace
-  -- What about warnings?
-  -- traceShowM (map G.unLoc leftovers, length warns)
 
   let
      -- To simplify the handling of filepaths, we normalise all filepaths right

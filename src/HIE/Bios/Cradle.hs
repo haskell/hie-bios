@@ -352,9 +352,7 @@ stackAction :: FilePath -> FilePath -> IO (CradleLoadResult ComponentOptions)
 stackAction work_dir fp = do
   -- Same wrapper works as with cabal
   wrapper_fp <- getCabalWrapperTool
-  -- TODO: this is for debugging
-  -- check <- readFile wrapper_fp
-  -- traceM check
+  
   (ex1, args, stde) <-
       readProcessWithExitCodeInDirectory work_dir "stack" ["repl", "--silent", "--no-load", "--with-ghc", wrapper_fp, fp ] []
   (ex2, pkg_args, stdr) <-
