@@ -29,6 +29,7 @@ Library
                         HIE.Bios.Debug
                         HIE.Bios.Flags
                         HIE.Bios.Types
+                        HIE.Bios.Log
                         HIE.Bios.Ghc.Api
                         HIE.Bios.Ghc.Check
                         HIE.Bios.Ghc.Doc
@@ -56,7 +57,9 @@ Library
                         unix-compat          >= 0.5.1 && < 0.6,
                         unordered-containers >= 0.2.9 && < 0.3,
                         vector               >= 0.12.0 && < 0.13,
-                        yaml                 >= 0.8.32 && < 0.12
+                        yaml                 >= 0.8.32 && < 0.12,
+                        hslogger             >= 1.3.0 && < 1.4
+
 
 Executable hie-bios
   Default-Language:     Haskell2010
