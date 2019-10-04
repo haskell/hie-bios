@@ -11,9 +11,9 @@ import Exception
 
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Logger
+import qualified HIE.Bios.Log as Log
 import HIE.Bios.Types
 import HIE.Bios.Ghc.Load
-import Outputable
 import Control.Monad.IO.Class
 
 ----------------------------------------------------------------
@@ -26,7 +26,7 @@ checkSyntax :: Options
             -> IO String
 checkSyntax _   _      []    = return ""
 checkSyntax opt cradle files = withGhcT $ do
-    pprTrace "cradle" (text $ show cradle) (return ())
+    Log.debugm $ "Cradle: " ++ show cradle
     res <- initializeFlagsWithCradle (head files) cradle
     case res of
       CradleSuccess ini -> do
