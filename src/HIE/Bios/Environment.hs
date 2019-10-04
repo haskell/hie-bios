@@ -30,9 +30,6 @@ initSession  CompilerOptions {..} = do
 
     let opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init (map B.pack ghcOptions)
     fp <- liftIO $ getCacheDir opts_hash
-    -- For now, clear the cache initially rather than persist it across
-    -- sessions
-    liftIO $ clearInterfaceCache opts_hash
     (df', targets) <- addCmdOpts ghcOptions df
     void $ G.setSessionDynFlags
         (disableOptimisation
@@ -65,13 +62,19 @@ getSystemLibDir = do
 
 
 cacheDir :: String
-cacheDir = "haskell-ide-engine"
+cacheDir = "hie-bios"
 
+{-
+-- Back in the day we used to clear the cache at the start of each session,
+-- however, it's not really necessary as
+-- 1. There is one cache dir for any change in options.
+-- 2. Interface files are resistent to bad option changes anyway.
 clearInterfaceCache :: FilePath -> IO ()
 clearInterfaceCache fp = do
   cd <- getCacheDir fp
   res <- doesPathExist cd
   when res (removeDirectoryRecursive cd)
+-}
 
 getCacheDir :: FilePath -> IO FilePath
 getCacheDir fp = getXdgDirectory XdgCache (cacheDir </> fp)
