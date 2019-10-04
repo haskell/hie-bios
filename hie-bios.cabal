@@ -58,7 +58,7 @@ Library
                         unordered-containers >= 0.2.9 && < 0.3,
                         vector               >= 0.12.0 && < 0.13,
                         yaml                 >= 0.8.32 && < 0.12,
-                        hslogger             >= 1.3.0 && < 1.4
+                        hslogger             >= 1.2 && < 1.4
 
 
 Executable hie-bios
