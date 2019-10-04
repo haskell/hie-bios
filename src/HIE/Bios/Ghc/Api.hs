@@ -27,11 +27,11 @@ import qualified GhcMake as G
 
 import Control.Monad (void)
 import System.Exit (exitSuccess)
-import System.IO (hPutStr, hPrint, stderr)
 import System.IO.Unsafe (unsafePerformIO)
 
 import qualified HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Types
+import qualified HIE.Bios.Log as Log
 import HIE.Bios.Environment
 import HIE.Bios.Flags
 
@@ -47,8 +47,8 @@ withGHC file body = ghandle ignore $ withGHC' body
   where
     ignore :: SomeException -> IO a
     ignore e = do
-        hPutStr stderr $ file ++ ":0:0:Error:"
-        hPrint stderr e
+        Log.logm $ file ++ ":0:0:Error:"
+        Log.logm (show e)
         exitSuccess
 
 withGHC' :: Ghc a -> IO a
