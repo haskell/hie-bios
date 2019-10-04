@@ -56,10 +56,8 @@ main = flip E.catches handlers $ do
     hSetEncoding stdout utf8
     args <- getArgs
     cradle <- getCurrentDirectory >>= \cwd ->
-        -- find cradle does a takeDirectory on the argument, so make it into a file
-        findCradle (cwd </> "File.hs") >>= \case
-          Just yaml -> loadCradle yaml
-          Nothing -> loadImplicitCradle (cwd </> "File.hs")
+        -- loadCradle does a takeDirectory on the argument, so make it into a file
+        loadCradle (cwd </> "File.hs")
     let cmdArg0 = args !. 0
         remainingArgs = tail args
         opt = defaultOptions

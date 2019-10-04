@@ -1,10 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 module HIE.Bios.Cradle (
-      findCradle
-    , loadCradle
-    , loadImplicitCradle
-    , defaultCradle
+      loadCradle
+    , findCradle
+    , cradleConfig
   ) where
 
 import System.Process
@@ -34,27 +33,27 @@ findCradle wfile = do
     let wdir = takeDirectory wfile
     runMaybeT (yamlConfig wdir)
 
--- | Given root/hie.yaml load the Cradle
+-- | Given root/foo/bar.hs return Cradle
 loadCradle :: FilePath -> IO Cradle
-loadCradle = loadCradleWithOpts defaultCradleOpts
+loadCradle wfile = do
+  mConfig <- cradleConfig wfile
+  return $ maybe defCradle getCradle mConfig
+  where
+  defCradle = defaultCradle (takeDirectory wfile) []
 
--- | Given root/foo/bar.hs, load an implicit cradle
-loadImplicitCradle :: FilePath -> IO Cradle
-loadImplicitCradle wfile = do
-  let wdir = takeDirectory wfile
-  cfg <- runMaybeT (implicitConfig wdir)
-  return $ case cfg of
-    Just bc -> getCradle bc
-    Nothing -> defaultCradle wdir []
+-- | Given root/foo/bar.hs return the Cradle configuration and yaml directory
+cradleConfig :: FilePath -> IO (Maybe (CradleConfig, FilePath))
+cradleConfig wfile = do
+  mConfigPath <- findCradle wfile
 
--- | Finding 'Cradle'.
---   Find a cabal file by tracing ancestor directories.
---   Find a sandbox according to a cabal sandbox config
---   in a cabal directory.
-loadCradleWithOpts :: CradleOpts -> FilePath -> IO Cradle
-loadCradleWithOpts _copts wfile = do
-    cradleConfig <- readCradleConfig wfile
-    return $ getCradle (cradleConfig, takeDirectory wfile)
+  rConf <- sequence $ coupleConfAndConfPath <$> mConfigPath
+  iConf <- runMaybeT $ implicitConfig wdir
+
+  pure $ rConf <|> iConf
+  where
+  wdir = takeDirectory wfile
+  coupleConfAndConfPath confPath = (,takeDirectory confPath)
+                               <$> readCradleConfig confPath
 
 getCradle :: (CradleConfig, FilePath) -> Cradle
 getCradle (cc, wdir) = case cradleType cc of

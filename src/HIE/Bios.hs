@@ -1,12 +1,11 @@
 -- | The HIE Bios
 
 module HIE.Bios (
-  -- * Find and load a Cradle
+  -- * Find and load a Cradle and its configuration
     Cradle(..)
-  , findCradle
   , loadCradle
-  , loadImplicitCradle
-  , defaultCradle
+  , findCradle
+  , cradleConfig
   -- * Compiler Options
   , CompilerOptions(..)
   , getCompilerOptions
