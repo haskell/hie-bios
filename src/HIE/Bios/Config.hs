@@ -41,6 +41,7 @@ data CradleType
     | Direct { arguments :: [String] }
     | Default
     | None
+    | Multi [ (FilePath, CradleConfig) ]
     deriving (Show, Eq)
 
 instance FromJSON CradleType where
@@ -57,6 +58,7 @@ parseCradleType o
     | Just val <- Map.lookup "direct" o = parseDirect val
     | Just _val <- Map.lookup "default" o = return Default
     | Just _val <- Map.lookup "none" o = return None
+    | Just val  <- Map.lookup "multi" o = parseMulti val
 parseCradleType o = fail $ "Unknown cradle type: " ++ show o
 
 parseCabal :: Value -> Parser CradleType
@@ -96,6 +98,20 @@ parseDirect (Object x)
     | otherwise
     = fail "Not a valid Direct Configuration type, following keys are allowed: arguments"
 parseDirect _ = fail "Direct Configuration is expected to be an object."
+
+parseMulti :: Value -> Parser CradleType
+parseMulti (Array x)
+    = Multi <$> mapM parsePath (V.toList x)
+parseMulti _ = fail "Multi Configuration is expected to be an array."
+
+parsePath :: Value -> Parser (FilePath, CradleConfig)
+parsePath (Object v)
+  | Just (String path) <- Map.lookup "path" v
+  , Just c <- Map.lookup "config" v
+  = do
+      (T.unpack path,) <$> parseJSON c
+parsePath o = fail ("Multi component is expected to be an object." ++ show o)
+
 
 data Config = Config { cradle :: CradleConfig }
     deriving (Show, Eq)

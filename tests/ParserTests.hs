@@ -21,6 +21,8 @@ main = defaultMain $
     assertParser "direct.yaml" (noDeps (Direct ["list", "of", "arguments"]))
     assertParser "none.yaml" (noDeps None)
     assertParser "obelisk.yaml" (noDeps Obelisk)
+    assertParser "multi.yaml" (noDeps (Multi [("./src", CradleConfig [] (Cabal (Just "lib:hie-bios")))
+                                             , ("./test", CradleConfig [] (Cabal (Just "test")) ) ]))
 
 
 
