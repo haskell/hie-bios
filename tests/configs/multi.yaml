@@ -1,0 +1,6 @@
+cradle:
+  multi:
+    - path: "./src"
+      config: { cradle: {cabal: {component: "lib:hie-bios"}} }
+    - path: "./test"
+      config: { cradle: {cabal: {component: "test"}} }

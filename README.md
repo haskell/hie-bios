@@ -117,10 +117,53 @@ cradle:
     arguments: ["list","of","ghc","arguments"]
   default:
   none:
+  multi: - path: ./
+           config: { cradle: ... }
 
 dependencies:
   - someDep
 ```
+
+## Multi-Cradle
+
+For a multi-component project you can use the multi-cradle to specify how each
+subdirectory of the project should be handled by the IDE.
+
+The multi-cradle is a list of relative paths and cradle configurations.
+The path is relative to the configuration file and specifies the scope of
+the cradle. For example, this configuration specificies that files in the
+`src` subdirectory should be handled with the `lib:hie-bios` component and
+files in the `test` directory using the `test` component.
+
+```
+cradle:
+  multi:
+    - path: "./src"
+      config: { cradle: {cabal: {component: "lib:hie-bios"}} }
+    - path: "./test"
+      config: { cradle: {cabal: {component: "test"}} }
+```
+
+If a file matches multiple prefixes, the most specific one is chosen.
+
+This cradle type is experimental and may not be supported correctly by
+some libraries which use `hie-bios`. It requires some additional care to
+correctly manage multiple components.
+
+Note: Remember you can use the multi-cradle to declare that certain directories
+shouldn't be loaded by an IDE, in conjunction with the `none` cradle.
+
+```
+cradle:
+  multi:
+    - path: "./src"
+      config: { cradle: {cabal: {component: "lib:hie-bios"}} }
+    - path: "./test"
+      config: { cradle: {cabal: {component: "test"}} }
+    - path: "./test/test-files"
+      config: { cradle: none }
+```
+
 
 ## Implicit Configuration
 

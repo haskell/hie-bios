@@ -66,6 +66,7 @@ getCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
     Direct xs -> directCradle wdir xs
     Default   -> defaultCradle wdir
     None      -> noneCradle wdir
+    Multi ms  -> multiCradle wdir ms
     where
       cradleDeps = cradleDependencies cc
 
@@ -135,6 +136,50 @@ noneCradle cur_dir =
         , runCradle = const $ return CradleNone
         }
     }
+
+---------------------------------------------------------------
+-- The multi cradle selects a cradle based on the filepath
+
+multiCradle :: FilePath -> [(FilePath, CradleConfig)] -> Cradle
+multiCradle cur_dir cs =
+  Cradle
+    { cradleRootDir = cur_dir
+    , cradleOptsProg = CradleAction
+        { actionName = "multi"
+        , runCradle = canonicalizePath >=> multiAction cur_dir cs
+        }
+    }
+
+multiAction :: FilePath
+            -> [(FilePath, CradleConfig)]
+            -> FilePath
+            -> IO (CradleLoadResult ComponentOptions)
+multiAction cur_dir cs cur_fp = selectCradle =<< canonicalizeCradles
+
+  where
+    err_msg = unlines $ ["Multi Cradle: No prefixes matched"
+                      , "pwd: " ++ cur_dir
+                      , "filepath" ++ cur_fp
+                      , "prefixes:"
+                      ] ++ [show (pf, cradleType cc) | (pf, cc) <- cs]
+
+    -- Canonicalize the relative paths present in the multi-cradle and
+    -- also order the paths by most specific first. In the cradle selection
+    -- function we want to choose the most specific cradle possible.
+    canonicalizeCradles :: IO [(FilePath, CradleConfig)]
+    canonicalizeCradles =
+      sortBy (\(p1, _) (p2, _) ->
+        if p1 `isPrefixOf` p2
+          then GT
+          else LT) <$> mapM (\(p, c) -> (,c) <$> (canonicalizePath (cur_dir </> p))) cs
+
+    selectCradle [] =
+      return (CradleFail (CradleError ExitSuccess err_msg))
+    selectCradle ((p, c): css) = do
+        if p `isPrefixOf` cur_fp
+          then runCradle (cradleOptsProg (getCradle (c, cur_dir))) cur_fp
+          else selectCradle css
+
 
 -------------------------------------------------------------------------
 
