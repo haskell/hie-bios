@@ -45,7 +45,7 @@ loadImplicitCradle wfile = do
   cfg <- runMaybeT (implicitConfig wdir)
   return $ case cfg of
     Just bc -> getCradle bc
-    Nothing -> defaultCradle wdir []
+    Nothing -> defaultCradle wdir
 
 -- | Finding 'Cradle'.
 --   Find a cabal file by tracing ancestor directories.
@@ -57,17 +57,27 @@ loadCradleWithOpts _copts wfile = do
     return $ getCradle (cradleConfig, takeDirectory wfile)
 
 getCradle :: (CradleConfig, FilePath) -> Cradle
-getCradle (cc, wdir) = case cradleType cc of
-    Cabal mc -> cabalCradle wdir mc cradleDeps
-    Stack -> stackCradle wdir cradleDeps
-    Bazel -> rulesHaskellCradle wdir cradleDeps
-    Obelisk -> obeliskCradle wdir cradleDeps
-    Bios bios deps  -> biosCradle wdir bios deps cradleDeps
-    Direct xs -> directCradle wdir xs cradleDeps
-    Default   -> defaultCradle wdir cradleDeps
+getCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
+    Cabal mc -> cabalCradle wdir mc
+    Stack -> stackCradle wdir
+    Bazel -> rulesHaskellCradle wdir
+    Obelisk -> obeliskCradle wdir
+    Bios bios deps  -> biosCradle wdir bios deps
+    Direct xs -> directCradle wdir xs
+    Default   -> defaultCradle wdir
     None      -> noneCradle wdir
     where
       cradleDeps = cradleDependencies cc
+
+addCradleDeps :: [FilePath] -> Cradle -> Cradle
+addCradleDeps deps c =
+  c { cradleOptsProg = addActionDeps (cradleOptsProg c) }
+  where
+    addActionDeps :: CradleAction -> CradleAction
+    addActionDeps ca =
+      ca { runCradle = \fp ->
+            (fmap (\(ComponentOptions os' ds) -> ComponentOptions os' (ds `union` deps)))
+              <$> runCradle ca fp }
 
 implicitConfig :: FilePath -> MaybeT IO (CradleConfig, FilePath)
 implicitConfig fp = do
@@ -99,19 +109,17 @@ readCradleConfig yamlHie = do
 configFileName :: FilePath
 configFileName = "hie.yaml"
 
-
 ---------------------------------------------------------------
 -- Default cradle has no special options, not very useful for loading
 -- modules.
 
-defaultCradle :: FilePath -> [FilePath] -> Cradle
-defaultCradle cur_dir deps =
+defaultCradle :: FilePath -> Cradle
+defaultCradle cur_dir =
   Cradle
     { cradleRootDir = cur_dir
     , cradleOptsProg = CradleAction
         { actionName = "default"
-        , getDependencies = return deps
-        , getOptions = const $ return (CradleSuccess (CompilerOptions []))
+        , runCradle = const $ return (CradleSuccess (ComponentOptions [] []))
         }
     }
 
@@ -124,21 +132,19 @@ noneCradle cur_dir =
     { cradleRootDir = cur_dir
     , cradleOptsProg = CradleAction
         { actionName = "none"
-        , getDependencies = return []
-        , getOptions = const $ return CradleNone
+        , runCradle = const $ return CradleNone
         }
     }
 
 -------------------------------------------------------------------------
 
-directCradle :: FilePath -> [String] -> [FilePath] -> Cradle
-directCradle wdir args deps =
+directCradle :: FilePath -> [String] -> Cradle
+directCradle wdir args  =
   Cradle
     { cradleRootDir = wdir
     , cradleOptsProg = CradleAction
         { actionName = "direct"
-        , getDependencies = return deps
-        , getOptions = const $ return (CradleSuccess (CompilerOptions args))
+        , runCradle = const $ return (CradleSuccess (ComponentOptions args []))
         }
     }
 
@@ -147,16 +153,13 @@ directCradle wdir args deps =
 
 -- | Find a cradle by finding an executable `hie-bios` file which will
 -- be executed to find the correct GHC options to use.
-biosCradle :: FilePath -> FilePath -> Maybe FilePath -> [FilePath] -> Cradle
-biosCradle wdir biosProg biosDepsProg deps =
+biosCradle :: FilePath -> FilePath -> Maybe FilePath -> Cradle
+biosCradle wdir biosProg biosDepsProg =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "bios"
-        , getDependencies = fmap (deps `union`) (biosDepsAction biosDepsProg)
-        -- Execute the bios action and add dependencies of the cradle.
-        -- Removes all duplicates.
-        , getOptions = biosAction wdir biosProg
+        , runCradle = biosAction wdir biosProg biosDepsProg
         }
     }
 
@@ -172,25 +175,31 @@ biosDepsAction (Just biosDepsProg) = do
     ExitSuccess -> return (lines sout)
 biosDepsAction Nothing = return []
 
-biosAction :: FilePath -> FilePath -> FilePath -> IO (CradleLoadResult CompilerOptions)
-biosAction _wdir bios fp = do
+biosAction :: FilePath
+           -> FilePath
+           -> Maybe FilePath
+           -> FilePath
+           -> IO (CradleLoadResult ComponentOptions)
+biosAction _wdir bios bios_deps fp = do
   bios' <- canonicalizePath bios
   (ex, res, std) <- readProcessWithExitCode bios' [fp] []
-  return $ makeCradleResult (ex, std, words res)
+  deps <- biosDepsAction bios_deps
+        -- Execute the bios action and add dependencies of the cradle.
+        -- Removes all duplicates.
+  return $ makeCradleResult (ex, std, words res) deps
 
 ------------------------------------------------------------------------
 -- Cabal Cradle
 -- Works for new-build by invoking `v2-repl` does not support components
 -- yet.
 
-cabalCradle :: FilePath -> Maybe String -> [FilePath] -> Cradle
-cabalCradle wdir mc deps =
+cabalCradle :: FilePath -> Maybe String -> Cradle
+cabalCradle wdir mc =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "cabal"
-        , getDependencies = fmap (deps `union`) (cabalCradleDependencies wdir)
-        , getOptions = cabalAction wdir mc
+        , runCradle = cabalAction wdir mc
         }
     }
 
@@ -257,19 +266,21 @@ getCabalWrapperTool = do
   _check <- readFile wrapper_fp
   return wrapper_fp
 
-cabalAction :: FilePath -> Maybe String -> FilePath -> IO (CradleLoadResult CompilerOptions)
+cabalAction :: FilePath -> Maybe String -> FilePath -> IO (CradleLoadResult ComponentOptions)
 cabalAction work_dir mc _fp = do
   wrapper_fp <- getCabalWrapperTool
   let cab_args = ["v2-repl", "-v0", "--disable-documentation", "--with-compiler", wrapper_fp]
                   ++ [component_name | Just component_name <- [mc]]
   (ex, args, stde) <-
     readProcessWithExitCodeInDirectory work_dir "cabal" cab_args []
+
+  deps <- cabalCradleDependencies work_dir
   case processCabalWrapperArgs args of
       Nothing -> pure $ CradleFail (CradleError ex
                   (unlines ["Failed to parse result of calling cabal"
                            , stde
                            , args]))
-      Just final_args -> pure $ makeCradleResult (ex, stde, final_args)
+      Just final_args -> pure $ makeCradleResult (ex, stde, final_args) deps
 
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
@@ -292,14 +303,13 @@ cabalWorkDir = findFileUpwards isCabal
 -- Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
 
-stackCradle :: FilePath -> [FilePath] -> Cradle
-stackCradle wdir deps =
+stackCradle :: FilePath -> Cradle
+stackCradle wdir =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "stack"
-        , getDependencies = fmap (deps `union`) (stackCradleDependencies wdir)
-        , getOptions = stackAction wdir
+        , runCradle = stackAction wdir
         }
     }
 
@@ -308,26 +318,24 @@ stackCradleDependencies wdir = do
     cabalFiles <- findCabalFiles wdir
     return $ cabalFiles ++ ["package.yaml", "stack.yaml"]
 
-stackAction :: FilePath -> FilePath -> IO (CradleLoadResult CompilerOptions)
+stackAction :: FilePath -> FilePath -> IO (CradleLoadResult ComponentOptions)
 stackAction work_dir fp = do
   -- Same wrapper works as with cabal
   wrapper_fp <- getCabalWrapperTool
-  -- TODO: this is for debugging
-  -- check <- readFile wrapper_fp
-  -- traceM check
   (ex1, args, stde) <-
       readProcessWithExitCodeInDirectory work_dir "stack" ["repl", "--silent", "--no-load", "--with-ghc", wrapper_fp, fp ] []
   (ex2, pkg_args, stdr) <-
       readProcessWithExitCodeInDirectory work_dir "stack" ["path", "--ghc-package-path"] []
   let split_pkgs = splitSearchPath (init pkg_args)
       pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
+  deps <- stackCradleDependencies work_dir
   return $ case processCabalWrapperArgs args of
       Nothing -> CradleFail (CradleError ex1
                   (unlines ["Failed to parse result of calling cabal"
                            , stde
                            , args]))
 
-      Just ghc_args -> makeCradleResult (combineExitCodes [ex1, ex2], stde ++ stdr, ghc_args ++ pkg_ghc_args)
+      Just ghc_args -> makeCradleResult (combineExitCodes [ex1, ex2], stde ++ stdr, ghc_args ++ pkg_ghc_args) deps
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess
@@ -349,14 +357,13 @@ rulesHaskellWorkDir :: FilePath -> MaybeT IO FilePath
 rulesHaskellWorkDir fp =
   findFileUpwards (== "WORKSPACE") fp
 
-rulesHaskellCradle :: FilePath -> [FilePath] -> Cradle
-rulesHaskellCradle wdir deps =
+rulesHaskellCradle :: FilePath -> Cradle
+rulesHaskellCradle wdir =
   Cradle
     { cradleRootDir  = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "bazel"
-        , getDependencies = fmap (deps `union`) (rulesHaskellCradleDependencies wdir)
-        , getOptions = rulesHaskellAction wdir
+        , runCradle = rulesHaskellAction wdir
         }
     }
 
@@ -366,7 +373,7 @@ rulesHaskellCradleDependencies _wdir = return ["BUILD.bazel", "WORKSPACE"]
 bazelCommand :: String
 bazelCommand = $(embedStringFile "wrappers/bazel")
 
-rulesHaskellAction :: FilePath -> FilePath -> IO (CradleLoadResult CompilerOptions)
+rulesHaskellAction :: FilePath -> FilePath -> IO (CradleLoadResult ComponentOptions)
 rulesHaskellAction work_dir fp = do
   wrapper_fp <- writeSystemTempFile "wrapper" bazelCommand
   setFileMode wrapper_fp accessModes
@@ -375,7 +382,8 @@ rulesHaskellAction work_dir fp = do
       readProcessWithExitCodeInDirectory work_dir wrapper_fp [rel_path] []
   let args'  = filter (/= '\'') args
   let args'' = filter (/= "\"$GHCI_LOCATION\"") (words args')
-  return $ makeCradleResult (ex, stde, args'')
+  deps <- rulesHaskellCradleDependencies work_dir
+  return $ makeCradleResult (ex, stde, args'') deps
 
 
 ------------------------------------------------------------------------------
@@ -394,22 +402,23 @@ obeliskWorkDir fp = do
 obeliskCradleDependencies :: FilePath -> IO [FilePath]
 obeliskCradleDependencies _wdir = return []
 
-obeliskCradle :: FilePath -> [FilePath] -> Cradle
-obeliskCradle wdir deps =
+obeliskCradle :: FilePath -> Cradle
+obeliskCradle wdir =
   Cradle
     { cradleRootDir  = wdir
     , cradleOptsProg = CradleAction
         { actionName = "obelisk"
-        , getDependencies = fmap (deps `union`) (obeliskCradleDependencies wdir)
-        , getOptions = obeliskAction wdir
+        , runCradle = obeliskAction wdir
         }
     }
 
-obeliskAction :: FilePath -> FilePath -> IO (CradleLoadResult CompilerOptions)
+obeliskAction :: FilePath -> FilePath -> IO (CradleLoadResult ComponentOptions)
 obeliskAction work_dir _fp = do
   (ex, args, stde) <-
       readProcessWithExitCodeInDirectory work_dir "ob" ["ide-args"] []
-  return (makeCradleResult (ex, stde, words args))
+
+  o_deps <- obeliskCradleDependencies work_dir
+  return (makeCradleResult (ex, stde, words args) o_deps )
 
 
 ------------------------------------------------------------------------------
@@ -445,10 +454,10 @@ readProcessWithExitCodeInDirectory work_dir fp args stdin =
   let process = (proc fp args) { cwd = Just work_dir }
   in  readCreateProcessWithExitCode process stdin
 
-makeCradleResult :: (ExitCode, String, [String]) -> CradleLoadResult CompilerOptions
-makeCradleResult (ex, err, gopts) =
+makeCradleResult :: (ExitCode, String, [String]) -> [FilePath] -> CradleLoadResult ComponentOptions
+makeCradleResult (ex, err, gopts) deps =
   case ex of
     ExitFailure _ -> CradleFail (CradleError ex err)
     _ ->
-        let compOpts = CompilerOptions gopts
+        let compOpts = ComponentOptions gopts deps
         in CradleSuccess compOpts

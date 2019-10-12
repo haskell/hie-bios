@@ -159,21 +159,8 @@ data Cradle = Cradle {
 data CradleAction = CradleAction {
                       actionName :: String
                       -- ^ Name of the action
-                      , getDependencies :: IO [FilePath]
-                      -- ^ Dependencies of a cradle that might change the cradle.
-                      -- Contains both files specified in hie.yaml as well as
-                      -- specified by the build-tool if there is any.
-                      -- FilePaths are expected to be relative to the `cradleRootDir`
-                      -- to which this CradleAction belongs to.
-                      -- Files returned by this action might not actually exist.
-                      -- This is useful, because, sometimes, adding specific files
-                      -- changes the options that a Cradle may return, thus, needs reload
-                      -- as soon as these files are created.
-                      , getOptions :: FilePath -> IO (CradleLoadResult CompilerOptions)
+                      , runCradle :: FilePath -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
-                      -- The result consists of the return code of the operation
-                      -- that has been run, the stdout of the process, and a list of
-                      -- options that are needed to compile the given file.
                       }
 
 instance Show CradleAction where
@@ -191,6 +178,16 @@ instance Exception CradleError where
 ----------------------------------------------------------------
 
 -- | Option information for GHC
-data CompilerOptions = CompilerOptions {
-    ghcOptions  :: [String]  -- ^ Command line options
+data ComponentOptions = ComponentOptions {
+    componentOptions  :: [String]  -- ^ Command line options
+  , componentDependencies :: [FilePath]
+  -- ^ Dependencies of a cradle that might change the cradle.
+  -- Contains both files specified in hie.yaml as well as
+  -- specified by the build-tool if there is any.
+  -- FilePaths are expected to be relative to the `cradleRootDir`
+  -- to which this CradleAction belongs to.
+  -- Files returned by this action might not actually exist.
+  -- This is useful, because, sometimes, adding specific files
+  -- changes the options that a Cradle may return, thus, needs reload
+  -- as soon as these files are created.
   } deriving (Eq, Show)
