@@ -15,10 +15,9 @@ debugInfo :: Options
           -> Cradle
           -> IO String
 debugInfo opt cradle = convert opt <$> do
-    res <- getOptions (cradleOptsProg cradle) (cradleRootDir cradle)
+    res <- runCradle (cradleOptsProg cradle) (cradleRootDir cradle)
     case res of
-      CradleSuccess (CompilerOptions gopts) -> do
-        deps  <- getDependencies (cradleOptsProg cradle)
+      CradleSuccess (ComponentOptions gopts deps) -> do
         mglibdir <- liftIO getSystemLibDir
         return [
             "Root directory:      " ++ rootDir

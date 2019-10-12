@@ -9,9 +9,9 @@ import HIE.Bios.Types
 getCompilerOptions ::
     FilePath -- The file we are loading it because of
     -> Cradle
-    -> IO (CradleLoadResult CompilerOptions)
+    -> IO (CradleLoadResult ComponentOptions)
 getCompilerOptions fp cradle = do
-  getOptions (cradleOptsProg cradle) fp
+  runCradle (cradleOptsProg cradle) fp
 
 
 ----------------------------------------------------------------

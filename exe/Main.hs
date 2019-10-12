@@ -77,7 +77,9 @@ main = flip E.catches handlers $ do
                       return $ "Failed to show flags for \""
                                                 ++ fp
                                                 ++ "\": " ++ show err
-                    CradleSuccess opts -> return $ "CompilerOptions: " ++ show (ghcOptions opts)
+                    CradleSuccess opts ->
+                      return $ unlines ["Options: " ++ show (componentOptions opts)
+                                       ,"Dependencies: " ++ show (componentDependencies opts) ]
                     CradleNone -> return "No flags: this component should not be loaded"
         return (unlines res)
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 module HIE.Bios.Config(
     readConfig,
     Config(..),
@@ -99,7 +100,7 @@ parseDirect _ = fail "Direct Configuration is expected to be an object."
 data Config = Config { cradle :: CradleConfig }
     deriving (Show, Eq)
 
-instance FromJSON Config where
+instance FromJSON CradleConfig where
     parseJSON (Object val) = do
             crd     <- val .: "cradle"
             crdDeps <- case Map.size val of
@@ -107,13 +108,15 @@ instance FromJSON Config where
                 2 -> val .: "dependencies"
                 _ -> fail "Unknown key, following keys are allowed: cradle, dependencies"
 
-            return Config
-                { cradle = CradleConfig { cradleType         = crd
-                                        , cradleDependencies = crdDeps
-                                        }
-                }
+            return $ CradleConfig { cradleType         = crd
+                                  , cradleDependencies = crdDeps
+                                  }
 
     parseJSON _ = fail "Expected a cradle: key containing the preferences, possible values: cradle, dependencies"
+
+
+instance FromJSON Config where
+    parseJSON o = Config <$> parseJSON o
 
 readConfig :: FilePath -> IO Config
 readConfig = decodeFileThrow
