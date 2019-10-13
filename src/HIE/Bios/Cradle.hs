@@ -123,7 +123,7 @@ noneCradle cur_dir =
   Cradle
     { cradleRootDir = cur_dir
     , cradleOptsProg = CradleAction
-        { actionName = "default"
+        { actionName = "none"
         , getDependencies = return []
         , getOptions = const $ return CradleNone
         }
