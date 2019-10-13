@@ -21,6 +21,7 @@ import Control.Applicative ((<|>))
 import Data.FileEmbed
 import System.IO.Temp
 import Data.List
+import Data.Ord (Down(..))
 
 import System.PosixCompat.Files
 
@@ -168,10 +169,8 @@ multiAction cur_dir cs cur_fp = selectCradle =<< canonicalizeCradles
     -- function we want to choose the most specific cradle possible.
     canonicalizeCradles :: IO [(FilePath, CradleConfig)]
     canonicalizeCradles =
-      sortBy (\(p1, _) (p2, _) ->
-        if p1 `isPrefixOf` p2
-          then GT
-          else LT) <$> mapM (\(p, c) -> (,c) <$> (canonicalizePath (cur_dir </> p))) cs
+      sortOn (Down . fst)
+        <$> mapM (\(p, c) -> (,c) <$> (canonicalizePath (cur_dir </> p))) cs
 
     selectCradle [] =
       return (CradleFail (CradleError ExitSuccess err_msg))
