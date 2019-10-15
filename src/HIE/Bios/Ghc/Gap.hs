@@ -15,12 +15,23 @@ module HIE.Bios.Ghc.Gap (
   , outType
   , mapMG
   , mgModSummaries
+  , numLoadedPlugins
+  , initializePlugins
   ) where
 
 import DynFlags (DynFlags)
-import GHC(LHsBind, LHsExpr, LPat, Type, ModSummary, ModuleGraph)
+import GHC(LHsBind, LHsExpr, LPat, Type, ModSummary, ModuleGraph, HscEnv)
 import HsExpr (MatchGroup)
 import Outputable (PrintUnqualified, PprStyle, Depth(AllTheWay), mkUserStyle)
+
+#if __GLASGOW_HASKELL__ >= 808
+import qualified DynamicLoading (initializePlugins)
+import qualified Plugins (plugins)
+#endif
+
+
+
+
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
@@ -48,6 +59,7 @@ import GHC (mg_res_ty, mg_arg_tys)
 #else
 import GHC (Id, mg_res_ty, mg_arg_tys)
 #endif
+
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
@@ -140,4 +152,20 @@ mapMG = map
 #else
 mgModSummaries :: ModuleGraph -> [ModSummary]
 mgModSummaries = id
+#endif
+
+numLoadedPlugins :: DynFlags -> Int
+#if __GLASGOW_HASKELL__ >= 808
+numLoadedPlugins = length . Plugins.plugins
+#else
+-- Plugins are loaded just as they are used
+numLoadedPlugins _ = 0
+#endif
+
+initializePlugins :: HscEnv -> DynFlags -> IO DynFlags
+#if __GLASGOW_HASKELL__ >= 808
+initializePlugins = DynamicLoading.initializePlugins
+#else
+-- In earlier versions of GHC plugins are just loaded before they are used.
+initializePlugins _ df = return df
 #endif
