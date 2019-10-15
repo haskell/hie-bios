@@ -2,7 +2,6 @@
 {-# LANGUAGE CPP #-}
 module HIE.Bios.Ghc.Load ( loadFileWithMessage, loadFile, setTargetFiles, setTargetFilesWithMessage) where
 
-import CoreMonad (liftIO)
 import GHC
 import qualified GHC as G
 import qualified GhcMake as G
@@ -114,11 +113,20 @@ collectASTs action = do
 
 astHook :: IORef [TypecheckedModule] -> ModSummary -> Hsc FrontendResult
 astHook tc_ref ms = ghcInHsc $ do
-  p <- G.parseModule ms
+  p <- G.parseModule =<< initializePluginsGhc ms
   tcm <- G.typecheckModule p
   let tcg_env = fst (tm_internals_ tcm)
   liftIO $ modifyIORef tc_ref (tcm :)
   return $ FrontendTypecheck tcg_env
+
+initializePluginsGhc :: ModSummary -> Ghc ModSummary
+initializePluginsGhc ms = do
+  hsc_env <- getSession
+  df <- liftIO $ Gap.initializePlugins hsc_env (ms_hspp_opts  ms)
+  Log.debugm ("init-plugins(loaded):" ++ show (Gap.numLoadedPlugins df))
+  Log.debugm ("init-plugins(specified):" ++ show (length $ pluginModNames df))
+  return (ms { ms_hspp_opts = df })
+
 
 ghcInHsc :: Ghc a -> Hsc a
 ghcInHsc gm = do
