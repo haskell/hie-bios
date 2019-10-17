@@ -1,0 +1,8 @@
+cradle:
+  multi:
+    - path: "./test/testdata"
+      config: { cradle: { none:  } }
+    - path: "./"
+      config: { cradle: { cabal:
+                            [ { path: "./src", component: "lib:hie-bios" }
+                            , { path: "./tests", component: "parser-tests" } ] } }

@@ -10,6 +10,7 @@ module HIE.Bios.Config(
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as Map
+import Data.Foldable (foldrM)
 import           Data.Yaml
 
 data CradleConfig =
@@ -26,6 +27,7 @@ data CradleConfig =
 
 data CradleType
     = Cabal { component :: Maybe String }
+    | CabalMulti [ (FilePath, String) ]
     | Stack
     | Bazel
     | Obelisk
@@ -46,7 +48,7 @@ data CradleType
 
 instance FromJSON CradleType where
     parseJSON (Object o) = parseCradleType o
-    parseJSON _ = fail "Not a known cradle type. Possible are: cabal, stack, bazel, obelisk, bios, direct, default"
+    parseJSON _ = fail "Not a known cradle type. Possible are: cabal, stack, bazel, obelisk, bios, direct, default, none, multi"
 
 parseCradleType :: Object -> Parser CradleType
 parseCradleType o
@@ -72,6 +74,18 @@ parseCabal (Object x)
 
     | otherwise
     = fail "Not a valid Cabal Configuration type, following keys are allowed: component"
+parseCabal (Array x) = do
+  let parseOne  e
+        | Object v <- e
+        , Just (String prefix) <- Map.lookup "path" v
+        , Just (String comp) <- Map.lookup "component" v
+        , Map.size v == 2
+        = return (T.unpack prefix, T.unpack comp)
+        | otherwise
+        = fail "Expected an object with path and component keys"
+
+  xs <- foldrM (\v cs -> (: cs) <$> parseOne v) [] x
+  return $ CabalMulti xs
 parseCabal _ = fail "Cabal Configuration is expected to be an object."
 
 parseBios :: Value -> Parser CradleType

@@ -60,6 +60,11 @@ loadCradleWithOpts _copts wfile = do
 getCradle :: (CradleConfig, FilePath) -> Cradle
 getCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
     Cabal mc -> cabalCradle wdir mc
+    CabalMulti ms ->
+      getCradle $
+        (CradleConfig cradleDeps
+          (Multi [(p, CradleConfig [] (Cabal (Just c))) | (p, c) <- ms])
+        , wdir)
     Stack -> stackCradle wdir
     Bazel -> rulesHaskellCradle wdir
     Obelisk -> obeliskCradle wdir
