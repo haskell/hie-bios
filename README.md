@@ -107,6 +107,9 @@ The complete configuration is a subset of
 cradle:
   cabal:
     component: "optional component name"
+  cabal:
+    - path: ./
+      component: "component name"
   stack:
   bazel:
   obelisk:
@@ -145,6 +148,10 @@ cradle:
 ```
 
 If a file matches multiple prefixes, the most specific one is chosen.
+Once a prefix is matched, the selected cradle is used to find the options. This
+is usually a specific cradle such as `cabal` or `stack` but it could be another
+multi-cradle, in which case, matching works in exactly the same way until a
+specific cradle is chosen.
 
 This cradle type is experimental and may not be supported correctly by
 some libraries which use `hie-bios`. It requires some additional care to
@@ -162,6 +169,31 @@ cradle:
       config: { cradle: {cabal: {component: "test"}} }
     - path: "./test/test-files"
       config: { cradle: none }
+```
+
+For cabal projects there is a shorthand to specify how to load each component.
+
+```
+cradle:
+  cabal:
+    - path: "./src"
+      component: "lib:hie-bios"
+    - path: "./test"
+      component: "test"
+```
+
+Remember you can combine this shorthand with more complicated configuration
+as well.
+
+```
+cradle:
+  multi:
+    - path: "./test/testdata"
+      config: { cradle: { none:  } }
+    - path: "./"
+      config: { cradle: { cabal:
+                            [ { path: "./src", component: "lib:hie-bios" }
+                            , { path: "./tests", component: "parser-tests" } ] } }
 ```
 
 
