@@ -367,7 +367,7 @@ stackAction work_dir fp = do
   -- Same wrapper works as with cabal
   wrapper_fp <- getCabalWrapperTool
   (ex1, args, stde) <-
-      readProcessWithExitCodeInDirectory work_dir "stack" ["repl", "--silent", "--no-load", "--with-ghc", wrapper_fp, fp ] []
+      readProcessWithExitCodeInDirectory work_dir "stack" ["repl", "--no-load", "--with-ghc", wrapper_fp, fp ] []
   (ex2, pkg_args, stdr) <-
       readProcessWithExitCodeInDirectory work_dir "stack" ["path", "--ghc-package-path"] []
   let split_pkgs = splitSearchPath (init pkg_args)
