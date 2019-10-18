@@ -43,6 +43,7 @@ usage =    progVersion
 
 data HhpcError = SafeList
                | TooManyArguments String
+               | NotEnoughArguments String
                | NoSuchCommand String
                | CmdArg [String]
                | FileNotExist String deriving (Show, Typeable)
@@ -69,7 +70,9 @@ main = flip E.catches handlers $ do
       "debug"   -> debugInfo opt cradle
       "root"    -> rootInfo opt cradle
       "version" -> return progVersion
-      "flags"   -> do
+      "flags"
+        | null remainingArgs -> E.throw $ NotEnoughArguments cmdArg0
+        | otherwise -> do
         res <- forM remainingArgs $ \fp -> do
                 res <- getCompilerOptions fp cradle
                 case res of
@@ -98,6 +101,10 @@ main = flip E.catches handlers $ do
     handler2 SafeList = hPutStr stderr usage
     handler2 (TooManyArguments cmd) = do
         hPutStrLn stderr $ "\"" ++ cmd ++ "\": Too many arguments"
+    handler2 (NotEnoughArguments cmd) = do
+        hPutStrLn stderr $ "\"" ++ cmd ++ "\": Not enough arguments"
+        hPutStrLn stderr ""
+        hPutStr stderr usage
     handler2 (NoSuchCommand cmd) = do
         hPutStrLn stderr $ "\"" ++ cmd ++ "\" not supported"
         hPutStrLn stderr ""
