@@ -268,7 +268,8 @@ processCabalWrapperArgs args =
     case lines args of
         [dir, ghc_args] ->
             let final_args =
-                    removeInteractive
+                    removeVerbosityOpts
+                    $ removeInteractive
                     $ map (fixImportDirs dir)
                     $ limited ghc_args
             in Just final_args
@@ -328,6 +329,9 @@ cabalAction work_dir mc _fp = do
 
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
+
+removeVerbosityOpts :: [String] -> [String]
+removeVerbosityOpts = filter ((&&) <$> (/= "-v0") <*> (/= "-w"))
 
 fixImportDirs :: FilePath -> String -> String
 fixImportDirs base_dir arg =
