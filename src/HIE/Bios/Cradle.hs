@@ -91,7 +91,7 @@ implicitConfig' fp = (\wdir ->
          (Bios (wdir </> ".hie-bios") Nothing, wdir)) <$> biosWorkDir fp
      <|> (Obelisk,) <$> obeliskWorkDir fp
      <|> (Bazel,) <$> rulesHaskellWorkDir fp
-     <|> (Stack,) <$> stackWorkDir fp
+     <|> (stackExecutable >> (Stack,) <$> stackWorkDir fp)
      <|> ((Cabal Nothing,) <$> cabalWorkDir fp)
 
 
@@ -387,6 +387,8 @@ combineExitCodes = foldr go ExitSuccess
     go ExitSuccess b = b
     go a _ = a
 
+stackExecutable :: MaybeT IO FilePath
+stackExecutable = MaybeT $ findExecutable "stack"
 
 stackWorkDir :: FilePath -> MaybeT IO FilePath
 stackWorkDir = findFileUpwards isStack

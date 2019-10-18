@@ -178,7 +178,7 @@ The targets are searched for in following order.
 1. A specific `hie-bios` file.
 2. An `obelisk` project
 3. A `rules_haskell` project
-4. A `stack` project
+4. A `stack` project, if there exists an executable `stack` in `$PATH`
 5. A `cabal` project
 6. The default cradle which has no specific options.
 
