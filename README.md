@@ -138,7 +138,7 @@ the cradle. For example, this configuration specificies that files in the
 `src` subdirectory should be handled with the `lib:hie-bios` component and
 files in the `test` directory using the `test` component.
 
-```
+```yaml
 cradle:
   multi:
     - path: "./src"
@@ -160,7 +160,7 @@ correctly manage multiple components.
 Note: Remember you can use the multi-cradle to declare that certain directories
 shouldn't be loaded by an IDE, in conjunction with the `none` cradle.
 
-```
+```yaml
 cradle:
   multi:
     - path: "./src"
@@ -173,7 +173,7 @@ cradle:
 
 For cabal projects there is a shorthand to specify how to load each component.
 
-```
+```yaml
 cradle:
   cabal:
     - path: "./src"
@@ -185,7 +185,7 @@ cradle:
 Remember you can combine this shorthand with more complicated configuration
 as well.
 
-```
+```yaml
 cradle:
   multi:
     - path: "./test/testdata"
