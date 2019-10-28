@@ -233,9 +233,10 @@ biosAction _wdir bios bios_deps fp = do
   bios' <- canonicalizePath bios
   (ex, res, std) <- readProcessWithExitCode bios' [fp] []
   deps <- biosDepsAction bios_deps
+        -- Output from the program should be delimited by newlines.
         -- Execute the bios action and add dependencies of the cradle.
         -- Removes all duplicates.
-  return $ makeCradleResult (ex, std, words res) deps
+  return $ makeCradleResult (ex, std, lines res) deps
 
 ------------------------------------------------------------------------
 -- Cabal Cradle

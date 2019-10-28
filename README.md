@@ -243,7 +243,9 @@ which flags to provide.
 In this mode, an executable file called `.hie-bios` is placed in the root
 of the workspace directory. The script takes one argument, the filepath
 to the current file we want to load into the session. The script returns
-the correct arguments in order to load that file successfully.
+the correct arguments in order to load that file successfully. The arguments
+must be delimited by newline (`\n`); i.e., each argument must be in its own
+line.
 
 A good guiding specification for this file is that the following command
 should work for any file in your project.
