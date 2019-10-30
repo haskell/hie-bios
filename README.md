@@ -1,7 +1,8 @@
 # hie-bios
 
-`hie-bios` is the way which
-[`hie`](https://github.com/haskell/haskell-ide-engine) sets up a GHC API session.
+`hie-bios` is the way to specify how
+[`hie`](https://github.com/haskell/haskell-ide-engine) and
+[`ghcide`](https://github.com/digital-asset/ghcide) sets up a GHC API session.
 
 Given a Haskell project that is managed by Stack, Cabal, or other package tools,
 `hie` needs to know the full set of flags to pass to GHC in order to build the
@@ -26,7 +27,7 @@ these flags and then it can set up GHC API session correctly.
 
 Futher it means that any failure to set up the API session is the responsibility
 of the build tool. It is up to them to provide the correct information if they
-want `hie` to work correctly.
+want the tool to work correctly.
 
 ## Explicit Configuration
 
@@ -48,83 +49,25 @@ cradle: {cabal: {component: "lib:haskell-ide-engine"}}
 Or you can explicitly state the program which should be used to collect
 the options by supplying the path to the program. It is interpreted
 relative to the current working directory if it is not an absolute path.
+The bios program should return a list of options separated by newline characters.
 
 ```yaml
 cradle: {bios: {program: ".hie-bios"}}
 ```
 
-### Cradle Dependencies
-
-Sometimes it is necessary to reload a cradle, for example when a package
-dependency is added to the project. Each type of cradle defines a list of
-files that might cause an existing cradle to no longer provide accurate
-diagnostics if changed. These are expected to be relative to the root of
-the cradle.
-
-This makes it possible to watch for changes to these files and reload the
-cradle appropiately.
-However, if there are files that are not covered by
-the cradle dependency resolution, you can add these files explicitly to
-`hie.yaml`.
-These files are not required to actually exist, since it can be useful
-to know when these files are created, e.g. if there was no `cabal.project`
-in the project before and now there is, it might change how a file in the
-project is compiled.
-
-As an example how you would add cradle dependencies that may not be covered
-by the `cabal` cradle.
+The `direct` cradle allows you to specify exactly the GHC options that should be used to load
+a project. This is good for debugging but not a very good approach in general as the set of options
+will quickly get out of sync with a cabal file.
 
 ```yaml
-cradle:
-  cabal:
-    component: "lib:hie-bios"
-
-dependencies:
-  - package.yaml
-  - shell.nix
-  - default.nix
+cradle: {direct: [arg1, arg2]}
 ```
 
-For the `Bios` cradle type, there is an optional field to specify a program
-to obtain cradle dependencies from:
+The `none` cradle says that the IDE shouldn't even try to load the project. It
+is most useful when combined with the multi-cradle which is specified in the next section.
 
 ```yaml
-cradle:
-  bios:
-    program: ./flags.sg
-    dependency-program: ./dependency.sh
-```
-
-The program `./dependency.sh` is executed with no paramaters and it is
-expected to output on stdout on each line exactly one filepath relative
-to the root of the cradle, not relative to the location of the program.
-
-## Configuration specification
-
-The complete configuration is a subset of
-
-```yaml
-cradle:
-  cabal:
-    component: "optional component name"
-  cabal:
-    - path: ./
-      component: "component name"
-  stack:
-  bazel:
-  obelisk:
-  bios:
-    program: "program to run"
-    dependency-program: "optional program to run"
-  direct:
-    arguments: ["list","of","ghc","arguments"]
-  default:
-  none:
-  multi: - path: ./
-           config: { cradle: ... }
-
-dependencies:
-  - someDep
+cradle: {none}
 ```
 
 ## Multi-Cradle
@@ -196,23 +139,105 @@ cradle:
                             , { path: "./tests", component: "parser-tests" } ] } }
 ```
 
+### Cradle Dependencies
+
+Sometimes it is necessary to reload a component, for example when a package
+dependency is added to the project. Each type of cradle defines a list of
+files that might cause an existing cradle to no longer provide accurate
+diagnostics if changed. These are expected to be relative to the root of
+the cradle.
+
+This makes it possible to watch for changes to these files and reload the
+cradle appropiately.
+However, if there are files that are not covered by
+the cradle dependency resolution, you can add these files explicitly to
+`hie.yaml`.
+These files are not required to actually exist, since it can be useful
+to know when these files are created, e.g. if there was no `cabal.project`
+in the project before and now there is, it might change how a file in the
+project is compiled.
+
+Here's an example of how you would add cradle dependencies that may not be covered
+by the `cabal` cradle.
+
+```yaml
+cradle:
+  cabal:
+    component: "lib:hie-bios"
+
+dependencies:
+  - package.yaml
+  - shell.nix
+  - default.nix
+```
+
+For the `Bios` cradle type, there is an optional field to specify a program
+to obtain cradle dependencies from:
+
+```yaml
+cradle:
+  bios:
+    program: ./flags.sh
+    dependency-program: ./dependency.sh
+```
+
+The program `./dependency.sh` is executed with no paramaters and it is
+expected to output on stdout on each line exactly one filepath relative
+to the root of the cradle, not relative to the location of the program.
+
+## Configuration specification
+
+The complete configuration is a subset of
+
+```yaml
+cradle:
+  cabal:
+    component: "optional component name"
+  stack:
+  bios:
+    program: "program to run"
+    dependency-program: "optional program to run"
+  direct:
+    arguments: ["list","of","ghc","arguments"]
+  none:
+  multi: - path: ./
+           config: { cradle: ... }
+
+dependencies:
+  - someDep
+```
+
+## Testing your configuration
+
+The provided `hie-bios` executable is provided to test your configuration.
+
+The `flags` command will print out the options that `hie-bios` thinks you will need to load a file.
+
+```
+hie-bios flags exe/Main.hs
+```
+
+The `check` command will try to use these flags to load the module into the GHC API.
+
+```
+hie-bios check exe/Main.hs
+```
 
 ## Implicit Configuration
 
 There are several built in modes which captures most common Haskell development
 scenarios. If no `hie.yaml` configuration file is found then an implicit
-configuration is searched for.
+configuration is searched for. It is strongly recommended to just explicitly
+configure your project.
 
 ### Priority
 
 The targets are searched for in following order.
 
 1. A specific `hie-bios` file.
-2. An `obelisk` project
-3. A `rules_haskell` project
-4. A `stack` project, if there exists an executable `stack` in `$PATH`
-5. A `cabal` project
-6. The default cradle which has no specific options.
+2. A `stack` project
+3. A `cabal` project
+4. The direct cradle which has no specific options.
 
 ### `cabal-install`
 
@@ -223,17 +248,11 @@ The arguments are collected by running `cabal v2-repl`.
 If `cabal v2-repl` fails, then the user needs to configure the correct
 target to use by writing a `hie.yaml` file.
 
-### `rules_haskell`
+### `stack`
 
-The workspace root is the folder containing a `WORKSPACE` file.
+The workspace root is the first folder containing a `stack.yaml` file.
 
-The options are collected by querying `bazel`.
-
-### `obelisk`
-
-The workspace root is the folder containing a `.obelisk` directory.
-
-The options are collected by running `ob ide-args`.
+The arguments are collected by executing `stack repl`.
 
 ### `bios`
 
@@ -243,28 +262,21 @@ which flags to provide.
 In this mode, an executable file called `.hie-bios` is placed in the root
 of the workspace directory. The script takes one argument, the filepath
 to the current file we want to load into the session. The script returns
-the correct arguments in order to load that file successfully. The arguments
-must be delimited by newline (`\n`); i.e., each argument must be in its own
-line.
+a list of GHC arguments separated by newlines which will setup the correct session.
 
 A good guiding specification for this file is that the following command
 should work for any file in your project.
 
 ```
-ghci $(./hie-bios /path/to/foo.hs) /path/to/foo.hs
+ghci $(./hie-bios /path/to/foo.hs | tr '\n' ' ') /path/to/foo.hs
 ```
 
 This is useful if you are designing a new build system or the other modes
 fail to setup the correct session for some reason. For example, this is
-how hadrian (GHC's build system) is integrated into HIE.
+how hadrian (GHC's build system) is integrated into `hie-bios`.
 
+## Supporting Bazel and Obelisk
 
-## Relationship with `ghcid`
-
-The design of `hie-bios` is inspired by `ghcid`. Like `ghcid`, it does not depend
-on any of the tools it supports. The success of `ghcid` is that it works reliably
-in many situations. This is because of the fact that it delegates complicated
-decisions about a build to the build tool.
-
-`ghcid` could be implemented using `hie-bios` using the `ghci $(./hie-bios Main.hs) Main.hs`
-idiom described earlier.
+In previous versions of `hie-bios` there was also support for projects using `rules_haskell` and `obelisk`.
+This was removed in the 0.3 release as they were unused and broken. There is no conceptual barrier to adding
+back support but it requires a user of these two approaches to maintain them.
