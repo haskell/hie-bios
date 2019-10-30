@@ -122,8 +122,7 @@ parsePath :: Value -> Parser (FilePath, CradleConfig)
 parsePath (Object v)
   | Just (String path) <- Map.lookup "path" v
   , Just c <- Map.lookup "config" v
-  = do
-      (T.unpack path,) <$> parseJSON c
+  = (T.unpack path,) <$> parseJSON c
 parsePath o = fail ("Multi component is expected to be an object." ++ show o)
 
 

@@ -10,7 +10,7 @@ getCompilerOptions ::
     FilePath -- The file we are loading it because of
     -> Cradle
     -> IO (CradleLoadResult ComponentOptions)
-getCompilerOptions fp cradle = do
+getCompilerOptions fp cradle =
   runCradle (cradleOptsProg cradle) fp
 
 

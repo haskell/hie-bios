@@ -25,11 +25,11 @@ debugInfo opt cradle = convert opt <$> do
           , "System libraries:    " ++ fromMaybe "" mglibdir
           , "Dependencies:        " ++ unwords deps
           ]
-      CradleFail (CradleError ext stderr) -> do
+      CradleFail (CradleError ext stderr) ->
         return ["Cradle failed to load"
                , "Exit Code: " ++ show ext
                , "Stderr: " ++ stderr]
-      CradleNone -> do
+      CradleNone ->
         return ["No cradle"]
   where
     rootDir    = cradleRootDir cradle

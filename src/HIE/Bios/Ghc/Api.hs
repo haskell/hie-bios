@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, RecordWildCards, CPP #-}
+{-# LANGUAGE ScopedTypeVariables, CPP #-}
 
 module HIE.Bios.Ghc.Api (
     withGHC
@@ -76,7 +76,7 @@ initializeFlagsWithCradleWithMessage ::
   -> FilePath -- The file we are loading it because of
   -> Cradle
   -> m (CradleLoadResult (m ())) -- ^ Whether we actually initialised a session or not
-initializeFlagsWithCradleWithMessage msg fp cradle = do
+initializeFlagsWithCradleWithMessage msg fp cradle =
     fmap (initSessionWithMessage msg) <$> (liftIO $ getCompilerOptions fp cradle)
 
 

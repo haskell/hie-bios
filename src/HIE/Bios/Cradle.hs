@@ -178,7 +178,7 @@ multiAction cur_dir cs cur_fp = selectCradle =<< canonicalizeCradles
 
     selectCradle [] =
       return (CradleFail (CradleError ExitSuccess err_msg))
-    selectCradle ((p, c): css) = do
+    selectCradle ((p, c): css) =
         if p `isPrefixOf` cur_fp
           then runCradle (cradleOptsProg (getCradle (c, cur_dir))) cur_fp
           else selectCradle css
@@ -309,8 +309,7 @@ getCabalWrapperTool = do
                         { cwd = Just (takeDirectory wrapper_hs) }
             readCreateProcess ghc "" >>= putStr
         return wrapper_fp
-      else do
-        writeSystemTempFile "bios-wrapper" cabalWrapper
+      else writeSystemTempFile "bios-wrapper" cabalWrapper
 
   setFileMode wrapper_fp accessModes
   _check <- readFile wrapper_fp

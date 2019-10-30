@@ -8,7 +8,7 @@ import qualified DriverPhases as G
 import qualified Util as G
 import DynFlags
 
-import Control.Monad (void, when)
+import Control.Monad (void)
 
 import System.Process (readProcess)
 import System.Directory

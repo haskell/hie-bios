@@ -56,7 +56,7 @@ withLogger ::
   => Options -> (DynFlags -> DynFlags) -> m () -> m (Either String String)
 withLogger opt setDF body = ghandle (sourceError opt) $ do
     logref <- liftIO newLogRef
-    withDynFlags (setLogger logref . setDF) $ do
+    withDynFlags (setLogger logref . setDF) $
         withCmdFlags wflags $ do
             body
             liftIO $ Right <$> readAndClearLogRef opt logref
