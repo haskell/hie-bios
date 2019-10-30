@@ -29,8 +29,10 @@ data CradleType
     = Cabal { component :: Maybe String }
     | CabalMulti [ (FilePath, String) ]
     | Stack
-    | Bazel
-    | Obelisk
+--  Bazel and Obelisk used to be supported but bit-rotted and no users have complained.
+--  They can be added back if a user
+--    | Bazel
+--    | Obelisk
     | Bios
         { prog :: FilePath
         -- ^ Path to program that retrieves options to compile a file
@@ -41,7 +43,6 @@ data CradleType
         -- to the location of this program.
         }
     | Direct { arguments :: [String] }
-    | Default
     | None
     | Multi [ (FilePath, CradleConfig) ]
     deriving (Show, Eq)
@@ -54,11 +55,10 @@ parseCradleType :: Object -> Parser CradleType
 parseCradleType o
     | Just val <- Map.lookup "cabal" o = parseCabal val
     | Just _val <- Map.lookup "stack" o = return Stack
-    | Just _val <- Map.lookup "bazel" o = return Bazel
-    | Just _val <- Map.lookup "obelisk" o = return Obelisk
+--    | Just _val <- Map.lookup "bazel" o = return Bazel
+--    | Just _val <- Map.lookup "obelisk" o = return Obelisk
     | Just val <- Map.lookup "bios" o = parseBios val
     | Just val <- Map.lookup "direct" o = parseDirect val
-    | Just _val <- Map.lookup "default" o = return Default
     | Just _val <- Map.lookup "none" o = return None
     | Just val  <- Map.lookup "multi" o = parseMulti val
 parseCradleType o = fail $ "Unknown cradle type: " ++ show o

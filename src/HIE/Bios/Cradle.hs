@@ -66,11 +66,10 @@ getCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
           (Multi [(p, CradleConfig [] (Cabal (Just c))) | (p, c) <- ms])
         , wdir)
     Stack -> stackCradle wdir
-    Bazel -> rulesHaskellCradle wdir
-    Obelisk -> obeliskCradle wdir
+ --   Bazel -> rulesHaskellCradle wdir
+ --   Obelisk -> obeliskCradle wdir
     Bios bios deps  -> biosCradle wdir bios deps
     Direct xs -> directCradle wdir xs
-    Default   -> defaultCradle wdir
     None      -> noneCradle wdir
     Multi ms  -> multiCradle wdir ms
     where
@@ -94,8 +93,8 @@ implicitConfig fp = do
 implicitConfig' :: FilePath -> MaybeT IO (CradleType, FilePath)
 implicitConfig' fp = (\wdir ->
          (Bios (wdir </> ".hie-bios") Nothing, wdir)) <$> biosWorkDir fp
-     <|> (Obelisk,) <$> obeliskWorkDir fp
-     <|> (Bazel,) <$> rulesHaskellWorkDir fp
+  --   <|> (Obelisk,) <$> obeliskWorkDir fp
+  --   <|> (Bazel,) <$> rulesHaskellWorkDir fp
      <|> (stackExecutable >> (Stack,) <$> stackWorkDir fp)
      <|> ((Cabal Nothing,) <$> cabalWorkDir fp)
 
@@ -405,6 +404,8 @@ stackWorkDir = findFileUpwards isStack
   where
     isStack name = name == "stack.yaml"
 
+{-
+-- Support removed for 0.3 but should be added back in the future
 ----------------------------------------------------------------------------
 -- rules_haskell - Thanks for David Smith for helping with this one.
 -- Looks for the directory containing a WORKSPACE file
@@ -476,7 +477,7 @@ obeliskAction work_dir _fp = do
   o_deps <- obeliskCradleDependencies work_dir
   return (makeCradleResult (ex, stde, words args) o_deps )
 
-
+-}
 ------------------------------------------------------------------------------
 -- Utilities
 
