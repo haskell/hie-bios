@@ -1,3 +1,16 @@
+xxxx - 0.3
+
+	* Add multi cradle, cabal multi cradle and none cradle
+	* Remove obelisk, bazel and default cradle types
+	* bios program now expects arguments to be separated by newlines rather than
+		spaces. (#80)
+	* Only try to use stack cradle if `stack` is executable.
+	* Filter out `-w -v0` from cabal output when using cabal cradle.
+	* Initialise plugins when loading a module.
+	* Interface file cache persists between loads -- this greatly speeds up
+	reloading a project if the options don't change.
+	* Reuse wrapper executable on windows if one already exists.
+
 2019-09-19 - 0.2.1
 
 	* Make stack cradle use the same wrappers as cabal cradle. Fixes some issues
