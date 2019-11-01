@@ -18,6 +18,7 @@ import qualified Crypto.Hash.SHA1 as H
 import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Base16
 import Data.List
+import Debug.Trace
 
 import HIE.Bios.Types
 
@@ -36,7 +37,7 @@ initSession  ComponentOptions {..} = do
         $ resetPackageDb
         -- --  $ ignorePackageEnv
         $ writeInterfaceFiles (Just fp)
-        $ setVerbosity 0
+        $ setVerbosity 5
 
         $ setLinkerOptions df'
         )
@@ -138,6 +139,7 @@ addCmdOpts cmdOpts df1 = do
    (srcs, objs) = partition_args normal_fileish_paths [] []
    df3 = df2 { ldInputs = map (FileOption "") objs ++ ldInputs df2 }
   ts <- mapM (uncurry G.guessTarget) srcs
+  traceShowM srcs
   return (df3, ts)
     -- TODO: Need to handle these as well
     -- Ideally it requires refactoring to work in GHCi monad rather than
