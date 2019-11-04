@@ -37,7 +37,7 @@ initSession  ComponentOptions {..} = do
         $ resetPackageDb
         -- --  $ ignorePackageEnv
         $ writeInterfaceFiles (Just fp)
-        $ setVerbosity 5
+        $ setVerbosity 0
 
         $ setLinkerOptions df'
         )
