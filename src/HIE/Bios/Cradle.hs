@@ -22,7 +22,6 @@ import Data.FileEmbed
 import System.IO.Temp
 import Data.List
 import Data.Ord (Down(..))
-import qualified HIE.Bios.Log as Log
 
 import System.PosixCompat.Files
 
@@ -228,7 +227,6 @@ biosAction :: FilePath
 biosAction _wdir bios bios_deps fp = do
   bios' <- canonicalizePath bios
   (ex, res, std) <- readProcessWithExitCode bios' [fp] []
-  Log.debugm (show (ex, res, std))
   deps <- biosDepsAction bios_deps
         -- Execute the bios action and add dependencies of the cradle.
         -- Removes all duplicates.
