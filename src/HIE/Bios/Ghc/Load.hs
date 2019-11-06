@@ -1,12 +1,17 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
-module HIE.Bios.Ghc.Load ( loadFileWithMessage, loadFile, setTargetFiles, setTargetFilesWithMessage) where
+module HIE.Bios.Ghc.Load ( loadFileWithMessage
+                         , loadFile
+                         , setTargetFiles
+                         , setTargetFilesWithMessage
+                         , reloadFile) where
 
 import CoreMonad (liftIO)
 import GHC
 import qualified GHC as G
 import qualified GhcMake as G
 import qualified HscMain as G
+import Outputable (showSDocUnsafe, ppr)
 import HscTypes
 import Control.Monad.IO.Class
 
@@ -19,6 +24,7 @@ import Control.Monad (forM, void)
 import GhcMonad
 import HscMain
 import Data.List
+import Debug.Trace
 
 import Data.Time.Clock
 import qualified HIE.Bios.Ghc.Gap as Gap
@@ -88,6 +94,46 @@ setTargetFilesWithMessage msg files = do
     dflags1 <- getSessionDynFlags
     Log.debugm $ "hidir: " ++ show (hiDir dflags1)
     void $ G.load' LoadAllTargets msg mod_graph
+
+
+reloadFile :: GhcMonad m => Maybe G.Messager
+                         -> (FilePath, FilePath)
+                         -> m (Maybe TypecheckedModule, [TypecheckedModule])
+reloadFile msg file  = do
+  (_, tcs) <- collectASTs $ reloadTarget msg file
+  Log.debugm $ "loaded " ++ fst file ++ " - " ++ snd file
+  let get_fp = ml_hs_file . ms_location . pm_mod_summary . tm_parsed_module
+  Log.debugm $ "Typechecked modules for: " ++ (unlines $ map (show . get_fp) tcs)
+  let findMod [] = Nothing
+      findMod (x:xs) = case get_fp x of
+                         Just fp -> if fp `isSuffixOf` (snd file) then Just x else findMod xs
+                         Nothing -> findMod xs
+  return (findMod tcs, tcs)
+
+msTargetIs' :: ModSummary -> FilePath -> Bool
+msTargetIs' ms f = ml_hs_file (ms_location ms) == Just f
+
+-- | We bump the times for any ModSummary's that are Targets, to
+-- fool the recompilation checker so that we can get the typechecked modules
+updateTime' :: MonadIO m => (FilePath, FilePath) -> ModuleGraph -> m ModuleGraph
+updateTime' (file, mapped_file) graph = liftIO $ do
+  cur_time <- getCurrentTime
+  let go ms
+        | msTargetIs' ms file = ms { ms_hs_date = cur_time
+                             , ms_location = (ms_location ms) { ml_hs_file = Just mapped_file } }
+        | otherwise = ms
+  pure $ Gap.mapMG go graph
+
+-- | Reload a module which is already in the module graph.
+reloadTarget :: GhcMonad m => Maybe G.Messager -> (FilePath, FilePath) -> m ()
+reloadTarget msg file = do
+  -- Invariant -- targets are always just the normal files on disk, apart
+  -- from in this function -- where we override one temporarily.
+  tgts <- getTargets
+  Log.debugm $ "targets" ++ showSDocUnsafe (ppr tgts)
+  mod_graph <- updateTime' file =<< depanal [] False
+  G.load' LoadAllTargets msg mod_graph
+  G.setTargets tgts
 
 collectASTs :: (GhcMonad m) => m a -> m (a, [TypecheckedModule])
 collectASTs action = do
