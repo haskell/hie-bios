@@ -3,6 +3,7 @@
 module HIE.Bios (
   -- * Find and load a Cradle
     Cradle(..)
+  , CradleLoadResult(..)
   , findCradle
   , loadCradle
   , loadImplicitCradle
