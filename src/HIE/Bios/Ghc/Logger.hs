@@ -2,8 +2,6 @@
 
 module HIE.Bios.Ghc.Logger (
     withLogger
-  , checkErrorPrefix
-  , getSrcSpan
   ) where
 
 import Bag (Bag, bagToList)
@@ -18,13 +16,11 @@ import HscTypes (SourceError, srcErrorMessages)
 import Outputable (PprStyle, SDoc)
 
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
-import Data.List (isPrefixOf)
 import Data.Maybe (fromMaybe)
 import System.FilePath (normalise)
 
 import HIE.Bios.Ghc.Doc (showPage, getStyle)
-import HIE.Bios.Ghc.Api (withDynFlags, withCmdFlags)
-import HIE.Bios.Types (Options(..), convert)
+import HIE.Bios.Ghc.Api (withDynFlags)
 
 ----------------------------------------------------------------
 
@@ -35,11 +31,11 @@ newtype LogRef = LogRef (IORef Builder)
 newLogRef :: IO LogRef
 newLogRef = LogRef <$> newIORef id
 
-readAndClearLogRef :: Options -> LogRef -> IO String
-readAndClearLogRef opt (LogRef ref) = do
+readAndClearLogRef :: LogRef -> IO String
+readAndClearLogRef (LogRef ref) = do
     b <- readIORef ref
     writeIORef ref id
-    return $! convert opt (b [])
+    return $! unlines (b [])
 
 appendLogRef :: DynFlags -> LogRef -> LogAction
 appendLogRef df (LogRef ref) _ _ sev src style msg = do
@@ -53,27 +49,25 @@ appendLogRef df (LogRef ref) _ _ sev src style msg = do
 --   Right is success and Left is failure.
 withLogger ::
   (GhcMonad m)
-  => Options -> (DynFlags -> DynFlags) -> m () -> m (Either String String)
-withLogger opt setDF body = ghandle (sourceError opt) $ do
+  => (DynFlags -> DynFlags) -> m () -> m (Either String String)
+withLogger setDF body = ghandle sourceError $ do
     logref <- liftIO newLogRef
-    withDynFlags (setLogger logref . setDF) $
-        withCmdFlags wflags $ do
-            body
-            liftIO $ Right <$> readAndClearLogRef opt logref
+    withDynFlags (setLogger logref . setDF) $ do
+      body
+      liftIO $ Right <$> readAndClearLogRef logref
   where
     setLogger logref df = df { log_action =  appendLogRef df logref }
-    wflags = filter ("-fno-warn" `isPrefixOf`) $ ghcOpts opt
 
 ----------------------------------------------------------------
 
 -- | Converting 'SourceError' to 'String'.
 sourceError ::
   (GhcMonad m)
-  => Options -> SourceError -> m (Either String String)
-sourceError opt err = do
+  => SourceError -> m (Either String String)
+sourceError err = do
     dflag <- G.getSessionDynFlags
     style <- getStyle dflag
-    let ret = convert opt . errBagToStrList dflag style . srcErrorMessages $ err
+    let ret = unlines . errBagToStrList dflag style . srcErrorMessages $ err
     return (Left ret)
 
 errBagToStrList :: DynFlags -> PprStyle -> Bag ErrMsg -> [String]

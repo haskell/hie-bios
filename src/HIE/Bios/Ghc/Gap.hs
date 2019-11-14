@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances, CPP #-}
-
+-- | All the CPP for GHC version compability should live in this module.
 module HIE.Bios.Ghc.Gap (
     WarnFlags
   , emptyWarnFlags
@@ -17,10 +17,11 @@ module HIE.Bios.Ghc.Gap (
   , mgModSummaries
   , numLoadedPlugins
   , initializePlugins
+  , unsetLogAction
   ) where
 
 import DynFlags (DynFlags)
-import GHC(LHsBind, LHsExpr, LPat, Type, ModSummary, ModuleGraph, HscEnv)
+import GHC(LHsBind, LHsExpr, LPat, Type, ModSummary, ModuleGraph, HscEnv, setLogAction, GhcMonad)
 import HsExpr (MatchGroup)
 import Outputable (PrintUnqualified, PprStyle, Depth(AllTheWay), mkUserStyle)
 
@@ -168,4 +169,11 @@ initializePlugins = DynamicLoading.initializePlugins
 #else
 -- In earlier versions of GHC plugins are just loaded before they are used.
 initializePlugins _ df = return df
+#endif
+
+unsetLogAction :: GhcMonad m => m ()
+unsetLogAction =
+    setLogAction (\_df _wr _s _ss _pp _m -> return ())
+#if __GLASGOW_HASKELL__ < 806
+        (\_df -> return ())
 #endif

@@ -1,4 +1,4 @@
-module HIE.Bios.Log where
+module HIE.Bios.Internal.Log where
 
 import Control.Monad.IO.Class
 import System.Log.Logger

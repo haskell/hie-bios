@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, CPP #-}
-module HIE.Bios.Environment (initSession, getSystemLibDir, addCmdOpts, getDynamicFlags) where
+module HIE.Bios.Environment (initSession, getSystemLibDir, addCmdOpts) where
 
 import CoreMonad (liftIO)
 import GHC (DynFlags(..), GhcLink(..), HscTarget(..), GhcMonad)
@@ -20,31 +20,31 @@ import Data.ByteString.Base16
 import Data.List
 
 import HIE.Bios.Types
+import HIE.Bios.Ghc.Gap
 
+-- | Start a GHC session and set some sensible options for tooling to use
+-- * Creates a folder in the cache directory to cache interface files to make reloading faster.
+-- *
 initSession :: (GhcMonad m)
     => ComponentOptions
     -> m [G.Target]
 initSession  ComponentOptions {..} = do
     df <- G.getSessionDynFlags
-
+    -- Create a unique folder per set of different GHC options, assuming that each different set of
+    -- GHC options will create incompatible interface files.
     let opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init (map B.pack componentOptions)
-    fp <- liftIO $ getCacheDir opts_hash
+    cache_dir <- liftIO $ getCacheDir opts_hash
+    -- Add the user specified options to a fresh GHC session.
     (df', targets) <- addCmdOpts componentOptions df
     void $ G.setSessionDynFlags
-        (disableOptimisation
-        $ setIgnoreInterfacePragmas
-        $ resetPackageDb
-        -- --  $ ignorePackageEnv
-        $ writeInterfaceFiles (Just fp)
-        $ setVerbosity 0
-
-        $ setLinkerOptions df'
+        (disableOptimisation -- Compile with -O0 as we are not going to produce object files.
+        $ setIgnoreInterfacePragmas            -- Ignore any non-essential information in interface files such as unfoldings changing.
+        $ writeInterfaceFiles (Just cache_dir) -- Write interface files to the cache
+        $ setVerbosity 0                       -- Set verbosity to zero just in case the user specified `-vx` in the options.
+        $ setLinkerOptions df'                 -- Set `-fno-code` to avoid generating object files, unless we have to.
         )
-    G.setLogAction (\_df _wr _s _ss _pp _m -> return ())
-#if __GLASGOW_HASKELL__ < 806
-        (\_df -> return ())
-#endif
-
+    -- Unset the default log action to avoid output going to stdout.
+    unsetLogAction
     return targets
 
 ----------------------------------------------------------------
@@ -59,7 +59,7 @@ getSystemLibDir = do
 
 ----------------------------------------------------------------
 
-
+-- | What to call the cache directory in the cache folder.
 cacheDir :: String
 cacheDir = "hie-bios"
 
@@ -90,12 +90,6 @@ setLinkerOptions df = df {
   , ghcMode = CompManager
   }
 
-resetPackageDb :: DynFlags -> DynFlags
-resetPackageDb df = df { pkgDatabase = Nothing }
-
---ignorePackageEnv :: DynFlags -> DynFlags
---ignorePackageEnv df = df { packageEnv = Just "-" }
-
 setIgnoreInterfacePragmas :: DynFlags -> DynFlags
 setIgnoreInterfacePragmas df = gopt_set df Opt_IgnoreInterfacePragmas
 
@@ -110,6 +104,10 @@ setHiDir :: FilePath -> DynFlags -> DynFlags
 setHiDir f d = d { hiDir      = Just f}
 
 
+-- | Interpret and set the specific command line options.
+-- A lot of this code is just copied from ghc/Main.hs
+-- It would be good to move this code into a library module so we can just use it
+-- rather than copy it.
 addCmdOpts :: (GhcMonad m)
            => [String] -> DynFlags -> m (DynFlags, [G.Target])
 addCmdOpts cmdOpts df1 = do
@@ -151,15 +149,6 @@ addCmdOpts cmdOpts df1 = do
     when (interactive_only && packageFlagsChanged idflags1 idflags0) $ do
        liftIO $ hPutStrLn stderr "cannot set package flags with :seti; use :set"
     -}
-
-----------------------------------------------------------------
-
--- | Return the 'DynFlags' currently in use in the GHC session.
-getDynamicFlags :: IO DynFlags
-getDynamicFlags = do
-    mlibdir <- getSystemLibDir
-    G.runGhc mlibdir G.getSessionDynFlags
-
 
 -- partition_args, along with some of the other code in this file,
 -- was copied from ghc/Main.hs

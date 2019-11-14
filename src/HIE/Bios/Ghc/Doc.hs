@@ -1,3 +1,4 @@
+-- | Pretty printer utilities
 module HIE.Bios.Ghc.Doc where
 
 import GHC (DynFlags, getPrintUnqual, pprCols, GhcMonad)
