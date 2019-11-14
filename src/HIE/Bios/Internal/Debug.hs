@@ -1,4 +1,4 @@
-module HIE.Bios.Debug (debugInfo, rootInfo) where
+module HIE.Bios.Internal.Debug (debugInfo, rootInfo) where
 
 import Control.Monad.IO.Class (liftIO)
 
@@ -11,10 +11,9 @@ import HIE.Bios.Types
 ----------------------------------------------------------------
 
 -- | Obtaining debug information.
-debugInfo :: Options
-          -> Cradle
+debugInfo :: Cradle
           -> IO String
-debugInfo opt cradle = convert opt <$> do
+debugInfo cradle = unlines <$> do
     res <- runCradle (cradleOptsProg cradle) (cradleRootDir cradle)
     case res of
       CradleSuccess (ComponentOptions gopts deps) -> do
@@ -40,7 +39,6 @@ debugInfo opt cradle = convert opt <$> do
 ----------------------------------------------------------------
 
 -- | Obtaining root information.
-rootInfo :: Options
-          -> Cradle
+rootInfo :: Cradle
           -> IO String
-rootInfo opt cradle = return $ convert opt $ cradleRootDir cradle
+rootInfo cradle = return $ cradleRootDir cradle

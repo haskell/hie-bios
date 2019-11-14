@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+-- | Logic and datatypes for parsing @hie.yaml@ files.
 module HIE.Bios.Config(
     readConfig,
     Config(..),
@@ -126,7 +127,7 @@ parsePath (Object v)
 parsePath o = fail ("Multi component is expected to be an object." ++ show o)
 
 
-data Config = Config { cradle :: CradleConfig }
+newtype Config = Config { cradle :: CradleConfig }
     deriving (Show, Eq)
 
 instance FromJSON CradleConfig where

@@ -18,7 +18,7 @@ import System.FilePath( (</>) )
 import HIE.Bios
 import HIE.Bios.Types
 import HIE.Bios.Ghc.Check
-import HIE.Bios.Debug
+import HIE.Bios.Internal.Debug
 import Paths_hie_bios
 
 ----------------------------------------------------------------
@@ -63,12 +63,10 @@ main = flip E.catches handlers $ do
           Nothing -> loadImplicitCradle (cwd </> "File.hs")
     let cmdArg0 = args !. 0
         remainingArgs = tail args
-        opt = defaultOptions
     res <- case cmdArg0 of
-      "check"   -> checkSyntax opt cradle remainingArgs
-      "expand"  -> expandTemplate opt cradle remainingArgs
-      "debug"   -> debugInfo opt cradle
-      "root"    -> rootInfo opt cradle
+      "check"   -> checkSyntax cradle remainingArgs
+      "debug"   -> debugInfo cradle
+      "root"    -> rootInfo cradle
       "version" -> return progVersion
       "flags"
         | null remainingArgs -> E.throw $ NotEnoughArguments cmdArg0
@@ -99,7 +97,7 @@ main = flip E.catches handlers $ do
     handler1 = print -- for debug
     handler2 :: HhpcError -> IO ()
     handler2 SafeList = hPutStr stderr usage
-    handler2 (TooManyArguments cmd) = do
+    handler2 (TooManyArguments cmd) =
         hPutStrLn stderr $ "\"" ++ cmd ++ "\": Too many arguments"
     handler2 (NotEnoughArguments cmd) = do
         hPutStrLn stderr $ "\"" ++ cmd ++ "\": Not enough arguments"
@@ -109,9 +107,9 @@ main = flip E.catches handlers $ do
         hPutStrLn stderr $ "\"" ++ cmd ++ "\" not supported"
         hPutStrLn stderr ""
         hPutStr stderr usage
-    handler2 (CmdArg errs) = do
+    handler2 (CmdArg errs) =
         mapM_ (hPutStr stderr) errs
-    handler2 (FileNotExist file) = do
+    handler2 (FileNotExist file) =
         hPutStrLn stderr $ "\"" ++ file ++ "\" not found"
     xs !. idx
       | length xs <= idx = E.throw SafeList

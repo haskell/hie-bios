@@ -27,17 +27,16 @@ Library
                         HIE.Bios.Config
                         HIE.Bios.Cradle
                         HIE.Bios.Environment
-                        HIE.Bios.Debug
+                        HIE.Bios.Internal.Debug
                         HIE.Bios.Flags
                         HIE.Bios.Types
-                        HIE.Bios.Log
+                        HIE.Bios.Internal.Log
                         HIE.Bios.Ghc.Api
                         HIE.Bios.Ghc.Check
                         HIE.Bios.Ghc.Doc
                         HIE.Bios.Ghc.Gap
                         HIE.Bios.Ghc.Load
                         HIE.Bios.Ghc.Logger
-                        HIE.Bios.Ghc.Things
   Other-Modules:        Paths_hie_bios
   Build-Depends:
                         base >= 4.8 && < 5,

@@ -1,18 +1,14 @@
 {-# LANGUAGE ScopedTypeVariables, CPP #-}
-
+-- | These functions are for conveniently implementing the simple CLI
 module HIE.Bios.Ghc.Api (
-    withGHC
+    initializeFlagsWithCradle
+  , initializeFlagsWithCradleWithMessage
+  -- * Utility functions for running the GHC monad and implementing internal utilities
+  , withGHC
   , withGHC'
   , withGhcT
-  , initializeFlagsWithCradle
-  , initializeFlagsWithCradleWithMessage
-  , getDynamicFlags
   , getSystemLibDir
   , withDynFlags
-  , withCmdFlags
-  , setNoWarningFlags
-  , setAllWarningFlags
-  , setDeferTypeErrors
   ) where
 
 import CoreMonad (liftIO)
@@ -27,19 +23,14 @@ import qualified GhcMake as G
 
 import Control.Monad (void)
 import System.Exit (exitSuccess)
-import System.IO.Unsafe (unsafePerformIO)
-
-import qualified HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Types
-import qualified HIE.Bios.Log as Log
+import qualified HIE.Bios.Internal.Log as Log
 import HIE.Bios.Environment
 import HIE.Bios.Flags
 
-
-
 ----------------------------------------------------------------
 
--- | Converting the 'Ghc' monad to the 'IO' monad.
+-- | Converting the 'Ghc' monad to the 'IO' monad. All exceptions are ignored and logged.
 withGHC :: FilePath  -- ^ A target file displayed in an error message.
         -> Ghc a -- ^ 'Ghc' actions created by the Ghc utilities.
         -> IO a
@@ -51,8 +42,11 @@ withGHC file body = ghandle ignore $ withGHC' body
         Log.logm (show e)
         exitSuccess
 
+-- | Run a Ghc monad computation with an automatically discovered libdir.
+-- It calculates the lib dir by calling ghc with the `--print-libdir` flag.
 withGHC' :: Ghc a -> IO a
 withGHC' body = do
+    -- TODO: Why is this not using ghc-paths?
     mlibdir <- getSystemLibDir
     G.runGhc mlibdir body
 
@@ -63,23 +57,29 @@ withGhcT body = do
 
 ----------------------------------------------------------------
 
+-- | Initialise a GHC session by loading a given file into a given cradle.
 initializeFlagsWithCradle ::
     GhcMonad m
-    => FilePath -- The file we are loading it because of
-    -> Cradle
+    => FilePath -- ^ The file we are loading it because of
+    -> Cradle   -- ^ The cradle we want to load
     -> m (CradleLoadResult (m ()))
 initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMsg)
 
+-- | The same as 'initializeFlagsWithCradle' but with an additional argument to control
+-- how the loading progress messages are displayed to the user. In @haskell-ide-engine@
+-- the module loading progress is displayed in the UI by using a progress notification.
 initializeFlagsWithCradleWithMessage ::
   GhcMonad m
   => Maybe G.Messager
   -> FilePath -- The file we are loading it because of
   -> Cradle
-  -> m (CradleLoadResult (m ())) -- ^ Whether we actually initialised a session or not
+  -> m (CradleLoadResult (m ())) -- ^ Whether we actually loaded the cradle or not.
 initializeFlagsWithCradleWithMessage msg fp cradle =
     fmap (initSessionWithMessage msg) <$> (liftIO $ getCompilerOptions fp cradle)
 
-
+-- | Actually perform the initialisation of the session. Initialising the session corresponds to
+-- parsing the command line flags, setting the targets for the session and then attempting to load
+-- all the targets.
 initSessionWithMessage :: (GhcMonad m)
             => Maybe G.Messager
             -> ComponentOptions
@@ -104,41 +104,4 @@ withDynFlags setFlag body = G.gbracket setup teardown (\_ -> body)
         return dflag
     teardown = void . G.setSessionDynFlags
 
-withCmdFlags ::
-  (GhcMonad m)
-  => [String] -> m a ->  m a
-withCmdFlags flags body = G.gbracket setup teardown (\_ -> body)
-  where
-    setup = do
-        (dflag, _) <- G.getSessionDynFlags >>= addCmdOpts flags
-        void $ G.setSessionDynFlags dflag
-        return dflag
-    teardown = void . G.setSessionDynFlags
-
 ----------------------------------------------------------------
-
-setDeferTypeErrors :: DynFlags -> DynFlags
-setDeferTypeErrors
-    = foldDFlags (flip wopt_set) [Opt_WarnTypedHoles, Opt_WarnDeferredTypeErrors, Opt_WarnDeferredOutOfScopeVariables]
-    . foldDFlags setGeneralFlag' [Opt_DeferTypedHoles, Opt_DeferTypeErrors, Opt_DeferOutOfScopeVariables]
-
-foldDFlags :: (a -> DynFlags -> DynFlags) -> [a] -> DynFlags -> DynFlags
-foldDFlags f xs x = foldr f x xs
-
--- | Set 'DynFlags' equivalent to "-w:".
-setNoWarningFlags :: DynFlags -> DynFlags
-setNoWarningFlags df = df { warningFlags = Gap.emptyWarnFlags}
-
--- | Set 'DynFlags' equivalent to "-Wall".
-setAllWarningFlags :: DynFlags -> DynFlags
-setAllWarningFlags df = df { warningFlags = allWarningFlags }
-
-
-{-# NOINLINE allWarningFlags #-}
-allWarningFlags :: Gap.WarnFlags
-allWarningFlags = unsafePerformIO $ do
-    mlibdir <- getSystemLibDir
-    G.runGhcT mlibdir $ do
-        df <- G.getSessionDynFlags
-        (df', _) <- addCmdOpts ["-Wall"] df
-        return $ G.warningFlags df'

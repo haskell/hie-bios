@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
+-- | Convenience functions for loading a file into a GHC API session
 module HIE.Bios.Ghc.Load ( loadFileWithMessage, loadFile, setTargetFiles, setTargetFilesWithMessage) where
 
 import GHC
@@ -11,7 +12,6 @@ import Control.Monad.IO.Class
 
 import Data.IORef
 
-import System.Directory
 import Hooks
 import TcRnTypes (FrontendResult(..))
 import Control.Monad (forM, void)
@@ -21,42 +21,32 @@ import Data.List
 
 import Data.Time.Clock
 import qualified HIE.Bios.Ghc.Gap as Gap
-import qualified HIE.Bios.Log as Log
+import qualified HIE.Bios.Internal.Log as Log
 
--- | Obtaining type of a target expression. (GHCi's type:)
+-- | Load a file into the GHC session
 loadFileWithMessage :: GhcMonad m
          => Maybe G.Messager
          -> (FilePath, FilePath)     -- ^ A target file.
          -> m (Maybe TypecheckedModule, [TypecheckedModule])
 loadFileWithMessage msg file = do
-  dir <- liftIO $ getCurrentDirectory
-  Log.debugm $ "loadFile:2 " ++ dir
-  df <- getSessionDynFlags
-  Log.debugm $ "loadFile:3 " ++ show (optLevel df)
-  (_, tcs) <- collectASTs $
-    (setTargetFilesWithMessage msg [file])
+  -- STEP 1: Load the file into the session, using collectASTs to also retrieve
+  -- typechecked and parsed modules.
+  (_, tcs) <- collectASTs $ (setTargetFilesWithMessage msg [file])
   Log.debugm $ "loaded " ++ fst file ++ " - " ++ snd file
   let get_fp = ml_hs_file . ms_location . pm_mod_summary . tm_parsed_module
   Log.debugm $ "Typechecked modules for: " ++ (unlines $ map (show . get_fp) tcs)
+  -- Find the specific module in the list of returned typechecked modules if it exists.
   let findMod [] = Nothing
       findMod (x:xs) = case get_fp x of
                          Just fp -> if fp `isSuffixOf` (snd file) then Just x else findMod xs
                          Nothing -> findMod xs
   return (findMod tcs, tcs)
 
+-- | Load a file with the default message which outputs updates in the same format as normal GHC.
 loadFile :: (GhcMonad m)
          => (FilePath, FilePath)
          -> m (Maybe TypecheckedModule, [TypecheckedModule])
 loadFile = loadFileWithMessage (Just G.batchMsg)
-
-{-
-fileModSummary :: GhcMonad m => FilePath -> m ModSummary
-fileModSummary file = do
-    mss <- getModSummaries <$> G.getModuleGraph
-    let [ms] = filter (\m -> G.ml_hs_file (G.ms_location m) == Just file) mss
-    return ms
-    -}
-
 
 setTargetFiles :: GhcMonad m => [(FilePath, FilePath)] -> m ()
 setTargetFiles = setTargetFilesWithMessage (Just G.batchMsg)
@@ -76,18 +66,19 @@ updateTime ts graph = liftIO $ do
         | otherwise = ms
   pure $ Gap.mapMG go graph
 
--- | Set the files as targets and load them.
+-- | Set the files as targets and load them. This will reset GHC's targets so only the modules you
+-- set as targets and its dependencies will be loaded or reloaded.
 setTargetFilesWithMessage :: (GhcMonad m)  => Maybe G.Messager -> [(FilePath, FilePath)] -> m ()
 setTargetFilesWithMessage msg files = do
     targets <- forM files guessTargetMapped
     Log.debugm $ "setTargets: " ++ show files
-    G.setTargets (map (\t -> t { G.targetAllowObjCode = False }) targets)
+    G.setTargets targets
     mod_graph <- updateTime targets =<< depanal [] False
     Log.debugm $ "modGraph: " ++ show (map ms_location $ Gap.mgModSummaries mod_graph)
-    dflags1 <- getSessionDynFlags
-    Log.debugm $ "hidir: " ++ show (hiDir dflags1)
     void $ G.load' LoadAllTargets msg mod_graph
 
+-- | Add a hook to record the contents of any 'TypecheckedModule's which are produced
+-- during compilation.
 collectASTs :: (GhcMonad m) => m a -> m (a, [TypecheckedModule])
 collectASTs action = do
   dflags0 <- getSessionDynFlags
@@ -106,11 +97,11 @@ collectASTs action = do
   let dflags2 = dflags1 { hooks = (hooks dflags_old)
                           { hscFrontendHook = Nothing }
                         }
-
   modifySession $ \h -> h{ hsc_dflags = dflags2 }
 
   return (res, tcs)
 
+-- | This hook overwrites the default frontend action of GHC.
 astHook :: IORef [TypecheckedModule] -> ModSummary -> Hsc FrontendResult
 astHook tc_ref ms = ghcInHsc $ do
   p <- G.parseModule =<< initializePluginsGhc ms
@@ -134,7 +125,8 @@ ghcInHsc gm = do
   session <- liftIO $ newIORef hsc_session
   liftIO $ reflectGhc gm (Session session)
 
-
+-- | A variant of 'guessTarget' which after guessing the target for a filepath, overwrites the
+-- target file to be a temporary file.
 guessTargetMapped :: (GhcMonad m) => (FilePath, FilePath) -> m Target
 guessTargetMapped (orig_file_name, mapped_file_name) = do
   t <- G.guessTarget orig_file_name Nothing
