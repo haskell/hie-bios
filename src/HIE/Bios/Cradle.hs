@@ -29,17 +29,17 @@ import Data.Version (showVersion)
 import Paths_hie_bios
 ----------------------------------------------------------------
 
--- | Given root/foo/bar.hs, return root/hie.yaml, or wherever the yaml file was found
+-- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
 findCradle :: FilePath -> IO (Maybe FilePath)
 findCradle wfile = do
     let wdir = takeDirectory wfile
     runMaybeT (yamlConfig wdir)
 
--- | Given root/hie.yaml load the Cradle
+-- | Given root\/hie.yaml load the Cradle.
 loadCradle :: FilePath -> IO Cradle
 loadCradle = loadCradleWithOpts defaultCradleOpts
 
--- | Given root/foo/bar.hs, load an implicit cradle
+-- | Given root\/foo\/bar.hs, load an implicit cradle
 loadImplicitCradle :: FilePath -> IO Cradle
 loadImplicitCradle wfile = do
   let wdir = takeDirectory wfile
@@ -116,9 +116,9 @@ configFileName :: FilePath
 configFileName = "hie.yaml"
 
 ---------------------------------------------------------------
--- Default cradle has no special options, not very useful for loading
--- modules.
 
+-- | Default cradle has no special options, not very useful for loading
+-- modules.
 defaultCradle :: FilePath -> Cradle
 defaultCradle cur_dir =
   Cradle

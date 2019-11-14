@@ -126,7 +126,14 @@ parsePath (Object v)
   = (T.unpack path,) <$> parseJSON c
 parsePath o = fail ("Multi component is expected to be an object." ++ show o)
 
-
+-- | Configuration that can be used to load a 'Cradle'.
+-- A configuration has roughly the following form:
+--
+-- @
+-- cradle:
+--   cabal:
+--     component: "lib:hie-bios"
+-- @
 newtype Config = Config { cradle :: CradleConfig }
     deriving (Show, Eq)
 
@@ -148,5 +155,9 @@ instance FromJSON CradleConfig where
 instance FromJSON Config where
     parseJSON o = Config <$> parseJSON o
 
+
+-- | Decode given file to a 'Config' value.
+-- If the contents of the file is not a valid 'Config',
+-- an 'Control.Exception.IOException' is thrown.
 readConfig :: FilePath -> IO Config
 readConfig = decodeFileThrow

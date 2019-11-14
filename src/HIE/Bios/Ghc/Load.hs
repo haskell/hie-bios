@@ -23,11 +23,25 @@ import Data.Time.Clock
 import qualified HIE.Bios.Ghc.Gap as Gap
 import qualified HIE.Bios.Internal.Log as Log
 
--- | Load a file into the GHC session
+-- | Load a target into the GHC session.
+--
+-- The target is represented as a tuple. The tuple consists of the
+-- original filename and another file that contains the actual
+-- source code to compile.
+--
+-- The optional messager can be used to log diagnostics, warnings or errors
+-- that occurred during loading the target.
+--
+-- If the loading succeeds, the typechecked module is returned
+-- together with all the typechecked modules that had to be loaded
+-- in order to typecheck the given target.
 loadFileWithMessage :: GhcMonad m
-         => Maybe G.Messager
-         -> (FilePath, FilePath)     -- ^ A target file.
+         => Maybe G.Messager -- ^ Optional messager hook
+                             -- to log messages produced by GHC.
+         -> (FilePath, FilePath)  -- ^ Target file to load.
          -> m (Maybe TypecheckedModule, [TypecheckedModule])
+         -- ^ Typechecked module and modules that had to
+         -- be loaded for the target.
 loadFileWithMessage msg file = do
   -- STEP 1: Load the file into the session, using collectASTs to also retrieve
   -- typechecked and parsed modules.
@@ -42,12 +56,30 @@ loadFileWithMessage msg file = do
                          Nothing -> findMod xs
   return (findMod tcs, tcs)
 
--- | Load a file with the default message which outputs updates in the same format as normal GHC.
+-- | Load a target into the GHC session with the default messager
+--  which outputs updates in the same format as normal GHC.
+--
+-- The target is represented as a tuple. The tuple consists of the
+-- original filename and another file that contains the actual
+-- source code to compile.
+--
+-- If the message should configured, use 'loadFileWithMessage'.
+--
+-- If the loading succeeds, the typechecked module is returned
+-- together with all the typechecked modules that had to be loaded
+-- in order to typecheck the given target.
 loadFile :: (GhcMonad m)
-         => (FilePath, FilePath)
+         => (FilePath, FilePath) -- ^ Target file to load.
          -> m (Maybe TypecheckedModule, [TypecheckedModule])
+         -- ^ Typechecked module and modules that had to
+         -- be loaded for the target.
 loadFile = loadFileWithMessage (Just G.batchMsg)
 
+
+-- | Set the files as targets and load them. This will reset GHC's targets so only the modules you
+-- set as targets and its dependencies will be loaded or reloaded.
+-- Produced diagnostics will be printed similar to the normal output of GHC.
+-- To configure this, use 'setTargetFilesWithMessage'.
 setTargetFiles :: GhcMonad m => [(FilePath, FilePath)] -> m ()
 setTargetFiles = setTargetFilesWithMessage (Just G.batchMsg)
 
