@@ -51,7 +51,7 @@ instance Show CradleAction where
 
 -- | Result of an attempt to set up a GHC session for a 'Cradle'.
 -- This is the go-to error handling mechanism. When possible, this
--- should be preferd over throwing exceptions.
+-- should be preferred over throwing exceptions.
 data CradleLoadResult r = CradleSuccess r -- ^ The cradle succeeded and returned these options.
                       | CradleFail CradleError -- ^ We tried to load the cradle and it failed.
                       | CradleNone -- ^ No attempt was made to load the cradle.
