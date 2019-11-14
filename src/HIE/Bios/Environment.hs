@@ -22,9 +22,9 @@ import Data.List
 import HIE.Bios.Types
 import HIE.Bios.Ghc.Gap
 
--- | Start a GHC session and set some sensible options for tooling to use
--- * Creates a folder in the cache directory to cache interface files to make reloading faster.
--- *
+-- | Start a GHC session and set some sensible options for tooling to use.
+-- Creates a folder in the cache directory to cache interface files to make
+-- reloading faster.
 initSession :: (GhcMonad m)
     => ComponentOptions
     -> m [G.Target]
@@ -49,7 +49,7 @@ initSession  ComponentOptions {..} = do
 
 ----------------------------------------------------------------
 
--- | Obtaining the directory for system libraries.
+-- | Obtain the directory for system libraries.
 getSystemLibDir :: IO (Maybe FilePath)
 getSystemLibDir = do
     res <- readProcess "ghc" ["--print-libdir"] []
@@ -63,18 +63,18 @@ getSystemLibDir = do
 cacheDir :: String
 cacheDir = "hie-bios"
 
-{-
--- Back in the day we used to clear the cache at the start of each session,
--- however, it's not really necessary as
--- 1. There is one cache dir for any change in options.
--- 2. Interface files are resistent to bad option changes anyway.
-clearInterfaceCache :: FilePath -> IO ()
-clearInterfaceCache fp = do
-  cd <- getCacheDir fp
-  res <- doesPathExist cd
-  when res (removeDirectoryRecursive cd)
--}
+{- |
+Back in the day we used to clear the cache at the start of each session,
+however, it's not really necessary as
+1. There is one cache dir for any change in options.
+2. Interface files are resistent to bad option changes anyway.
 
+> clearInterfaceCache :: FilePath -> IO ()
+> clearInterfaceCache fp = do
+>   cd <- getCacheDir fp
+>   res <- doesPathExist cd
+>   when res (removeDirectoryRecursive cd)
+-}
 getCacheDir :: FilePath -> IO FilePath
 getCacheDir fp = getXdgDirectory XdgCache (cacheDir </> fp)
 

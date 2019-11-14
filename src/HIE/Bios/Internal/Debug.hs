@@ -10,7 +10,14 @@ import HIE.Bios.Types
 
 ----------------------------------------------------------------
 
--- | Obtaining debug information.
+-- | Obtain debug information for a 'Cradle'.
+--
+-- Tries to load the 'Cradle' and dump any information associated with it.
+-- If loading succeeds, contains information such as the root directory of
+-- the cradle, the compiler options to compile a module in this 'Cradle',
+-- the file dependencies and so on.
+--
+-- Otherwise, shows the error message and exit-code.
 debugInfo :: Cradle
           -> IO String
 debugInfo cradle = unlines <$> do
@@ -38,7 +45,7 @@ debugInfo cradle = unlines <$> do
 
 ----------------------------------------------------------------
 
--- | Obtaining root information.
+-- | Get the root directory of the given Cradle.
 rootInfo :: Cradle
           -> IO String
 rootInfo cradle = return $ cradleRootDir cradle

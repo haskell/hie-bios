@@ -57,10 +57,10 @@ withGhcT body = do
 
 ----------------------------------------------------------------
 
--- | Initialise a GHC session by loading a given file into a given cradle.
+-- | Initialize a GHC session by loading a given file into a given cradle.
 initializeFlagsWithCradle ::
     GhcMonad m
-    => FilePath -- ^ The file we are loading it because of
+    => FilePath -- ^ The file we are loading the 'Cradle' because of
     -> Cradle   -- ^ The cradle we want to load
     -> m (CradleLoadResult (m ()))
 initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMsg)
@@ -71,8 +71,8 @@ initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMs
 initializeFlagsWithCradleWithMessage ::
   GhcMonad m
   => Maybe G.Messager
-  -> FilePath -- The file we are loading it because of
-  -> Cradle
+  -> FilePath -- ^ The file we are loading the 'Cradle' because of
+  -> Cradle   -- ^ The cradle we want to load
   -> m (CradleLoadResult (m ())) -- ^ Whether we actually loaded the cradle or not.
 initializeFlagsWithCradleWithMessage msg fp cradle =
     fmap (initSessionWithMessage msg) <$> (liftIO $ getCompilerOptions fp cradle)

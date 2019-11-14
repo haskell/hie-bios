@@ -1,5 +1,12 @@
--- | The HIE Bios
+{- | The HIE Bios
 
+Provides an abstraction over the GHC Api to initialise a GHC session and
+loading modules in a project.
+
+Defines the `hie.yaml` file specification. This is used to explicitly configure
+how a project should be built by GHC.
+
+-}
 module HIE.Bios (
   -- * Find and load a Cradle
     Cradle(..)
