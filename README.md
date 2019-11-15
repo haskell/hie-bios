@@ -49,7 +49,10 @@ cradle: {cabal: {component: "lib:haskell-ide-engine"}}
 Or you can explicitly state the program which should be used to collect
 the options by supplying the path to the program. It is interpreted
 relative to the current working directory if it is not an absolute path.
-The bios program should return a list of options separated by newline characters.
+The bios program should consult the `HIE_BIOS_OUTPUT` env var and write a list of
+options to this file separated by newlines. Once the program finishes running `hie-bios`
+reads this file and uses the arguments to set up the GHC session. This is how GHC's
+build system is able to support `hie-bios`.
 
 ```yaml
 cradle: {bios: {program: ".hie-bios"}}

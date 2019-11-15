@@ -39,10 +39,12 @@ data Cradle = Cradle {
   , cradleOptsProg   :: CradleAction
   } deriving (Show)
 
+type LoggingFunction = String -> IO ()
+
 data CradleAction = CradleAction {
                       actionName :: String
                       -- ^ Name of the action.
-                      , runCradle :: FilePath -> IO (CradleLoadResult ComponentOptions)
+                      , runCradle :: LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
                       }
 
@@ -58,7 +60,7 @@ data CradleLoadResult r = CradleSuccess r -- ^ The cradle succeeded and returned
                       deriving (Functor)
 
 
-data CradleError = CradleError ExitCode String deriving (Show)
+data CradleError = CradleError ExitCode [String] deriving (Show)
 
 instance Exception CradleError where
 ----------------------------------------------------------------

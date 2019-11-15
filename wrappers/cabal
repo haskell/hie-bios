@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
+
+function out(){
+  echo "$1" >> $HIE_BIOS_OUTPUT
+}
+
 if [ "$1" == "--interactive" ]; then
-  pwd
+  pwd | out
   for arg in "$@"; do
-    echo -ne "$arg\x00"
+    out "$arg"
   done
-  echo -ne "\n"
 else
   ghc "$@"
 fi
