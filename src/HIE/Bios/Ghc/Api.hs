@@ -62,7 +62,7 @@ initializeFlagsWithCradle ::
     GhcMonad m
     => FilePath -- ^ The file we are loading the 'Cradle' because of
     -> Cradle   -- ^ The cradle we want to load
-    -> m (CradleLoadResult (m ()))
+    -> m (CradleLoadResult (m G.SuccessFlag))
 initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMsg)
 
 -- | The same as 'initializeFlagsWithCradle' but with an additional argument to control
@@ -73,7 +73,7 @@ initializeFlagsWithCradleWithMessage ::
   => Maybe G.Messager
   -> FilePath -- ^ The file we are loading the 'Cradle' because of
   -> Cradle   -- ^ The cradle we want to load
-  -> m (CradleLoadResult (m ())) -- ^ Whether we actually loaded the cradle or not.
+  -> m (CradleLoadResult (m G.SuccessFlag)) -- ^ Whether we actually loaded the cradle or not.
 initializeFlagsWithCradleWithMessage msg fp cradle =
     fmap (initSessionWithMessage msg) <$> (liftIO $ getCompilerOptions fp cradle)
 
@@ -83,13 +83,13 @@ initializeFlagsWithCradleWithMessage msg fp cradle =
 initSessionWithMessage :: (GhcMonad m)
             => Maybe G.Messager
             -> ComponentOptions
-            -> m ()
+            -> m G.SuccessFlag
 initSessionWithMessage msg compOpts = do
     targets <- initSession compOpts
     G.setTargets targets
     -- Get the module graph using the function `getModuleGraph`
     mod_graph <- G.depanal [] True
-    void $ G.load' LoadAllTargets msg mod_graph
+    G.load' LoadAllTargets msg mod_graph
 
 ----------------------------------------------------------------
 

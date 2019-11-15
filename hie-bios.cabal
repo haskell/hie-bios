@@ -91,6 +91,22 @@ test-suite parser-tests
   ghc-options: -threaded -Wall
   main-is: ParserTests.hs
 
+test-suite bios-tests
+  type: exitcode-stdio-1.0
+  default-language: Haskell2010
+  build-depends:
+      base,
+      tasty,
+      tasty-hunit,
+      hie-bios,
+      filepath,
+      directory,
+      ghc
+
+  hs-source-dirs: tests/
+  ghc-options: -threaded -Wall
+  main-is: BiosTests.hs
+
 Source-Repository head
   Type:                 git
   Location:             git://github.com/mpickering/hie-bios.git

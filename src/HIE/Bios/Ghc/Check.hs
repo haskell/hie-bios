@@ -32,7 +32,7 @@ checkSyntax cradle files = withGhcT $ do
     res <- initializeFlagsWithCradle (head files) cradle
     case res of
       CradleSuccess ini -> do
-        ini
+        _sf <- ini
         either id id <$> check files
       CradleFail ce -> liftIO $ throwIO ce
       CradleNone -> return "No cradle"
