@@ -1,2 +1,2 @@
 cradle:
-  bios: {program: ./hie-bios }
+  bios: {program: ./hie-bios.sh }
