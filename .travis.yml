@@ -68,7 +68,7 @@ install:
   - rm -f cabal.project
   - touch cabal.project
   - "printf 'packages: \".\"\\n' >> cabal.project"
-  - "printf 'write-ghc-environment-files: always\\n' >> cabal.project"
+  - "printf 'write-ghc-environment-files: never\\n' >> cabal.project"
   - touch cabal.project.local
   - "for pkg in $($HCPKG list --simple-output); do echo $pkg | sed 's/-[^-]*$//' | grep -vE -- '^(hie-bios)$' | sed 's/^/constraints: /' | sed 's/$/ installed/' >> cabal.project.local; done"
   - cat cabal.project || true
