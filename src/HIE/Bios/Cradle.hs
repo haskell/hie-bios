@@ -226,7 +226,7 @@ biosWorkDir = findFileUpwards (".hie-bios" ==)
 biosDepsAction :: LoggingFunction -> FilePath -> Maybe FilePath -> IO [FilePath]
 biosDepsAction l wdir (Just biosDepsProg) = do
   biosDeps' <- canonicalizePath biosDepsProg
-  (ex, sout, serr, args) <- readProcessWithExitCodeInDirectory l wdir biosDeps' []
+  (ex, sout, serr, args) <- readProcessWithOutputFile l wdir biosDeps' []
   case ex of
     ExitFailure _ ->  error $ show (ex, sout, serr)
     ExitSuccess -> return args
@@ -240,7 +240,7 @@ biosAction :: FilePath
            -> IO (CradleLoadResult ComponentOptions)
 biosAction wdir bios bios_deps l fp = do
   bios' <- canonicalizePath bios
-  (ex, _stdo, std, res) <- readProcessWithExitCodeInDirectory l wdir bios' [fp]
+  (ex, _stdo, std, res) <- readProcessWithOutputFile l wdir bios' [fp]
   deps <- biosDepsAction l wdir bios_deps
         -- Output from the program should be written to the output file and
         -- delimited by newlines.
@@ -319,7 +319,7 @@ cabalAction work_dir mc l _fp = do
   let cab_args = ["v2-repl", "--with-compiler", wrapper_fp]
                   ++ [component_name | Just component_name <- [mc]]
   (ex, output, stde, args) <-
-    readProcessWithExitCodeInDirectory l work_dir "cabal" cab_args
+    readProcessWithOutputFile l work_dir "cabal" cab_args
   deps <- cabalCradleDependencies work_dir
   case processCabalWrapperArgs args of
       Nothing -> pure $ CradleFail (CradleError ex
@@ -365,17 +365,17 @@ stackCradle wdir =
 
 stackCradleDependencies :: FilePath -> IO [FilePath]
 stackCradleDependencies wdir = do
-    cabalFiles <- findCabalFiles wdir
-    return $ cabalFiles ++ ["package.yaml", "stack.yaml"]
+  cabalFiles <- findCabalFiles wdir
+  return $ cabalFiles ++ ["package.yaml", "stack.yaml"]
 
 stackAction :: FilePath -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
 stackAction work_dir l fp = do
   -- Same wrapper works as with cabal
   wrapper_fp <- getCabalWrapperTool
   (ex1, _stdo, stde, args) <-
-      readProcessWithExitCodeInDirectory l work_dir "stack" ["repl", "--no-load", "--with-ghc", wrapper_fp, fp ]
+      readProcessWithOutputFile l work_dir "stack" ["repl", "--no-load", "--with-ghc", wrapper_fp, fp ]
   (ex2, pkg_args, stdr, _) <-
-    readProcessWithExitCodeInDirectory l work_dir "stack" ["path", "--ghc-package-path"]
+    readProcessWithOutputFile l work_dir "stack" ["path", "--ghc-package-path"]
   let split_pkgs = concatMap splitSearchPath pkg_args
       pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
   deps <- stackCradleDependencies work_dir
@@ -433,7 +433,7 @@ rulesHaskellAction work_dir fp = do
   setFileMode wrapper_fp accessModes
   let rel_path = makeRelative work_dir fp
   (ex, args, stde) <-
-      readProcessWithExitCodeInDirectory work_dir wrapper_fp [rel_path] []
+      readProcessWithOutputFile work_dir wrapper_fp [rel_path] []
   let args'  = filter (/= '\'') args
   let args'' = filter (/= "\"$GHCI_LOCATION\"") (words args')
   deps <- rulesHaskellCradleDependencies work_dir
@@ -469,7 +469,7 @@ obeliskCradle wdir =
 obeliskAction :: FilePath -> FilePath -> IO (CradleLoadResult ComponentOptions)
 obeliskAction work_dir _fp = do
   (ex, args, stde) <-
-      readProcessWithExitCodeInDirectory work_dir "ob" ["ide-args"] []
+      readProcessWithOutputFile work_dir "ob" ["ide-args"] []
 
   o_deps <- obeliskCradleDependencies work_dir
   return (makeCradleResult (ex, stde, words args) o_deps )
@@ -500,15 +500,20 @@ findFile p dir = do
     getFiles = filter p <$> getDirectoryContents dir
     doesPredFileExist file = doesFileExist $ dir </> file
 
--- | Call a process with the given arguments and the given stdin
--- in the given working directory.
-readProcessWithExitCodeInDirectory
+-- | Call a process with the given arguments
+-- * A special file is created for the process to write to, the process can discover the name of
+-- the file by reading the @HIE_BIOS_OUTPUT@ environment variable. The contents of this file is
+-- returned by the function.
+-- * The logging function is called every time the process emits anything to stdout or stderr.
+-- it can be used to report progress of the process to a user.
+-- * The process is executed in the given directory
+readProcessWithOutputFile
   :: LoggingFunction
   -> FilePath
   -> FilePath
   -> [String]
   -> IO (ExitCode, [String], [String], [String])
-readProcessWithExitCodeInDirectory l work_dir fp args = withSystemTempFile "bios-output" $ \output_file h -> do
+readProcessWithOutputFile l work_dir fp args = withSystemTempFile "bios-output" $ \output_file h -> do
   hSetBuffering h LineBuffering
   old_env <- getEnvironment
   -- Pipe stdout directly into the logger
