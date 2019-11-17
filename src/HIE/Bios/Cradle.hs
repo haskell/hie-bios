@@ -520,11 +520,11 @@ readProcessWithOutputFile l work_dir fp args = withSystemTempFile "bios-output" 
   let process = (proc fp args) { cwd = Just work_dir
                                , env = Just (("HIE_BIOS_OUTPUT", output_file) : old_env)
                                }
-      loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.map unpack C..| C.iterM l C..| C.sinkList)
+      -- Windows line endings are not converted so you have to filter out `'r` characters
+      loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map unpack C..| C.iterM l C..| C.sinkList)
   (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
   !res <- force <$> hGetContents h
   return (ex, stdo, stde, lines res)
-
 
 
 makeCradleResult :: (ExitCode, [String], [String]) -> [FilePath] -> CradleLoadResult ComponentOptions
