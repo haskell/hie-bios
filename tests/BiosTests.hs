@@ -7,9 +7,8 @@ import HIE.Bios.Ghc.Api
 import Control.Monad.IO.Class
 import Control.Monad ( unless )
 import System.Directory
-import           System.FilePath          ( makeRelative )
+import System.FilePath ( makeRelative )
 import BasicTypes
-import           Debug.Trace                    ( traceShowM )
 
 main :: IO ()
 main = defaultMain $
@@ -54,8 +53,6 @@ testDirectory fp step = do
   crd <- case mcfg of
           Just cfg -> loadCradle cfg
           Nothing -> loadImplicitCradle a_fp
-  traceShowM ("cradle", crd)
-  traceShowM ("fp", fp, a_fp)
   step "Initialise Flags"
   withCurrentDirectory (cradleRootDir crd) $
     withGHC' $ do
