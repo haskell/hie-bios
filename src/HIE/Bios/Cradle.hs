@@ -524,7 +524,7 @@ readProcessWithOutputFile l work_dir fp args = withSystemTempFile "bios-output" 
       loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map unpack C..| C.iterM l C..| C.sinkList)
   (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
   !res <- force <$> hGetContents h
-  return (ex, stdo, stde, lines res)
+  return (ex, stdo, stde, lines (filter (/= '\r') res))
 
 
 makeCradleResult :: (ExitCode, [String], [String]) -> [FilePath] -> CradleLoadResult ComponentOptions
