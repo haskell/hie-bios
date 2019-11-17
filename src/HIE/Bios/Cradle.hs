@@ -373,7 +373,7 @@ stackAction work_dir l fp = do
   -- Same wrapper works as with cabal
   wrapper_fp <- getCabalWrapperTool
   (ex1, _stdo, stde, args) <-
-      readProcessWithOutputFile l work_dir "stack" ["repl", "--no-load", "--with-ghc", wrapper_fp, fp ]
+      readProcessWithOutputFile l work_dir "stack" ["repl", "--no-nix-pure", "--no-load", "--with-ghc", wrapper_fp, fp ]
   (ex2, pkg_args, stdr, _) <-
     readProcessWithOutputFile l work_dir "stack" ["path", "--ghc-package-path"]
   let split_pkgs = concatMap splitSearchPath pkg_args
