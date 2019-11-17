@@ -7,7 +7,9 @@ import HIE.Bios.Ghc.Api
 import Control.Monad.IO.Class
 import Control.Monad ( unless )
 import System.Directory
+import           System.FilePath          ( makeRelative )
 import BasicTypes
+import           Debug.Trace                    ( traceShowM )
 
 main :: IO ()
 main = defaultMain $
@@ -33,11 +35,11 @@ main = defaultMain $
       , testCaseSteps "simple-direct" $ testDirectory "./tests/projects/simple-direct/B.hs"
       , testCaseSteps "simple-bios" $ testDirectory "./tests/projects/simple-bios/B.hs"
       , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
-                    $  testDirectory "./tests/projects/multi-cabal/src/Lib.hs"
-                    >> testDirectory "./tests/projects/multi-cabal/app/Main.hs"
+                    $  testDirectory "./tests/projects/multi-cabal/app/Main.hs"
+                    >> testDirectory "./tests/projects/multi-cabal/src/Lib.hs"
       , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
-                    $  testDirectory "./tests/projects/multi-stack/src/Lib.hs"
-                    >> testDirectory "./tests/projects/multi-stack/app/Main.hs"
+                    $  testDirectory "./tests/projects/multi-stack/app/Main.hs"
+                    >> testDirectory "./tests/projects/multi-stack/src/Lib.hs"
       ]
   ]
 
@@ -52,10 +54,13 @@ testDirectory fp step = do
   crd <- case mcfg of
           Just cfg -> loadCradle cfg
           Nothing -> loadImplicitCradle a_fp
+  traceShowM ("cradle", crd)
+  traceShowM ("fp", fp, a_fp)
   step "Initialise Flags"
   withCurrentDirectory (cradleRootDir crd) $
     withGHC' $ do
-      res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) fp crd
+      let relFp = makeRelative (cradleRootDir crd) a_fp
+      res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
       case res of
         CradleSuccess ini -> do
           liftIO (step "Initial module load")
