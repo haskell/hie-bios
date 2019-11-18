@@ -16,6 +16,7 @@ cache:
   directories:
     - $HOME/.cabal/packages
     - $HOME/.cabal/store
+    - $HOME/.stack
 
 before_cache:
   - rm -fv $CABALHOME/packages/hackage.haskell.org/build-reports.log
@@ -45,10 +46,14 @@ before_install:
   - unset CC
   - CABAL=/opt/ghc/bin/cabal
   - CABALHOME=$HOME/.cabal
-  - export PATH="$CABALHOME/bin:$PATH"
+  - export PATH="$CABALHOME/bin:/opt/ghc/bin:$PATH"
   - ROOTDIR=$(pwd)
   - HCNUMVER=$(( $(${HC} --numeric-version|sed -E 's/([0-9]+)\.([0-9]+)\.([0-9]+).*/\1 * 10000 + \2 * 100 + \3/') ))
   - echo $HCNUMVER
+  - mkdir -p ~/.local/bin
+  - export PATH=$HOME/.local/bin:$PATH
+  - travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+  - stack config set system-ghc --global true
 
 install:
   - ${CABAL} --version
@@ -63,7 +68,7 @@ install:
   - rm -f cabal.project
   - touch cabal.project
   - "printf 'packages: \".\"\\n' >> cabal.project"
-  - "printf 'write-ghc-environment-files: always\\n' >> cabal.project"
+  - "printf 'write-ghc-environment-files: never\\n' >> cabal.project"
   - touch cabal.project.local
   - "for pkg in $($HCPKG list --simple-output); do echo $pkg | sed 's/-[^-]*$//' | grep -vE -- '^(hie-bios)$' | sed 's/^/constraints: /' | sed 's/$/ installed/' >> cabal.project.local; done"
   - cat cabal.project || true

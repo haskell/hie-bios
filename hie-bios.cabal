@@ -1,21 +1,27 @@
+Cabal-Version:          2.4
 Name:                   hie-bios
 Version:                0.3.0
 Author:                 Matthew Pickering <matthewtpickering@gmail.com>
 Maintainer:             Matthew Pickering <matthewtpickering@gmail.com>
-License:                BSD3
+License:                BSD-3-Clause
 License-File:           LICENSE
 Homepage:               https://github.com/mpickering/hie-bios
 Synopsis:               Set up a GHC API session
 Description:            Set up a GHC API session and obtain flags required to compile a source file
 
 Category:               Development
-Cabal-Version:          >= 1.10
 Build-Type:             Simple
 Extra-Source-Files:     ChangeLog
-                        wrappers/bazel
                         wrappers/cabal
                         wrappers/cabal.hs
                         tests/configs/*.yaml
+                        tests/projects/**/*.hs
+                        tests/projects/**/*.cabal
+                        tests/projects/**/*.md
+                        tests/projects/**/*.project
+                        tests/projects/**/*.yaml
+                        tests/projects/**/*.sh
+
 
 tested-with: GHC==8.6.4, GHC==8.4.4, GHC==8.2.2
 
@@ -39,6 +45,7 @@ Library
                         HIE.Bios.Ghc.Logger
                         HIE.Bios.Wrappers
   Other-Modules:        Paths_hie_bios
+  autogen-modules:      Paths_hie_bios
   Build-Depends:
                         base >= 4.8 && < 5,
                         base16-bytestring    >= 0.1.1 && < 0.2,
@@ -90,6 +97,22 @@ test-suite parser-tests
   hs-source-dirs: tests/
   ghc-options: -threaded -Wall
   main-is: ParserTests.hs
+
+test-suite bios-tests
+  type: exitcode-stdio-1.0
+  default-language: Haskell2010
+  build-depends:
+      base,
+      tasty,
+      tasty-hunit,
+      hie-bios,
+      filepath,
+      directory,
+      ghc
+
+  hs-source-dirs: tests/
+  ghc-options: -threaded -Wall
+  main-is: BiosTests.hs
 
 Source-Repository head
   Type:                 git
