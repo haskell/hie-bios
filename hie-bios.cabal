@@ -37,6 +37,7 @@ Library
                         HIE.Bios.Ghc.Gap
                         HIE.Bios.Ghc.Load
                         HIE.Bios.Ghc.Logger
+                        HIE.Bios.Wrappers
   Other-Modules:        Paths_hie_bios
   Build-Depends:
                         base >= 4.8 && < 5,
@@ -50,7 +51,6 @@ Library
                         time                 >= 1.8.0 && < 1.10,
                         extra                >= 1.6.14 && < 1.7,
                         process              >= 1.6.1 && < 1.7,
-                        file-embed           >= 0.0.10 && < 0.1,
                         ghc                  >= 8.2.2 && < 8.9,
                         transformers         >= 0.5.2 && < 0.6,
                         temporary            >= 1.2 && < 1.4,
@@ -59,7 +59,10 @@ Library
                         unordered-containers >= 0.2.9 && < 0.3,
                         vector               >= 0.12.0 && < 0.13,
                         yaml                 >= 0.8.32 && < 0.12,
-                        hslogger             >= 1.2 && < 1.4
+                        hslogger             >= 1.2 && < 1.4,
+                        file-embed           >= 0.0.11 && < 1,
+                        conduit              >= 1.3 && < 2,
+                        conduit-extra        >= 1.3 && < 2
 
 
 Executable hie-bios

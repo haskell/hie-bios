@@ -7,6 +7,7 @@ import Data.Maybe (fromMaybe)
 
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Types
+import HIE.Bios.Flags
 
 ----------------------------------------------------------------
 
@@ -21,7 +22,7 @@ import HIE.Bios.Types
 debugInfo :: Cradle
           -> IO String
 debugInfo cradle = unlines <$> do
-    res <- runCradle (cradleOptsProg cradle) (cradleRootDir cradle)
+    res <- getCompilerOptions (cradleRootDir cradle) cradle
     case res of
       CradleSuccess (ComponentOptions gopts deps) -> do
         mglibdir <- liftIO getSystemLibDir
@@ -34,7 +35,7 @@ debugInfo cradle = unlines <$> do
       CradleFail (CradleError ext stderr) ->
         return ["Cradle failed to load"
                , "Exit Code: " ++ show ext
-               , "Stderr: " ++ stderr]
+               , "Stderr: " ++ unlines stderr]
       CradleNone ->
         return ["No cradle"]
   where

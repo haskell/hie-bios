@@ -1,6 +1,7 @@
 module HIE.Bios.Flags (getCompilerOptions) where
 
 import HIE.Bios.Types
+import HIE.Bios.Internal.Log
 
 
 -- | Initialize the 'DynFlags' relating to the compilation of a single
@@ -10,7 +11,7 @@ getCompilerOptions ::
     -> Cradle
     -> IO (CradleLoadResult ComponentOptions)
 getCompilerOptions fp cradle =
-  runCradle (cradleOptsProg cradle) fp
+  runCradle (cradleOptsProg cradle) logm fp
 
 
 ----------------------------------------------------------------
