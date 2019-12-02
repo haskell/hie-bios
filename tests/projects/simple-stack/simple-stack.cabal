@@ -1,5 +1,5 @@
 cabal-version:       >=2.0
-name:                simple-cabal
+name:                simple-stack
 version:             0.1.0.0
 -- synopsis:
 -- description:

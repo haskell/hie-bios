@@ -10,5 +10,5 @@ if [ "$1" == "--interactive" ]; then
     out "$arg"
   done
 else
-  ghc "$@"
+  "${HIE_BIOS_GHC}" ${HIE_BIOS_GHC_ARGS} "$@"
 fi
