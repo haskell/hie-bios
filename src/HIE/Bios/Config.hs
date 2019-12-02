@@ -29,7 +29,8 @@ data CradleConfig =
 data CradleType
     = Cabal { component :: Maybe String }
     | CabalMulti [ (FilePath, String) ]
-    | Stack
+    | Stack { component :: Maybe String }
+    | StackMulti [ (FilePath, String) ]
 --  Bazel and Obelisk used to be supported but bit-rotted and no users have complained.
 --  They can be added back if a user
 --    | Bazel
@@ -55,7 +56,7 @@ instance FromJSON CradleType where
 parseCradleType :: Object -> Parser CradleType
 parseCradleType o
     | Just val <- Map.lookup "cabal" o = parseCabal val
-    | Just _val <- Map.lookup "stack" o = return Stack
+    | Just val <- Map.lookup "stack" o = parseStack val
 --    | Just _val <- Map.lookup "bazel" o = return Bazel
 --    | Just _val <- Map.lookup "obelisk" o = return Obelisk
     | Just val <- Map.lookup "bios" o = parseBios val
@@ -64,19 +65,20 @@ parseCradleType o
     | Just val  <- Map.lookup "multi" o = parseMulti val
 parseCradleType o = fail $ "Unknown cradle type: " ++ show o
 
-parseCabal :: Value -> Parser CradleType
-parseCabal (Object x)
-    | Map.size x == 1
-    , Just (String cabalComponent) <- Map.lookup "component" x
-    = return $ Cabal $ Just $ T.unpack cabalComponent
-
-    | Map.null x
-    = return $ Cabal Nothing
-
-    | otherwise
-    = fail "Not a valid Cabal Configuration type, following keys are allowed: component"
-parseCabal (Array x) = do
-  let parseOne  e
+parseStackOrCabal
+  :: (Maybe String -> CradleType)
+  -> ([(FilePath, String)] -> CradleType)
+  -> Value
+  -> Parser CradleType
+parseStackOrCabal singleConstructor _ (Object x)
+  | Map.size x == 1, Just (String stackComponent) <- Map.lookup "component" x
+  = return $ singleConstructor $ Just $ T.unpack stackComponent
+  | Map.null x
+  = return $ singleConstructor Nothing
+  | otherwise
+  = fail "Not a valid Configuration type, following keys are allowed: component"
+parseStackOrCabal _ multiConstructor (Array x) = do
+  let parseOne e
         | Object v <- e
         , Just (String prefix) <- Map.lookup "path" v
         , Just (String comp) <- Map.lookup "component" v
@@ -86,8 +88,15 @@ parseCabal (Array x) = do
         = fail "Expected an object with path and component keys"
 
   xs <- foldrM (\v cs -> (: cs) <$> parseOne v) [] x
-  return $ CabalMulti xs
-parseCabal _ = fail "Cabal Configuration is expected to be an object."
+  return $ multiConstructor xs
+
+parseStackOrCabal _ _ _ = fail "Configuration is expected to be an object."
+
+parseStack :: Value -> Parser CradleType
+parseStack = parseStackOrCabal Stack StackMulti
+
+parseCabal :: Value -> Parser CradleType
+parseCabal = parseStackOrCabal Cabal CabalMulti
 
 parseBios :: Value -> Parser CradleType
 parseBios (Object x)

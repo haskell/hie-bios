@@ -35,6 +35,7 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import Data.Text (unpack)
+import           Data.Maybe                     ( maybeToList )
 ----------------------------------------------------------------
 
 -- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
@@ -73,7 +74,12 @@ getCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Cabal (Just c))) | (p, c) <- ms])
         , wdir)
-    Stack -> stackCradle wdir
+    Stack mc -> stackCradle wdir mc
+    StackMulti ms ->
+      getCradle $
+        (CradleConfig cradleDeps
+          (Multi [(p, CradleConfig [] (Stack (Just c))) | (p, c) <- ms])
+        , wdir)
  --   Bazel -> rulesHaskellCradle wdir
  --   Obelisk -> obeliskCradle wdir
     Bios bios deps  -> biosCradle wdir bios deps
@@ -103,7 +109,7 @@ implicitConfig' fp = (\wdir ->
          (Bios (wdir </> ".hie-bios") Nothing, wdir)) <$> biosWorkDir fp
   --   <|> (Obelisk,) <$> obeliskWorkDir fp
   --   <|> (Bazel,) <$> rulesHaskellWorkDir fp
-     <|> (stackExecutable >> (Stack,) <$> stackWorkDir fp)
+     <|> (stackExecutable >> (Stack Nothing,) <$> stackWorkDir fp)
      <|> ((Cabal Nothing,) <$> cabalWorkDir fp)
 
 
@@ -353,27 +359,27 @@ cabalWorkDir = findFileUpwards isCabal
 -- Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
 
-stackCradle :: FilePath -> Cradle
-stackCradle wdir =
+stackCradle :: FilePath -> Maybe String -> Cradle
+stackCradle wdir mc =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "stack"
-        , runCradle = stackAction wdir
+        , runCradle = stackAction wdir mc
         }
     }
 
-stackCradleDependencies :: FilePath -> IO [FilePath]
+stackCradleDependencies :: FilePath-> IO [FilePath]
 stackCradleDependencies wdir = do
   cabalFiles <- findCabalFiles wdir
   return $ cabalFiles ++ ["package.yaml", "stack.yaml"]
 
-stackAction :: FilePath -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
-stackAction work_dir l fp = do
+stackAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
+stackAction work_dir mc l _fp = do
   -- Same wrapper works as with cabal
   wrapper_fp <- getCabalWrapperTool
   (ex1, _stdo, stde, args) <-
-      readProcessWithOutputFile l work_dir "stack" ["repl", "--no-nix-pure", "--no-load", "--with-ghc", wrapper_fp, fp ]
+      readProcessWithOutputFile l work_dir "stack" $ ["repl", "--no-nix-pure", "--no-load", "--with-ghc", wrapper_fp] ++ maybeToList mc
   (ex2, pkg_args, stdr, _) <-
     readProcessWithOutputFile l work_dir "stack" ["path", "--ghc-package-path"]
   let split_pkgs = concatMap splitSearchPath pkg_args
