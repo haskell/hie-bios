@@ -34,7 +34,10 @@ import Data.Conduit.Process
 import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
-import Data.Text (unpack)
+import qualified Data.Text as T
+import           Data.Maybe                     ( maybeToList
+                                                , fromMaybe
+                                                )
 ----------------------------------------------------------------
 
 -- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
@@ -73,7 +76,12 @@ getCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Cabal (Just c))) | (p, c) <- ms])
         , wdir)
-    Stack -> stackCradle wdir
+    Stack mc -> stackCradle wdir mc
+    StackMulti ms ->
+      getCradle $
+        (CradleConfig cradleDeps
+          (Multi [(p, CradleConfig [] (Stack (Just c))) | (p, c) <- ms])
+        , wdir)
  --   Bazel -> rulesHaskellCradle wdir
  --   Obelisk -> obeliskCradle wdir
     Bios bios deps  -> biosCradle wdir bios deps
@@ -103,7 +111,7 @@ implicitConfig' fp = (\wdir ->
          (Bios (wdir </> ".hie-bios") Nothing, wdir)) <$> biosWorkDir fp
   --   <|> (Obelisk,) <$> obeliskWorkDir fp
   --   <|> (Bazel,) <$> rulesHaskellWorkDir fp
-     <|> (stackExecutable >> (Stack,) <$> stackWorkDir fp)
+     <|> (stackExecutable >> (Stack Nothing,) <$> stackWorkDir fp)
      <|> ((Cabal Nothing,) <$> cabalWorkDir fp)
 
 
@@ -226,7 +234,7 @@ biosWorkDir = findFileUpwards (".hie-bios" ==)
 biosDepsAction :: LoggingFunction -> FilePath -> Maybe FilePath -> IO [FilePath]
 biosDepsAction l wdir (Just biosDepsProg) = do
   biosDeps' <- canonicalizePath biosDepsProg
-  (ex, sout, serr, args) <- readProcessWithOutputFile l wdir biosDeps' []
+  (ex, sout, serr, args) <- readProcessWithOutputFile l Nothing wdir biosDeps' []
   case ex of
     ExitFailure _ ->  error $ show (ex, sout, serr)
     ExitSuccess -> return args
@@ -240,7 +248,7 @@ biosAction :: FilePath
            -> IO (CradleLoadResult ComponentOptions)
 biosAction wdir bios bios_deps l fp = do
   bios' <- canonicalizePath bios
-  (ex, _stdo, std, res) <- readProcessWithOutputFile l wdir bios' [fp]
+  (ex, _stdo, std, res) <- readProcessWithOutputFile l Nothing wdir bios' [fp]
   deps <- biosDepsAction l wdir bios_deps
         -- Output from the program should be written to the output file and
         -- delimited by newlines.
@@ -286,11 +294,16 @@ processCabalWrapperArgs args =
             in Just final_args
         _ -> Nothing
 
+-- | GHC process information.
+-- Consists of the filepath to the ghc executable and
+-- arguments to the executable.
+type GhcProc = (FilePath, [String])
+
 -- generate a fake GHC that can be passed to cabal
 -- when run with --interactive, it will print out its
 -- command-line arguments and exit
-getCabalWrapperTool :: IO FilePath
-getCabalWrapperTool = do
+getCabalWrapperTool :: GhcProc -> IO FilePath
+getCabalWrapperTool (ghcPath, ghcArgs) = do
   wrapper_fp <-
     if isWindows
       then do
@@ -303,7 +316,7 @@ getCabalWrapperTool = do
             let wrapper_hs = tempDir </> wrapper_name <.> "hs"
             writeFile wrapper_hs cabalWrapperHs
             createDirectoryIfMissing True cacheDir
-            let ghc = (proc "ghc" ["-o", wrapper_fp, wrapper_hs])
+            let ghc = (proc ghcPath $ ghcArgs ++ ["-o", wrapper_fp, wrapper_hs])
                         { cwd = Just (takeDirectory wrapper_hs) }
             readCreateProcess ghc "" >>= putStr
         return wrapper_fp
@@ -315,11 +328,11 @@ getCabalWrapperTool = do
 
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
 cabalAction work_dir mc l _fp = do
-  wrapper_fp <- getCabalWrapperTool
+  wrapper_fp <- getCabalWrapperTool ("ghc", [])
   let cab_args = ["v2-repl", "--with-compiler", wrapper_fp]
                   ++ [component_name | Just component_name <- [mc]]
   (ex, output, stde, args) <-
-    readProcessWithOutputFile l work_dir "cabal" cab_args
+    readProcessWithOutputFile l Nothing work_dir "cabal" cab_args
   deps <- cabalCradleDependencies work_dir
   case processCabalWrapperArgs args of
       Nothing -> pure $ CradleFail (CradleError ex
@@ -353,29 +366,32 @@ cabalWorkDir = findFileUpwards isCabal
 -- Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
 
-stackCradle :: FilePath -> Cradle
-stackCradle wdir =
+stackCradle :: FilePath -> Maybe String -> Cradle
+stackCradle wdir mc =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = "stack"
-        , runCradle = stackAction wdir
+        , runCradle = stackAction wdir mc
         }
     }
 
-stackCradleDependencies :: FilePath -> IO [FilePath]
+stackCradleDependencies :: FilePath-> IO [FilePath]
 stackCradleDependencies wdir = do
   cabalFiles <- findCabalFiles wdir
   return $ cabalFiles ++ ["package.yaml", "stack.yaml"]
 
-stackAction :: FilePath -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
-stackAction work_dir l fp = do
+stackAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
+stackAction work_dir mc l _fp = do
+  let ghcProcArgs = ("stack", ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
-  wrapper_fp <- getCabalWrapperTool
+  wrapper_fp <- getCabalWrapperTool ghcProcArgs
+
   (ex1, _stdo, stde, args) <-
-      readProcessWithOutputFile l work_dir "stack" ["repl", "--no-nix-pure", "--no-load", "--with-ghc", wrapper_fp, fp ]
+    readProcessWithOutputFile l Nothing work_dir
+            "stack" $ ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp] ++ maybeToList mc
   (ex2, pkg_args, stdr, _) <-
-    readProcessWithOutputFile l work_dir "stack" ["path", "--ghc-package-path"]
+    readProcessWithOutputFile l Nothing work_dir "stack" ["path", "--ghc-package-path"]
   let split_pkgs = concatMap splitSearchPath pkg_args
       pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
   deps <- stackCradleDependencies work_dir
@@ -385,7 +401,8 @@ stackAction work_dir l fp = do
                     stde)
                    ++ args)
 
-      Just ghc_args -> makeCradleResult (combineExitCodes [ex1, ex2], stde ++ stdr, ghc_args ++ pkg_ghc_args) deps
+      Just ghc_args ->
+        makeCradleResult (combineExitCodes [ex1, ex2], stde ++ stdr, ghc_args ++ pkg_ghc_args) deps
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess
@@ -500,32 +517,54 @@ findFile p dir = do
     getFiles = filter p <$> getDirectoryContents dir
     doesPredFileExist file = doesFileExist $ dir </> file
 
--- | Call a process with the given arguments
+-- | Call a process with the given arguments.
 -- * A special file is created for the process to write to, the process can discover the name of
 -- the file by reading the @HIE_BIOS_OUTPUT@ environment variable. The contents of this file is
 -- returned by the function.
 -- * The logging function is called every time the process emits anything to stdout or stderr.
 -- it can be used to report progress of the process to a user.
--- * The process is executed in the given directory
+-- * The process is executed in the given directory.
+-- * The path to the GHC version to use is supplied in the environment variable @HIE_BIOS_GHC@.
+--   Additionally, arguments to ghc are supplied via @HIE_BIOS_GHC_ARGS@
 readProcessWithOutputFile
-  :: LoggingFunction
-  -> FilePath
-  -> FilePath
-  -> [String]
+  :: LoggingFunction -- ^ Output of the process is streamed into this function.
+  -> Maybe GhcProc -- ^ Optional FilePath to GHC and arguments that should
+                   -- be passed to ghc.
+                   -- In the process to call, filepath and arguments
+  -> FilePath -- ^ Working directory. Process is executed in this directory.
+  -> FilePath -- ^ Process to call.
+  -> [String] -- ^ Arguments to the process.
   -> IO (ExitCode, [String], [String], [String])
-readProcessWithOutputFile l work_dir fp args = withSystemTempFile "bios-output" $ \output_file h -> do
-  hSetBuffering h LineBuffering
-  old_env <- getEnvironment
-  -- Pipe stdout directly into the logger
-  let process = (proc fp args) { cwd = Just work_dir
-                               , env = Just (("HIE_BIOS_OUTPUT", output_file) : old_env)
-                               }
-      -- Windows line endings are not converted so you have to filter out `'r` characters
-      loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map unpack C..| C.iterM l C..| C.sinkList)
-  (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
-  !res <- force <$> hGetContents h
-  return (ex, stdo, stde, lines (filter (/= '\r') res))
+readProcessWithOutputFile l ghcProc work_dir fp args =
+  withSystemTempFile "bios-output" $ \output_file h -> do
+    hSetBuffering h LineBuffering
+    old_env <- getEnvironment
+    let (ghcPath, ghcArgs) = case ghcProc of
+            Just (p, a) -> (p, unwords a)
+            Nothing ->
+              ( fromMaybe "ghc" (lookup hieBiosGhc old_env)
+              , fromMaybe "" (lookup hieBiosGhcArgs old_env)
+              )
+    -- Pipe stdout directly into the logger
+    let process = (readProcessInDirectory work_dir fp args)
+                      { env = Just
+                              $ (hieBiosGhc, ghcPath)
+                              : (hieBiosGhcArgs, ghcArgs)
+                              : ("HIE_BIOS_OUTPUT", output_file)
+                              : old_env
+                      }
+        -- Windows line endings are not converted so you have to filter out `'r` characters
+        loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map T.unpack C..| C.iterM l C..| C.sinkList)
+    (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
+    !res <- force <$> hGetContents h
+    return (ex, stdo, stde, lines (filter (/= '\r') res))
 
+    where
+      hieBiosGhc = "HIE_BIOS_GHC"
+      hieBiosGhcArgs = "HIE_BIOS_GHC_ARGS"
+
+readProcessInDirectory :: FilePath -> FilePath -> [String] -> CreateProcess
+readProcessInDirectory wdir p args = (proc p args) { cwd = Just wdir }
 
 makeCradleResult :: (ExitCode, [String], [String]) -> [FilePath] -> CradleLoadResult ComponentOptions
 makeCradleResult (ex, err, gopts) deps =

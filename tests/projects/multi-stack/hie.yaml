@@ -1,2 +1,7 @@
 cradle:
   stack:
+      - path: ./src
+        component: "multi-stack:lib"
+
+      - path: ./app
+        component: "multi-stack:exe:multi-stack"

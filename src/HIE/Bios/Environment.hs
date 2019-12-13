@@ -111,7 +111,13 @@ setHiDir f d = d { hiDir      = Just f}
 addCmdOpts :: (GhcMonad m)
            => [String] -> DynFlags -> m (DynFlags, [G.Target])
 addCmdOpts cmdOpts df1 = do
-  (df2, leftovers, _warns) <- G.parseDynamicFlags df1 (map G.noLoc cmdOpts)
+  (df2, leftovers', _warns) <- G.parseDynamicFlags df1 (map G.noLoc cmdOpts)
+
+  -- parse targets from ghci-scripts. Only extract targets that have been ":add"'ed.
+  additionalTargets <- concat <$> mapM (liftIO . getTargetsFromGhciScript) (ghciScripts df2)
+
+  -- leftovers contains all Targets from the command line
+  let leftovers = leftovers' ++ map G.noLoc additionalTargets
 
   let
      -- To simplify the handling of filepaths, we normalise all filepaths right
@@ -195,3 +201,20 @@ looks_like_an_input m =  G.isSourceFilename m
 
 disableOptimisation :: DynFlags -> DynFlags
 disableOptimisation df = updOptLevel 0 df
+
+-- --------------------------------------------------------
+
+-- | Read a ghci script and extract all targets to load form it.
+-- The ghci script is expected to have the following format:
+-- @
+--  :add Foo Bar Main.hs
+-- @
+--
+-- We strip away ":add" and parse the Targets.
+getTargetsFromGhciScript :: FilePath -> IO [String]
+getTargetsFromGhciScript script = do
+  contents <- lines <$> readFile script
+  return
+    $ concatMap (tail {- first element is ":add" which we want to remove -}
+                      . words)
+    $ filter (":add" `isPrefixOf`) contents

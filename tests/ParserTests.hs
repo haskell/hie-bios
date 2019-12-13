@@ -12,7 +12,7 @@ main :: IO ()
 main = defaultMain $
   testCase "Parser Tests" $ do
     assertParser "cabal-1.yaml" (noDeps (Cabal (Just "lib:hie-bios")))
-    assertParser "stack-config.yaml" (noDeps Stack)
+    assertParser "stack-config.yaml" (noDeps (Stack Nothing))
     --assertParser "bazel.yaml" (noDeps Bazel)
     assertParser "bios-1.yaml" (noDeps (Bios "program" Nothing))
     assertParser "bios-2.yaml" (noDeps (Bios "program" (Just "dep-program")))
@@ -26,10 +26,18 @@ main = defaultMain $
     assertParser "cabal-multi.yaml" (noDeps (CabalMulti [("./src", "lib:hie-bios")
                                                     ,("./", "lib:hie-bios")]))
 
+    assertParser "stack-multi.yaml" (noDeps (StackMulti [("./src", "lib:hie-bios")
+                                                    ,("./", "lib:hie-bios")]))
+
     assertParser "nested-cabal-multi.yaml" (noDeps (Multi [("./test/testdata", CradleConfig [] None)
                                                           ,("./", CradleConfig [] (
                                                                     CabalMulti [("./src", "lib:hie-bios")
                                                                                ,("./tests", "parser-tests")]))]))
+
+    assertParser "nested-stack-multi.yaml" (noDeps (Multi [("./test/testdata", CradleConfig [] None)
+                                                          ,("./", CradleConfig [] (
+                                                                    StackMulti [("./src", "lib:hie-bios")
+                                                                              ,("./tests", "parser-tests")]))]))
 
 assertParser :: FilePath -> Config -> Assertion
 assertParser fp cc = do

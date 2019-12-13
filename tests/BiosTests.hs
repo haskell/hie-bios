@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Main where
 
 import Test.Tasty
@@ -6,44 +7,43 @@ import HIE.Bios
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Load
 import Control.Monad.IO.Class
-import Control.Monad ( unless )
+import Control.Monad ( unless, forM_ )
 import System.Directory
-import System.FilePath ( makeRelative )
-import BasicTypes
+import System.FilePath ( makeRelative, (</>) )
 
 main :: IO ()
-main = defaultMain $
-  testGroup "Bios-tests"
-    [ testGroup "Find cradle"
-      [ testCaseSteps "simple-cabal"
-              (findCradleForModule
-                "./tests/projects/simple-cabal/B.hs"
-                (Just "./tests/projects/simple-cabal/hie.yaml")
-              )
+main = do
+  writeStackYamlFiles
+  defaultMain $
+    testGroup "Bios-tests"
+      [ testGroup "Find cradle"
+        [ testCaseSteps "simple-cabal"
+                (findCradleForModule
+                  "./tests/projects/simple-cabal/B.hs"
+                  (Just "./tests/projects/simple-cabal/hie.yaml")
+                )
 
-      -- Checks if we can find a hie.yaml even when the given filepath
-      -- is unknown. This functionality is required by Haskell IDE Engine.
-      , testCaseSteps "simple-cabal-unknown-path"
-              (findCradleForModule
-                "./tests/projects/simple-cabal/Foo.hs"
-                (Just "./tests/projects/simple-cabal/hie.yaml")
-              )
+        -- Checks if we can find a hie.yaml even when the given filepath
+        -- is unknown. This functionality is required by Haskell IDE Engine.
+        , testCaseSteps "simple-cabal-unknown-path"
+                (findCradleForModule
+                  "./tests/projects/simple-cabal/Foo.hs"
+                  (Just "./tests/projects/simple-cabal/hie.yaml")
+                )
+        ]
+      , testGroup "Loading tests" [
+        testCaseSteps "simple-cabal" $ testDirectory "./tests/projects/simple-cabal/B.hs"
+        , testCaseSteps "simple-stack" $ testDirectory "./tests/projects/simple-stack/B.hs"
+        , testCaseSteps "simple-direct" $ testDirectory "./tests/projects/simple-direct/B.hs"
+        , testCaseSteps "simple-bios" $ testDirectory "./tests/projects/simple-bios/B.hs"
+        , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
+                      $  testDirectory "./tests/projects/multi-cabal/app/Main.hs"
+                      >> testDirectory "./tests/projects/multi-cabal/src/Lib.hs"
+        , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
+                      $  testDirectory "./tests/projects/multi-stack/app/Main.hs"
+                      >> testDirectory "./tests/projects/multi-stack/src/Lib.hs"
+        ]
       ]
-    , testGroup "Loading tests" [
-      testCaseSteps "simple-cabal" $ testDirectory "./tests/projects/simple-cabal/B.hs"
-      -- The stack tests don't attempt to load the targets initially because they are not returned
-      -- by `stack repl`. They are hidden inside a GHCi script.
-      , testCaseSteps "simple-stack" $ testDirectory "./tests/projects/simple-stack/B.hs"
-      , testCaseSteps "simple-direct" $ testDirectory "./tests/projects/simple-direct/B.hs"
-      , testCaseSteps "simple-bios" $ testDirectory "./tests/projects/simple-bios/B.hs"
-      , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
-                    $  testDirectory "./tests/projects/multi-cabal/app/Main.hs"
-                    >> testDirectory "./tests/projects/multi-cabal/src/Lib.hs"
-      , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
-                    $  testDirectory "./tests/projects/multi-stack/app/Main.hs"
-                    >> testDirectory "./tests/projects/multi-stack/src/Lib.hs"
-      ]
-  ]
 
 
 
@@ -66,7 +66,7 @@ testDirectory fp step = do
           liftIO (step "Initial module load")
           sf <- ini
           case sf of
-            -- Test resetting the targets, and also has the effect on stack of actually loading any targets.
+            -- Test resetting the targets
             Succeeded -> setTargetFilesWithMessage (Just (\_ n _ _ -> step (show n))) [(a_fp, a_fp)]
             Failed -> error "Module loading failed"
         CradleNone -> error "None"
@@ -84,3 +84,35 @@ findCradleForModule fp expected' step = do
     ++ show expected
     ++ ", Actual: "
     ++ show mcfg
+
+
+writeStackYamlFiles :: IO ()
+writeStackYamlFiles = do
+  let yamlFile = stackYaml stackYamlResolver
+  forM_ stackProjects $ \proj ->
+    writeFile (proj </> "stack.yaml") yamlFile
+
+stackProjects :: [FilePath]
+stackProjects =
+  [ "tests" </> "projects" </> "multi-stack"
+  , "tests" </> "projects" </> "simple-stack"
+  ]
+
+stackYaml :: String -> String
+stackYaml resolver = unlines ["resolver: " ++ resolver, "packages:", "- ."]
+
+stackYamlResolver :: String
+stackYamlResolver =
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)))
+  "nightly-2019-12-13"
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,6,5,0)))
+  "lts-14.17"
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,6,4,0)))
+  "lts-13.19"
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,4,4,0)))
+  "lts-12.26"
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,4,3,0)))
+  "lts-12.26"
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,2,2,0)))
+  "lts-11.22"
+#endif

@@ -1,2 +1,3 @@
 cradle:
-  stack: {}
+  stack:
+    component: "simple-stack:lib"

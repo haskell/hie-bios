@@ -9,3 +9,4 @@ cabalWrapper = $(embedStringFile "wrappers/cabal")
 
 cabalWrapperHs :: String
 cabalWrapperHs = $(embedStringFile "wrappers/cabal.hs")
+
