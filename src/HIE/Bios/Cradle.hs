@@ -397,7 +397,7 @@ stackAction work_dir mc l _fp = do
   deps <- stackCradleDependencies work_dir
   return $ case processCabalWrapperArgs args of
       Nothing -> CradleFail (CradleError ex1 $
-                  ("Failed to parse result of calling cabal":
+                  ("Failed to parse result of calling stack":
                     stde)
                    ++ args)
 
