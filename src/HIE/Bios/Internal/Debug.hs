@@ -19,10 +19,11 @@ import HIE.Bios.Flags
 -- the file dependencies and so on.
 --
 -- Otherwise, shows the error message and exit-code.
-debugInfo :: Cradle
+debugInfo :: FilePath
+          -> Cradle
           -> IO String
-debugInfo cradle = unlines <$> do
-    res <- getCompilerOptions (cradleRootDir cradle) cradle
+debugInfo fp cradle = unlines <$> do
+    res <- getCompilerOptions fp cradle
     case res of
       CradleSuccess (ComponentOptions gopts deps) -> do
         mglibdir <- liftIO getSystemLibDir

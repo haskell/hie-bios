@@ -64,7 +64,9 @@ main = flip E.catches handlers $ do
         remainingArgs = tail args
     res <- case cmdArg0 of
       "check"   -> checkSyntax cradle remainingArgs
-      "debug"   -> debugInfo cradle
+      "debug"
+        | null remainingArgs -> debugInfo (cradleRootDir cradle) cradle
+        | (fp:_) <- remainingArgs -> debugInfo fp cradle
       "root"    -> rootInfo cradle
       "version" -> return progVersion
       "flags"
