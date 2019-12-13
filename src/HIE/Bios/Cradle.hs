@@ -389,13 +389,14 @@ stackAction work_dir mc l _fp = do
 
   (ex1, _stdo, stde, args) <-
     readProcessWithOutputFile l Nothing work_dir
-            "stack" $ ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp] ++ maybeToList mc
+            "stack" $ ["repl","--docker-env", "HIE_BIOS_OUTPUT=out", "--docker-env", "HIE_BIOS_GHC=ghc", "--docker-mount", wrapper_fp, "--no-nix-pure", "--with-ghc", wrapper_fp] ++ maybeToList mc
   (ex2, pkg_args, stdr, _) <-
     readProcessWithOutputFile l Nothing work_dir "stack" ["path", "--ghc-package-path"]
   let split_pkgs = concatMap splitSearchPath pkg_args
       pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
   deps <- stackCradleDependencies work_dir
-  return $ case processCabalWrapperArgs args of
+  outArgs <- readFile "out"
+  return $ case processCabalWrapperArgs (lines outArgs) of
       Nothing -> CradleFail (CradleError ex1 $
                   ("Failed to parse result of calling stack":
                     stde)
