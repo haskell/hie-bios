@@ -34,7 +34,7 @@ usage =    progVersion
         ++ "\t hie-bios check" ++ ghcOptHelp ++ "<HaskellFiles...>\n"
         ++ "\t hie-bios expand <HaskellFiles...>\n"
         ++ "\t hie-bios flags <HaskellFiles...>\n"
-        ++ "\t hie-bios debug\n"
+        ++ "\t hie-bios debug [<ComponentDir>]\n"
         ++ "\t hie-bios root\n"
         ++ "\t hie-bios version\n"
 
