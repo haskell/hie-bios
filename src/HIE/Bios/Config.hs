@@ -51,7 +51,7 @@ data CradleType
 
 instance FromJSON CradleType where
     parseJSON (Object o) = parseCradleType o
-    parseJSON _ = fail "Not a known cradle type. Possible are: cabal, stack, bazel, obelisk, bios, direct, default, none, multi"
+    parseJSON _ = fail "Not a known cradle type. Possible are: cabal, stack, bios, direct, default, none, multi"
 
 parseCradleType :: Object -> Parser CradleType
 parseCradleType o
@@ -89,7 +89,7 @@ parseStackOrCabal _ multiConstructor (Array x) = do
 
   xs <- foldrM (\v cs -> (: cs) <$> parseOne v) [] x
   return $ multiConstructor xs
-
+parseStackOrCabal singleConstructor _ Null = return $ singleConstructor Nothing
 parseStackOrCabal _ _ _ = fail "Configuration is expected to be an object."
 
 parseStack :: Value -> Parser CradleType
