@@ -33,8 +33,6 @@ main = do
         ]
       , testGroup "Loading tests" [
         testCaseSteps "simple-cabal" $ testDirectory "./tests/projects/simple-cabal/B.hs"
-        -- The stack tests don't attempt to load the targets initially because they are not returned
-        -- by `stack repl`. They are hidden inside a GHCi script.
         , testCaseSteps "simple-stack" $ testDirectory "./tests/projects/simple-stack/B.hs"
         , testCaseSteps "simple-direct" $ testDirectory "./tests/projects/simple-direct/B.hs"
         , testCaseSteps "simple-bios" $ testDirectory "./tests/projects/simple-bios/B.hs"
@@ -68,7 +66,7 @@ testDirectory fp step = do
           liftIO (step "Initial module load")
           sf <- ini
           case sf of
-            -- Test resetting the targets, and also has the effect on stack of actually loading any targets.
+            -- Test resetting the targets
             Succeeded -> setTargetFilesWithMessage (Just (\_ n _ _ -> step (show n))) [(a_fp, a_fp)]
             Failed -> error "Module loading failed"
         CradleNone -> error "None"
