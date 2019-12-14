@@ -10,6 +10,12 @@ xxxx - 0.3
 	* Interface file cache persists between loads -- this greatly speeds up
 	reloading a project if the options don't change.
 	* Reuse wrapper executable on windows if one already exists.
+	* Make stack cradle work more like the cabal cradle
+		- Syntax for specifying a specific component
+		- Targets are read from the ghci script file
+	* Cradles now use a temporary file to communicate arguments to hie-bios.
+	bios cradles should consult the HIE_BIOS_OUTPUT envvar for the filepath to
+	write the arguments seperated by newlines.
 
 2019-09-19 - 0.2.1
 
