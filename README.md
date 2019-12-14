@@ -36,11 +36,15 @@ describes how to setup the environment. For example, to explicitly state
 that you want to use `stack` then the configuration file would look like:
 
 ```yaml
-cradle: {stack}
+cradle: {stack: {component: "haskell-ide-engine:lib" }}
 ```
 
-If you use `cabal` then you probably need to specify which component you want
-to use.
+While the component is optional, this is recommended to make sure the correct
+component is loaded.
+
+To use `cabal`, the explicit configuration looks similar.
+Note that `cabal` and `stack` have different way of specifying their
+components.
 
 ```yaml
 cradle: {cabal: {component: "lib:haskell-ide-engine"}}
@@ -70,7 +74,7 @@ The `none` cradle says that the IDE shouldn't even try to load the project. It
 is most useful when combined with the multi-cradle which is specified in the next section.
 
 ```yaml
-cradle: {none}
+cradle: {none: }
 ```
 
 ## Multi-Cradle
@@ -114,10 +118,10 @@ cradle:
     - path: "./test"
       config: { cradle: {cabal: {component: "test"}} }
     - path: "./test/test-files"
-      config: { cradle: none }
+      config: { cradle: { none: } }
 ```
 
-For cabal projects there is a shorthand to specify how to load each component.
+For cabal and stack projects there is a shorthand to specify how to load each component.
 
 ```yaml
 cradle:
@@ -125,7 +129,16 @@ cradle:
     - path: "./src"
       component: "lib:hie-bios"
     - path: "./test"
-      component: "test"
+      component: "test:bios-tests"
+```
+
+```yaml
+cradle:
+  stack:
+    - path: "./src"
+      component: "hie-bios:lib"
+    - path: "./test"
+      component: "hie-bios:test:bios-tests"
 ```
 
 Remember you can combine this shorthand with more complicated configuration
@@ -197,6 +210,7 @@ cradle:
   cabal:
     component: "optional component name"
   stack:
+    component: "optional component name"
   bios:
     program: "program to run"
     dependency-program: "optional program to run"

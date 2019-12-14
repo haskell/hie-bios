@@ -1,4 +1,4 @@
-Cabal-Version:          2.4
+Cabal-Version:          2.2
 Name:                   hie-bios
 Version:                0.3.0
 Author:                 Matthew Pickering <matthewtpickering@gmail.com>
@@ -14,13 +14,54 @@ Build-Type:             Simple
 Extra-Source-Files:     ChangeLog
                         wrappers/cabal
                         wrappers/cabal.hs
-                        tests/configs/*.yaml
-                        tests/projects/**/*.hs
-                        tests/projects/**/*.cabal
-                        tests/projects/**/*.md
-                        tests/projects/**/*.project
-                        tests/projects/**/*.yaml
-                        tests/projects/**/*.sh
+                        tests/configs/bazel.yaml
+                        tests/configs/bios-1.yaml
+                        tests/configs/bios-2.yaml
+                        tests/configs/cabal-1.yaml
+                        tests/configs/cabal-multi.yaml
+                        tests/configs/default.yaml
+                        tests/configs/dependencies.yaml
+                        tests/configs/direct.yaml
+                        tests/configs/multi.yaml
+                        tests/configs/nested-cabal-multi.yaml
+                        tests/configs/nested-stack-multi.yaml
+                        tests/configs/none.yaml
+                        tests/configs/obelisk.yaml
+                        tests/configs/stack-config.yaml
+                        tests/configs/stack-multi.yaml
+                        tests/projects/multi-cabal/Setup.hs
+                        tests/projects/multi-cabal/app/Main.hs
+                        tests/projects/multi-cabal/cabal.project
+                        tests/projects/multi-cabal/hie.yaml
+                        tests/projects/multi-cabal/multi-cabal.cabal
+                        tests/projects/multi-cabal/src/Lib.hs
+                        tests/projects/multi-stack/Setup.hs
+                        tests/projects/multi-stack/app/Main.hs
+                        tests/projects/multi-stack/cabal.project
+                        tests/projects/multi-stack/hie.yaml
+                        tests/projects/multi-stack/multi-stack.cabal
+                        tests/projects/multi-stack/src/Lib.hs
+                        tests/projects/simple-bios/A.hs
+                        tests/projects/simple-bios/B.hs
+                        tests/projects/simple-bios/hie-bios.sh
+                        tests/projects/simple-bios/hie.yaml
+                        tests/projects/simple-cabal/A.hs
+                        tests/projects/simple-cabal/B.hs
+                        tests/projects/simple-cabal/CHANGELOG.md
+                        tests/projects/simple-cabal/Setup.hs
+                        tests/projects/simple-cabal/cabal.project
+                        tests/projects/simple-cabal/hie.yaml
+                        tests/projects/simple-cabal/simple-cabal.cabal
+                        tests/projects/simple-direct/A.hs
+                        tests/projects/simple-direct/B.hs
+                        tests/projects/simple-direct/hie.yaml
+                        tests/projects/simple-stack/A.hs
+                        tests/projects/simple-stack/B.hs
+                        tests/projects/simple-stack/CHANGELOG.md
+                        tests/projects/simple-stack/Setup.hs
+                        tests/projects/simple-stack/cabal.project
+                        tests/projects/simple-stack/hie.yaml
+                        tests/projects/simple-stack/simple-stack.cabal
 
 
 tested-with: GHC==8.6.4, GHC==8.4.4, GHC==8.2.2
