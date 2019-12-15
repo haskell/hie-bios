@@ -13,6 +13,7 @@ Category:               Development
 Build-Type:             Simple
 -- No glob syntax until GHC 8.6 because of stack
 Extra-Source-Files:     ChangeLog
+                        README.md
                         wrappers/cabal
                         wrappers/cabal.hs
                         tests/configs/bazel.yaml
