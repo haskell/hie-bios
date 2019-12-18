@@ -10,7 +10,7 @@ main = do
   args <- getArgs
   output_file <- getEnv "HIE_BIOS_OUTPUT"
   ghcPath <- getEnv "HIE_BIOS_GHC"
-  ghcPathArgs <- fmap unwords (getEnv "HIE_BIOS_GHC_ARGS")
+  ghcPathArgs <- fmap words (getEnv "HIE_BIOS_GHC_ARGS")
   case args of
     "--interactive":_ -> do
       h <- openFile output_file AppendMode
