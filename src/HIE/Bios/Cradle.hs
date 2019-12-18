@@ -302,8 +302,8 @@ type GhcProc = (FilePath, [String])
 -- generate a fake GHC that can be passed to cabal
 -- when run with --interactive, it will print out its
 -- command-line arguments and exit
-getCabalWrapperTool :: GhcProc -> IO FilePath
-getCabalWrapperTool (ghcPath, ghcArgs) = do
+getCabalWrapperTool :: GhcProc -> FilePath -> IO FilePath
+getCabalWrapperTool (ghcPath, ghcArgs) wdir = do
   wrapper_fp <-
     if isWindows
       then do
@@ -317,7 +317,7 @@ getCabalWrapperTool (ghcPath, ghcArgs) = do
             writeFile wrapper_hs cabalWrapperHs
             createDirectoryIfMissing True cacheDir
             let ghc = (proc ghcPath $ ghcArgs ++ ["-o", wrapper_fp, wrapper_hs])
-                        { cwd = Just (takeDirectory wrapper_hs) }
+                        { cwd = Just wdir }
             readCreateProcess ghc "" >>= putStr
         return wrapper_fp
       else writeSystemTempFile "bios-wrapper" cabalWrapper
@@ -328,7 +328,7 @@ getCabalWrapperTool (ghcPath, ghcArgs) = do
 
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
 cabalAction work_dir mc l _fp = do
-  wrapper_fp <- getCabalWrapperTool ("ghc", [])
+  wrapper_fp <- getCabalWrapperTool ("ghc", []) work_dir
   let cab_args = ["v2-repl", "--with-compiler", wrapper_fp]
                   ++ [component_name | Just component_name <- [mc]]
   (ex, output, stde, args) <-
@@ -385,7 +385,7 @@ stackAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (Cr
 stackAction work_dir mc l _fp = do
   let ghcProcArgs = ("stack", ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
-  wrapper_fp <- getCabalWrapperTool ghcProcArgs
+  wrapper_fp <- getCabalWrapperTool ghcProcArgs work_dir
 
   (ex1, _stdo, stde, args) <-
     readProcessWithOutputFile l Nothing work_dir
