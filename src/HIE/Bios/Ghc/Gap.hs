@@ -37,17 +37,10 @@ import qualified Plugins (plugins)
 ----------------------------------------------------------------
 ----------------------------------------------------------------
 
-#if __GLASGOW_HASKELL__ >= 802
-#else
-import GHC.PackageDb (ExposedModule(..))
-#endif
-
 #if __GLASGOW_HASKELL__ >= 804
 import DynFlags (WarningFlag)
 import qualified EnumSet as E (EnumSet, empty)
 import GHC (mgModSummaries, mapMG)
-#else
-import qualified Data.IntSet as I (IntSet, empty)
 #endif
 
 #if __GLASGOW_HASKELL__ >= 806
@@ -57,8 +50,6 @@ import GHC (mg_ext)
 #elif __GLASGOW_HASKELL__ >= 804
 import HsExtension (GhcTc)
 import GHC (mg_res_ty, mg_arg_tys)
-#else
-import GHC (Id, mg_res_ty, mg_arg_tys)
 #endif
 
 
@@ -66,18 +57,13 @@ import GHC (Id, mg_res_ty, mg_arg_tys)
 ----------------------------------------------------------------
 
 makeUserStyle :: DynFlags -> PrintUnqualified -> PprStyle
-#if __GLASGOW_HASKELL__ >= 802
+#if __GLASGOW_HASKELL__ >= 804
 makeUserStyle dflags style = mkUserStyle dflags style AllTheWay
-#else
-makeUserStyle _      style = mkUserStyle        style AllTheWay
 #endif
 
-#if __GLASGOW_HASKELL__ >= 802
+#if __GLASGOW_HASKELL__ >= 804
 getModuleName :: (a, b) -> a
 getModuleName = fst
-#else
-getModuleName :: ExposedModule unitid modulename -> modulename
-getModuleName = exposedName
 #endif
 
 ----------------------------------------------------------------
@@ -86,10 +72,6 @@ getModuleName = exposedName
 type WarnFlags = E.EnumSet WarningFlag
 emptyWarnFlags :: WarnFlags
 emptyWarnFlags = E.empty
-#else
-type WarnFlags = I.IntSet
-emptyWarnFlags :: WarnFlags
-emptyWarnFlags = I.empty
 #endif
 
 #if __GLASGOW_HASKELL__ >= 804
@@ -101,15 +83,6 @@ getTyThing (t,_,_,_,_) = t
 
 fixInfo :: (a, b, c, d, e) -> (a, b, c, d)
 fixInfo (t,f,cs,fs,_) = (t,f,cs,fs)
-#else
-getModSummaries :: a -> a
-getModSummaries = id
-
-getTyThing :: (a, b, c, d) -> a
-getTyThing (t,_,_,_) = t
-
-fixInfo :: (a, b, c, d) -> (a, b, c, d)
-fixInfo = id
 #endif
 
 ----------------------------------------------------------------
@@ -132,27 +105,6 @@ inTypes :: MatchGroup GhcTc LExpression -> [Type]
 inTypes = mg_arg_tys
 outType :: MatchGroup GhcTc LExpression -> Type
 outType = mg_res_ty
-#else
-type LExpression = LHsExpr Id
-type LBinding    = LHsBind Id
-type LPattern    = LPat    Id
-
-inTypes :: MatchGroup Id LExpression -> [Type]
-inTypes = mg_arg_tys
-outType :: MatchGroup Id LExpression -> Type
-outType = mg_res_ty
-#endif
-
-#if __GLASGOW_HASKELL__ >= 804
-#else
-mapMG :: (ModSummary -> ModSummary) -> ModuleGraph -> ModuleGraph
-mapMG = map
-#endif
-
-#if __GLASGOW_HASKELL__ >= 804
-#else
-mgModSummaries :: ModuleGraph -> [ModSummary]
-mgModSummaries = id
 #endif
 
 numLoadedPlugins :: DynFlags -> Int
