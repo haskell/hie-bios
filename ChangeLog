@@ -1,4 +1,9 @@
-xxxx - 0.3
+2019-12-18 - 0.3.1
+
+	* Fix bug in the windows wrapper script (#108)
+
+
+2019-12-15 - 0.3.0
 
 	* Add multi cradle, cabal multi cradle and none cradle
 	* Remove obelisk, bazel and default cradle types
