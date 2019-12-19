@@ -2,9 +2,9 @@ cradle:
   cabal:
     - path: "./src"
       component: "lib:hie-bios"
-    - path: "./test/BiosTests.hs"
+    - path: "./tests/BiosTests.hs"
       component: "test:bios-tests"
-    - path: "./test/ParserTests.hs"
+    - path: "./tests/ParserTests.hs"
       component: "test:parser-tests"
     - path: "./exe"
       component: "exe:hie-bios"
