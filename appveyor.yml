@@ -1,0 +1,35 @@
+version: 1.0.{build}
+environment:
+  matrix:
+ # - GHCVER: 8.8.1 Disabled until unix-compat supports ghc 8.8.1, see https://github.com/jacobstanley/unix-compat/pull/42 for example
+  - GHCVER: 8.6.4
+  - GHCVER: 8.4.4
+  - GHCVER: 8.2.2
+install:
+  - git submodule update --init --recursive
+  - choco install -y haskell-stack
+  - choco install -y cabal
+  - choco install ghc --version %GHCVER%
+  - refreshenv
+  - "set PATH=C:\\ProgramData\\chocolatey\\lib\\ghc\\tools\\ghc-%GHCVER%\\bin;C:\\msys64\\mingw64\\bin;C:\\msys64\\usr\\bin;%PATH%"
+  - stack --version
+  - cabal --version
+  - ghc --version
+
+
+cache:
+  - '%LOCALAPPDATA%\Programs\stack\'
+  - c:\sr
+  - '%APPDATA%\cabal'
+
+before_build:
+  - cabal v2-update
+
+build_script:
+  - cabal v2-build -w ghc-%GHCVER%.exe --disable-tests --disable-benchmarks exes
+
+before_test:
+  - cabal v2-build --enable-tests -w ghc-%GHCVER%.exe tests
+
+test_script:
+  - cabal v2-test -w ghc-%GHCVER%.exe
