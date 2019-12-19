@@ -48,9 +48,7 @@ main = do
       ]
 
 linuxExlusiveTestCases :: [TestTree]
-linuxExlusiveTestCases
-  | isWindows = []
-  | otherwise = [ testCaseSteps "simple-bios" $ testDirectory "./tests/projects/simple-bios/B.hs" ]
+linuxExlusiveTestCases = [ testCaseSteps "simple-bios" $ testDirectory "./tests/projects/simple-bios/B.hs" | not isWindows ]
 
 testDirectory :: FilePath -> (String -> IO ()) -> IO ()
 testDirectory fp step = do
