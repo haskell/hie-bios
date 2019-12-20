@@ -76,6 +76,10 @@ however, it's not really necessary as
 >   res <- doesPathExist cd
 >   when res (removeDirectoryRecursive cd)
 -}
+
+-- | Prepends the cache directory used by the library to the supplied file path.
+-- It tries to use the path under the environment variable `$HIE_BIOS_CACHE_DIR` 
+-- and falls back to the standard `$XDG_CACHE_HOME/hie-bios` if the former is not set
 getCacheDir :: FilePath -> IO FilePath
 getCacheDir fp = do
   mbEnvCacheDirectory <- lookupEnv "HIE_BIOS_CACHE_DIR"
