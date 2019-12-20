@@ -11,6 +11,7 @@ import System.Process
 import System.Exit
 import HIE.Bios.Types
 import HIE.Bios.Config
+import HIE.Bios.Environment (getCacheDir)
 import System.Directory hiding (findFile)
 import Control.Monad.Trans.Maybe
 import System.FilePath
@@ -306,18 +307,17 @@ getCabalWrapperTool (ghcPath, ghcArgs) wdir = do
   wrapper_fp <-
     if isWindows
       then do
-        mbEnvCacheDir <- lookupEnv "HIE_BIOS_CACHE_DIR"
-        cacheDir <- getXdgDirectory XdgCache "hie-bios"
-        let wrapper_dir = fromMaybe cacheDir mbEnvCacheDir
-        let wrapper_name = "wrapper-" ++ show (fingerprintString cabalWrapperHs)
-        let wrapper_fp = wrapper_dir </> wrapper_name <.> "exe"
+        cacheDir <- getCacheDir ""
+        let srcHash = show (fingerprintString cabalWrapperHs)
+        let wrapper_name = "wrapper-" ++ srcHash
+        let wrapper_fp = cacheDir </> wrapper_name <.> "exe"
         exists <- doesFileExist wrapper_fp
-        unless exists $ do
-            tempDir <- getTemporaryDirectory
-            let wrapper_hs = tempDir </> wrapper_name <.> "hs"
+        unless exists $ withSystemTempDirectory "hie-bios" $ \ tmpDir -> do
+            let wrapper_hs = cacheDir </> wrapper_name <.> "hs"
             writeFile wrapper_hs cabalWrapperHs
             createDirectoryIfMissing True cacheDir
-            let ghc = (proc ghcPath $ ghcArgs ++ ["-o", wrapper_fp, wrapper_hs])
+            let ghc = (proc ghcPath $
+                        ghcArgs ++ ["-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs])
                         { cwd = Just wdir }
             readCreateProcess ghc "" >>= putStr
         return wrapper_fp
