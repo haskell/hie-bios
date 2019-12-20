@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, CPP #-}
-module HIE.Bios.Environment (initSession, getSystemLibDir, addCmdOpts) where
+module HIE.Bios.Environment (initSession, getSystemLibDir, getCacheDir, addCmdOpts) where
 
 import CoreMonad (liftIO)
 import GHC (DynFlags(..), GhcLink(..), HscTarget(..), GhcMonad)
@@ -13,6 +13,7 @@ import Control.Monad (void)
 import System.Process (readProcess)
 import System.Directory
 import System.FilePath
+import System.Environment (lookupEnv)
 
 import qualified Crypto.Hash.SHA1 as H
 import qualified Data.ByteString.Char8 as B
@@ -76,7 +77,11 @@ however, it's not really necessary as
 >   when res (removeDirectoryRecursive cd)
 -}
 getCacheDir :: FilePath -> IO FilePath
-getCacheDir fp = getXdgDirectory XdgCache (cacheDir </> fp)
+getCacheDir fp = do
+  mbEnvCacheDirectory <- lookupEnv "HIE_BIOS_CACHE_DIR"
+  cacheBaseDir <- maybe (getXdgDirectory XdgCache cacheDir) return
+                         mbEnvCacheDirectory
+  return (cacheBaseDir </> fp)
 
 ----------------------------------------------------------------
 
