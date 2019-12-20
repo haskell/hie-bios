@@ -313,9 +313,9 @@ getCabalWrapperTool (ghcPath, ghcArgs) wdir = do
         let wrapper_fp = cacheDir </> wrapper_name <.> "exe"
         exists <- doesFileExist wrapper_fp
         unless exists $ withSystemTempDirectory "hie-bios" $ \ tmpDir -> do
+            createDirectoryIfMissing True cacheDir
             let wrapper_hs = cacheDir </> wrapper_name <.> "hs"
             writeFile wrapper_hs cabalWrapperHs
-            createDirectoryIfMissing True cacheDir
             let ghc = (proc ghcPath $
                         ghcArgs ++ ["-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs])
                         { cwd = Just wdir }
