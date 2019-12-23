@@ -11,6 +11,7 @@ import System.Process
 import System.Exit
 import HIE.Bios.Types
 import HIE.Bios.Config
+import HIE.Bios.Environment (getCacheDir)
 import System.Directory hiding (findFile)
 import Control.Monad.Trans.Maybe
 import System.FilePath
@@ -28,8 +29,6 @@ import HIE.Bios.Wrappers
 import System.IO
 import Control.DeepSeq
 
-import Data.Version (showVersion)
-import Paths_hie_bios
 import Data.Conduit.Process
 import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
@@ -38,6 +37,7 @@ import qualified Data.Text as T
 import           Data.Maybe                     ( maybeToList
                                                 , fromMaybe
                                                 )
+import           GHC.Fingerprint (fingerprintString)
 ----------------------------------------------------------------
 
 -- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
@@ -307,16 +307,17 @@ getCabalWrapperTool (ghcPath, ghcArgs) wdir = do
   wrapper_fp <-
     if isWindows
       then do
-        cacheDir <- getXdgDirectory XdgCache "hie-bios"
-        let wrapper_name = "wrapper-" ++ showVersion version
+        cacheDir <- getCacheDir ""
+        let srcHash = show (fingerprintString cabalWrapperHs)
+        let wrapper_name = "wrapper-" ++ srcHash
         let wrapper_fp = cacheDir </> wrapper_name <.> "exe"
         exists <- doesFileExist wrapper_fp
-        unless exists $ do
-            tempDir <- getTemporaryDirectory
-            let wrapper_hs = tempDir </> wrapper_name <.> "hs"
-            writeFile wrapper_hs cabalWrapperHs
+        unless exists $ withSystemTempDirectory "hie-bios" $ \ tmpDir -> do
             createDirectoryIfMissing True cacheDir
-            let ghc = (proc ghcPath $ ghcArgs ++ ["-o", wrapper_fp, wrapper_hs])
+            let wrapper_hs = cacheDir </> wrapper_name <.> "hs"
+            writeFile wrapper_hs cabalWrapperHs
+            let ghc = (proc ghcPath $
+                        ghcArgs ++ ["-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs])
                         { cwd = Just wdir }
             readCreateProcess ghc "" >>= putStr
         return wrapper_fp
