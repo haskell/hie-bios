@@ -6,6 +6,13 @@ module HIE.Bios.Cradle (
     , loadCradle
     , loadImplicitCradle
     , defaultCradle
+    , isCabalCradle
+    , isStackCradle
+    , isDirectCradle
+    , isBiosCradle
+    , isNoneCradle
+    , isMultiCradle
+    , isDefaultCradle
   ) where
 
 import Control.Exception (handleJust)
@@ -136,6 +143,53 @@ configFileName = "hie.yaml"
 
 ---------------------------------------------------------------
 
+cabalCradleName :: String
+cabalCradleName = "cabal"
+
+stackCradleName :: String
+stackCradleName = "stack"
+
+directCradleName :: String
+directCradleName = "direct"
+
+biosCradleName :: String
+biosCradleName = "bios"
+
+multiCradleName :: String
+multiCradleName = "multi"
+
+noneCradleName :: String
+noneCradleName = "none"
+
+defaultCradleName :: String
+defaultCradleName = "default"
+
+isCabalCradle :: Cradle -> Bool
+isCabalCradle = checkCradleName cabalCradleName
+
+isStackCradle :: Cradle -> Bool
+isStackCradle = checkCradleName stackCradleName
+
+isDirectCradle :: Cradle -> Bool
+isDirectCradle = checkCradleName directCradleName
+
+isBiosCradle :: Cradle -> Bool
+isBiosCradle = checkCradleName biosCradleName
+
+isMultiCradle :: Cradle -> Bool
+isMultiCradle = checkCradleName multiCradleName
+
+isNoneCradle :: Cradle -> Bool
+isNoneCradle = checkCradleName noneCradleName
+
+isDefaultCradle :: Cradle -> Bool
+isDefaultCradle = checkCradleName defaultCradleName
+
+checkCradleName :: String -> Cradle -> Bool
+checkCradleName crdlName crdl = (== crdlName) . actionName $ cradleOptsProg crdl
+
+---------------------------------------------------------------
+
 -- | Default cradle has no special options, not very useful for loading
 -- modules.
 defaultCradle :: FilePath -> Cradle
@@ -143,7 +197,7 @@ defaultCradle cur_dir =
   Cradle
     { cradleRootDir = cur_dir
     , cradleOptsProg = CradleAction
-        { actionName = "default"
+        { actionName = defaultCradleName
         , runCradle = \_ _ -> return (CradleSuccess (ComponentOptions [] []))
         }
     }
@@ -156,7 +210,7 @@ noneCradle cur_dir =
   Cradle
     { cradleRootDir = cur_dir
     , cradleOptsProg = CradleAction
-        { actionName = "none"
+        { actionName = noneCradleName
         , runCradle = \_ _ -> return CradleNone
         }
     }
@@ -167,12 +221,36 @@ noneCradle cur_dir =
 multiCradle :: FilePath -> [(FilePath, CradleConfig)] -> Cradle
 multiCradle cur_dir cs =
   Cradle
-    { cradleRootDir = cur_dir
+    { cradleRootDir  = cur_dir
     , cradleOptsProg = CradleAction
-        { actionName = "multi"
-        , runCradle = \l fp -> canonicalizePath fp >>= multiAction cur_dir cs l
+        { actionName = multiActionName
+        , runCradle  = \l fp -> canonicalizePath fp >>= multiAction cur_dir cs l
         }
     }
+  where
+    cfgs = map snd cs
+
+    multiActionName
+      | all (\c -> isStackCradleConfig c || isNoneCradleConfig c) cfgs
+      = stackCradleName
+      | all (\c -> isCabalCradleConfig c || isNoneCradleConfig c) cfgs
+      = cabalCradleName
+      | otherwise
+      = multiCradleName
+
+    isStackCradleConfig cfg = case cradleType cfg of
+      Stack{}      -> True
+      StackMulti{} -> True
+      _            -> False
+
+    isCabalCradleConfig cfg = case cradleType cfg of
+      Cabal{}      -> True
+      CabalMulti{} -> True
+      _            -> False
+
+    isNoneCradleConfig cfg = case cradleType cfg of
+      None -> True
+      _    -> False
 
 multiAction :: FilePath
             -> [(FilePath, CradleConfig)]
@@ -211,7 +289,7 @@ directCradle wdir args  =
   Cradle
     { cradleRootDir = wdir
     , cradleOptsProg = CradleAction
-        { actionName = "direct"
+        { actionName = directCradleName
         , runCradle = \_ _ -> return (CradleSuccess (ComponentOptions args []))
         }
     }
@@ -226,7 +304,7 @@ biosCradle wdir biosProg biosDepsProg =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
-        { actionName = "bios"
+        { actionName = biosCradleName
         , runCradle = biosAction wdir biosProg biosDepsProg
         }
     }
@@ -263,13 +341,12 @@ biosAction wdir bios bios_deps l fp = do
 -- Cabal Cradle
 -- Works for new-build by invoking `v2-repl` does not support components
 -- yet.
-
 cabalCradle :: FilePath -> Maybe String -> Cradle
 cabalCradle wdir mc =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
-        { actionName = "cabal"
+        { actionName = cabalCradleName
         , runCradle = cabalAction wdir mc
         }
     }
@@ -385,7 +462,7 @@ stackCradle wdir mc =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
-        { actionName = "stack"
+        { actionName = stackCradleName
         , runCradle = stackAction wdir mc
         }
     }

@@ -6,8 +6,9 @@ import Test.Tasty.HUnit
 import HIE.Bios
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Load
+import HIE.Bios.Cradle
 import Control.Monad.IO.Class
-import Control.Monad ( unless, forM_ )
+import Control.Monad ( unless, forM_, when )
 import System.Directory
 import System.FilePath ( makeRelative, (</>) )
 import System.Info.Extra ( isWindows )
@@ -35,23 +36,23 @@ main = do
       , testGroup "Loading tests"
         $ linuxExlusiveTestCases
         ++
-           [ testCaseSteps "simple-cabal" $ testDirectory "./tests/projects/simple-cabal/B.hs"
-           , testCaseSteps "simple-stack" $ testDirectory "./tests/projects/simple-stack/B.hs"
-           , testCaseSteps "simple-direct" $ testDirectory "./tests/projects/simple-direct/B.hs"
+           [ testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal/B.hs"
+           , testCaseSteps "simple-stack" $ testDirectory isStackCradle "./tests/projects/simple-stack/B.hs"
+           , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct/B.hs"
            , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
-                         $  testDirectory "./tests/projects/multi-cabal/app/Main.hs"
-                         >> testDirectory "./tests/projects/multi-cabal/src/Lib.hs"
+                         $  testDirectory isCabalCradle "./tests/projects/multi-cabal/app/Main.hs"
+                         >> testDirectory isCabalCradle "./tests/projects/multi-cabal/src/Lib.hs"
            , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
-                         $  testDirectory "./tests/projects/multi-stack/app/Main.hs"
-                         >> testDirectory "./tests/projects/multi-stack/src/Lib.hs"
+                         $  testDirectory isStackCradle "./tests/projects/multi-stack/app/Main.hs"
+                         >> testDirectory isStackCradle "./tests/projects/multi-stack/src/Lib.hs"
            ]
       ]
 
 linuxExlusiveTestCases :: [TestTree]
-linuxExlusiveTestCases = [ testCaseSteps "simple-bios" $ testDirectory "./tests/projects/simple-bios/B.hs" | not isWindows ]
+linuxExlusiveTestCases = [ testCaseSteps "simple-bios" $ testDirectory isBiosCradle "./tests/projects/simple-bios/B.hs" | not isWindows ]
 
-testDirectory :: FilePath -> (String -> IO ()) -> IO ()
-testDirectory fp step = do
+testDirectory :: (Cradle -> Bool) -> FilePath -> (String -> IO ()) -> IO ()
+testDirectory cradlePred fp step = do
   a_fp <- canonicalizePath fp
   step "Finding Cradle"
   mcfg <- findCradle a_fp
@@ -59,6 +60,7 @@ testDirectory fp step = do
   crd <- case mcfg of
           Just cfg -> loadCradle cfg
           Nothing -> loadImplicitCradle a_fp
+  when (not $ cradlePred crd) $ error "Cradle was not of the expected type."
   step "Initialise Flags"
   withCurrentDirectory (cradleRootDir crd) $
     withGHC' $ do
