@@ -72,20 +72,8 @@ main = flip E.catches handlers $ do
         | (fp:_) <- remainingArgs -> debugInfo fp cradle
       "root"    -> rootInfo cradle
       "version" -> return progVersion
-      "config"
-        | null remainingArgs -> return "No files given"
-        | otherwise -> fmap unlines $ forM remainingArgs $ \fp ->
-            findCradle (cwd </> fp) >>= \case
-              Just yaml -> return $ "Config for \"" ++ fp ++ "\": " ++ yaml
-              _ -> return $ "Config for \"" ++ fp ++ "\": Not Found"
-      "cradle"
-        | null remainingArgs -> return "No files given"
-        | otherwise -> fmap unlines $ forM remainingArgs $ \fp ->
-            findCradle (cwd </> fp) >>= \case
-              Just yaml -> do
-                crdl <- loadCradle yaml
-                return $ "Cradle for \"" ++ fp ++ "\": " ++ show crdl
-              _ -> return $ "Cradle for \"" ++ fp ++ "\": Not Found"
+      "config" -> configInfo remainingArgs
+      "cradle" -> cradleInfo remainingArgs
       "flags"
         | null remainingArgs -> E.throw $ NotEnoughArguments cmdArg0
         | otherwise -> do
