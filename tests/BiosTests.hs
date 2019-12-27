@@ -7,6 +7,7 @@ import HIE.Bios
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Load
 import HIE.Bios.Cradle
+import HIE.Bios.Types
 import Control.Monad.IO.Class
 import Control.Monad ( unless, forM_, when )
 import System.Directory
@@ -39,6 +40,9 @@ main = do
            [ testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal/B.hs"
            , testCaseSteps "simple-stack" $ testDirectory isStackCradle "./tests/projects/simple-stack/B.hs"
            , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct/B.hs"
+           , testCaseSteps "multi-direct" {- tests if both components can be loaded -}
+                         $  testDirectory isMultiCradle "./tests/projects/multi-direct/A.hs"
+                         >> testDirectory isMultiCradle "./tests/projects/multi-direct/B.hs"
            , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
                          $  testDirectory isCabalCradle "./tests/projects/multi-cabal/app/Main.hs"
                          >> testDirectory isCabalCradle "./tests/projects/multi-cabal/src/Lib.hs"
@@ -54,13 +58,13 @@ linuxExlusiveTestCases = [ testCaseSteps "simple-bios" $ testDirectory isBiosCra
 testDirectory :: (Cradle -> Bool) -> FilePath -> (String -> IO ()) -> IO ()
 testDirectory cradlePred fp step = do
   a_fp <- canonicalizePath fp
-  step "Finding Cradle"
+  step $ "Finding Cradle for: " ++ a_fp
   mcfg <- findCradle a_fp
-  step "Loading Cradle"
+  step $ "Loading Cradle: " ++ show mcfg
   crd <- case mcfg of
           Just cfg -> loadCradle cfg
           Nothing -> loadImplicitCradle a_fp
-  when (not $ cradlePred crd) $ error "Cradle was not of the expected type."
+  when (not $ cradlePred crd) $ error $ "Cradle is incorrect: " ++ ( actionName $ cradleOptsProg crd)
   step "Initialise Flags"
   withCurrentDirectory (cradleRootDir crd) $
     withGHC' $ do
