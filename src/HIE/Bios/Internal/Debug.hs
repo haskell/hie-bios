@@ -30,8 +30,9 @@ debugInfo :: FilePath
           -> IO String
 debugInfo fp cradle = unlines <$> do
     res <- getCompilerOptions fp cradle
-    conf <- findConfig fp
-    crdl <- findCradle' fp
+    canonFp <- canonicalizePath fp
+    conf <- findConfig canonFp
+    crdl <- findCradle' canonFp
     case res of
       CradleSuccess (ComponentOptions gopts deps) -> do
         mglibdir <- liftIO getSystemLibDir
@@ -66,10 +67,10 @@ rootInfo cradle = return $ cradleRootDir cradle
 
 configInfo :: [FilePath] -> IO String
 configInfo []   = return "No files given"
-configInfo args = do
-  cwd <- getCurrentDirectory
-  fmap unlines $ forM args $ \fp ->
-    (("Config for \"" ++ fp ++ "\": ") ++) <$> findConfig (cwd </> fp)
+configInfo args =
+  fmap unlines $ forM args $ \fp -> do
+    fp' <- canonicalizePath fp
+    (("Config for \"" ++ fp' ++ "\": ") ++) <$> findConfig fp'
 
 findConfig :: FilePath -> IO String
 findConfig fp = findCradle fp >>= \case
@@ -80,16 +81,17 @@ findConfig fp = findCradle fp >>= \case
 
 cradleInfo :: [FilePath] -> IO String
 cradleInfo [] = return "No files given"
-cradleInfo args = do
-  cwd <- getCurrentDirectory
-  fmap unlines $ forM args $ \fp ->
-    (("Cradle for \"" ++ fp ++ "\": ") ++)  <$> findCradle' (cwd </> fp)
+cradleInfo args =
+  fmap unlines $ forM args $ \fp -> do
+    fp' <- canonicalizePath fp
+    (("Cradle for \"" ++ fp' ++ "\": ") ++)  <$> findCradle' fp'
 
 findCradle' :: FilePath -> IO String
-findCradle' fp = findCradle fp >>= \case
-  Just yaml -> do
-    crdl <- loadCradle yaml
-    return $ show crdl
-  Nothing -> do
-    crdl <- loadImplicitCradle fp
-    return $ show crdl
+findCradle' fp =
+  findCradle fp >>= \case
+    Just yaml -> do
+      crdl <- loadCradle yaml
+      return $ show crdl
+    Nothing -> do
+      crdl <- loadImplicitCradle fp
+      return $ show crdl
