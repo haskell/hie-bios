@@ -1,13 +1,19 @@
-module HIE.Bios.Internal.Debug (debugInfo, rootInfo) where
+{-# LANGUAGE LambdaCase #-}
+module HIE.Bios.Internal.Debug (debugInfo, rootInfo, configInfo, cradleInfo) where
 
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad
 
 import qualified Data.Char as Char
 import Data.Maybe (fromMaybe)
 
 import HIE.Bios.Ghc.Api
+import HIE.Bios.Cradle
 import HIE.Bios.Types
 import HIE.Bios.Flags
+
+import System.Directory
+import System.FilePath
 
 ----------------------------------------------------------------
 
@@ -24,6 +30,9 @@ debugInfo :: FilePath
           -> IO String
 debugInfo fp cradle = unlines <$> do
     res <- getCompilerOptions fp cradle
+    canonFp <- canonicalizePath fp
+    conf <- findConfig canonFp
+    crdl <- findCradle' canonFp
     case res of
       CradleSuccess (ComponentOptions gopts deps) -> do
         mglibdir <- liftIO getSystemLibDir
@@ -31,6 +40,8 @@ debugInfo fp cradle = unlines <$> do
             "Root directory:      " ++ rootDir
           , "GHC options:         " ++ unwords (map quoteIfNeeded gopts)
           , "System libraries:    " ++ fromMaybe "" mglibdir
+          , "Config Location:     " ++ conf
+          , "Cradle:              " ++ crdl
           , "Dependencies:        " ++ unwords deps
           ]
       CradleFail (CradleError ext stderr) ->
@@ -51,3 +62,36 @@ debugInfo fp cradle = unlines <$> do
 rootInfo :: Cradle
           -> IO String
 rootInfo cradle = return $ cradleRootDir cradle
+
+----------------------------------------------------------------
+
+configInfo :: [FilePath] -> IO String
+configInfo []   = return "No files given"
+configInfo args =
+  fmap unlines $ forM args $ \fp -> do
+    fp' <- canonicalizePath fp
+    (("Config for \"" ++ fp' ++ "\": ") ++) <$> findConfig fp'
+
+findConfig :: FilePath -> IO String
+findConfig fp = findCradle fp >>= \case
+  Just yaml -> return yaml
+  _ -> return "No explicit config found"
+
+----------------------------------------------------------------
+
+cradleInfo :: [FilePath] -> IO String
+cradleInfo [] = return "No files given"
+cradleInfo args =
+  fmap unlines $ forM args $ \fp -> do
+    fp' <- canonicalizePath fp
+    (("Cradle for \"" ++ fp' ++ "\": ") ++)  <$> findCradle' fp'
+
+findCradle' :: FilePath -> IO String
+findCradle' fp =
+  findCradle fp >>= \case
+    Just yaml -> do
+      crdl <- loadCradle yaml
+      return $ show crdl
+    Nothing -> do
+      crdl <- loadImplicitCradle fp
+      return $ show crdl

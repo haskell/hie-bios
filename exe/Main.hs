@@ -35,6 +35,8 @@ usage =    progVersion
         ++ "\t hie-bios expand <HaskellFiles...>\n"
         ++ "\t hie-bios flags <HaskellFiles...>\n"
         ++ "\t hie-bios debug [<ComponentDir>]\n"
+        ++ "\t hie-bios config <HaskellFiles...>\n"
+        ++ "\t hie-bios cradle <HaskellFiles...>\n"
         ++ "\t hie-bios root\n"
         ++ "\t hie-bios version\n"
 
@@ -55,7 +57,8 @@ main :: IO ()
 main = flip E.catches handlers $ do
     hSetEncoding stdout utf8
     args <- getArgs
-    cradle <- getCurrentDirectory >>= \cwd ->
+    cwd <- getCurrentDirectory
+    cradle <-
         -- find cradle does a takeDirectory on the argument, so make it into a file
         findCradle (cwd </> "File.hs") >>= \case
           Just yaml -> loadCradle yaml
@@ -69,6 +72,8 @@ main = flip E.catches handlers $ do
         | (fp:_) <- remainingArgs -> debugInfo fp cradle
       "root"    -> rootInfo cradle
       "version" -> return progVersion
+      "config" -> configInfo remainingArgs
+      "cradle" -> cradleInfo remainingArgs
       "flags"
         | null remainingArgs -> E.throw $ NotEnoughArguments cmdArg0
         | otherwise -> do
