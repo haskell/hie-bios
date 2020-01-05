@@ -13,7 +13,6 @@ import HIE.Bios.Types
 import HIE.Bios.Flags
 
 import System.Directory
-import System.FilePath
 
 ----------------------------------------------------------------
 

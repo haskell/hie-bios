@@ -328,10 +328,9 @@ getCabalWrapperTool (ghcPath, ghcArgs) wdir = do
   return wrapper_fp
 
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
-cabalAction work_dir mc l _fp = do
+cabalAction work_dir _mc l fp = do
   wrapper_fp <- getCabalWrapperTool ("ghc", []) work_dir
-  let cab_args = ["v2-repl", "--with-compiler", wrapper_fp]
-                  ++ [component_name | Just component_name <- [mc]]
+  let cab_args = ["v2-repl", "--with-compiler", wrapper_fp, fp]
   (ex, output, stde, args) <-
     readProcessWithOutputFile l Nothing work_dir "cabal" cab_args
   deps <- cabalCradleDependencies work_dir
