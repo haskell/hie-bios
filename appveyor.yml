@@ -4,7 +4,6 @@ environment:
  # - GHCVER: 8.8.1 Disabled until unix-compat supports ghc 8.8.1, see https://github.com/jacobstanley/unix-compat/pull/42 for example
   - GHCVER: 8.6.5
   - GHCVER: 8.4.4
-  - GHCVER: 8.2.2
 install:
   - git submodule update --init --recursive
   - choco install -y haskell-stack

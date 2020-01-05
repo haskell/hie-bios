@@ -288,6 +288,7 @@ processCabalWrapperArgs args =
         (dir: ghc_args) ->
             let final_args =
                     removeVerbosityOpts
+                    $ removeRTS
                     $ removeInteractive
                     $ map (fixImportDirs dir)
                     $ ghc_args
@@ -317,7 +318,7 @@ getCabalWrapperTool (ghcPath, ghcArgs) wdir = do
             let wrapper_hs = cacheDir </> wrapper_name <.> "hs"
             writeFile wrapper_hs cabalWrapperHs
             let ghc = (proc ghcPath $
-                        ghcArgs ++ ["-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs])
+                        ghcArgs ++ ["-rtsopts=ignore", "-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs])
                         { cwd = Just wdir }
             readCreateProcess ghc "" >>= putStr
         return wrapper_fp
@@ -345,6 +346,15 @@ cabalAction work_dir mc l _fp = do
 
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
+
+-- Strip out any ["+RTS", ..., "-RTS"] sequences in the command string list.
+removeRTS :: [String] -> [String]
+removeRTS ("+RTS" : xs)  =
+  case dropWhile (/= "-RTS") xs of
+    [] -> []
+    (_ : ys) -> removeRTS ys
+removeRTS (y:ys)         = y : removeRTS ys
+removeRTS []             = []
 
 removeVerbosityOpts :: [String] -> [String]
 removeVerbosityOpts = filter ((&&) <$> (/= "-v0") <*> (/= "-w"))
