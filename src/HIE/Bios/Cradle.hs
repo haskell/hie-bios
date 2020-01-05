@@ -330,7 +330,7 @@ getCabalWrapperTool (ghcPath, ghcArgs) wdir = do
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
 cabalAction work_dir _mc l fp = do
   wrapper_fp <- getCabalWrapperTool ("ghc", []) work_dir
-  let cab_args = ["v2-repl", "--with-compiler", wrapper_fp, fp]
+  let cab_args = ["v2-repl", "--with-compiler", wrapper_fp, fixTargetPath fp]
   (ex, output, stde, args) <-
     readProcessWithOutputFile l Nothing work_dir "cabal" cab_args
   deps <- cabalCradleDependencies work_dir
@@ -341,6 +341,12 @@ cabalAction work_dir _mc l fp = do
                    , unlines stde
                    , unlines args])
       Just final_args -> pure $ makeCradleResult (ex, stde, final_args) deps
+  where
+    -- Need to make relative on Windows, due to a Cabal bug with how it
+    -- parses file targets with a C: drive in it
+    fixTargetPath x
+      | isWindows && hasDrive x = makeRelative work_dir x
+      | otherwise = x
 
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
