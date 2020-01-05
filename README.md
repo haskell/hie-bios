@@ -67,7 +67,7 @@ a project. This is good for debugging but not a very good approach in general as
 will quickly get out of sync with a cabal file.
 
 ```yaml
-cradle: {direct: [arg1, arg2]}
+cradle: {direct: { arguments: [arg1, arg2]} }
 ```
 
 The `none` cradle says that the IDE shouldn't even try to load the project. It
