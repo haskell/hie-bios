@@ -1,7 +1,7 @@
 version: 1.0.{build}
 environment:
   matrix:
- # - GHCVER: 8.8.1 Disabled until unix-compat supports ghc 8.8.1, see https://github.com/jacobstanley/unix-compat/pull/42 for example
+  - GHCVER: 8.8.1
   - GHCVER: 8.6.5
   - GHCVER: 8.4.4
 install:
