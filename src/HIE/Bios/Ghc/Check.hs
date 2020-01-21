@@ -23,7 +23,8 @@ import HIE.Bios.Environment
 
 -- | Checking syntax of a target file using GHC.
 --   Warnings and errors are returned.
-checkSyntax :: Cradle
+checkSyntax :: Show a
+            => Cradle a
             -> [FilePath]  -- ^ The target files.
             -> IO String
 checkSyntax _      []    = return ""

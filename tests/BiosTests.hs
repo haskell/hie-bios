@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
 module Main where
 
@@ -10,6 +11,7 @@ import HIE.Bios.Cradle
 import HIE.Bios.Types
 import Control.Monad.IO.Class
 import Control.Monad ( unless, forM_, when )
+import Data.Void
 import System.Directory
 import System.FilePath ( makeRelative, (</>) )
 import System.Info.Extra ( isWindows )
@@ -55,16 +57,16 @@ main = do
 linuxExlusiveTestCases :: [TestTree]
 linuxExlusiveTestCases = [ testCaseSteps "simple-bios" $ testDirectory isBiosCradle "./tests/projects/simple-bios/B.hs" | not isWindows ]
 
-testDirectory :: (Cradle -> Bool) -> FilePath -> (String -> IO ()) -> IO ()
+testDirectory :: (Cradle Void -> Bool) -> FilePath -> (String -> IO ()) -> IO ()
 testDirectory cradlePred fp step = do
   a_fp <- canonicalizePath fp
   step $ "Finding Cradle for: " ++ a_fp
   mcfg <- findCradle a_fp
   step $ "Loading Cradle: " ++ show mcfg
-  crd <- case mcfg of
+  crd :: Cradle Void <- case mcfg of
           Just cfg -> loadCradle cfg
           Nothing -> loadImplicitCradle a_fp
-  when (not $ cradlePred crd) $ error $ "Cradle is incorrect: " ++ ( actionName $ cradleOptsProg crd)
+  when (not $ cradlePred crd) $ error $ "Cradle is incorrect: " ++ show (actionName $ cradleOptsProg crd)
   step "Initialise Flags"
   withCurrentDirectory (cradleRootDir crd) $
     withGHC' $ do

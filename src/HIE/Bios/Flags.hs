@@ -8,7 +8,7 @@ import HIE.Bios.Internal.Log
 -- file or GHC session according to the provided 'Cradle'.
 getCompilerOptions ::
     FilePath -- The file we are loading it because of
-    -> Cradle
+    -> Cradle a
     -> IO (CradleLoadResult ComponentOptions)
 getCompilerOptions fp cradle =
   runCradle (cradleOptsProg cradle) logm fp

@@ -3,6 +3,7 @@ module HIE.Bios.Internal.Debug (debugInfo, rootInfo, configInfo, cradleInfo) whe
 
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad
+import Data.Void
 
 import qualified Data.Char as Char
 import Data.Maybe (fromMaybe)
@@ -13,7 +14,6 @@ import HIE.Bios.Types
 import HIE.Bios.Flags
 
 import System.Directory
-import System.FilePath
 
 ----------------------------------------------------------------
 
@@ -25,8 +25,9 @@ import System.FilePath
 -- the file dependencies and so on.
 --
 -- Otherwise, shows the error message and exit-code.
-debugInfo :: FilePath
-          -> Cradle
+debugInfo :: Show a
+          => FilePath
+          -> Cradle a
           -> IO String
 debugInfo fp cradle = unlines <$> do
     res <- getCompilerOptions fp cradle
@@ -59,7 +60,7 @@ debugInfo fp cradle = unlines <$> do
 ----------------------------------------------------------------
 
 -- | Get the root directory of the given Cradle.
-rootInfo :: Cradle
+rootInfo :: Cradle a
           -> IO String
 rootInfo cradle = return $ cradleRootDir cradle
 
@@ -90,8 +91,8 @@ findCradle' :: FilePath -> IO String
 findCradle' fp =
   findCradle fp >>= \case
     Just yaml -> do
-      crdl <- loadCradle yaml
+      crdl <- loadCradle yaml :: IO (Cradle Void)
       return $ show crdl
     Nothing -> do
-      crdl <- loadImplicitCradle fp
+      crdl <- loadImplicitCradle fp :: IO (Cradle Void)
       return $ show crdl
