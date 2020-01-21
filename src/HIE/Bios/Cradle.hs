@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns #-}
 module HIE.Bios.Cradle (
@@ -7,6 +8,7 @@ module HIE.Bios.Cradle (
     , defaultCradle
   ) where
 
+import Control.Exception (handleJust)
 import System.Process
 import System.Exit
 import HIE.Bios.Types
@@ -21,6 +23,7 @@ import Control.Monad.IO.Class
 import System.Environment
 import Control.Applicative ((<|>))
 import System.IO.Temp
+import System.IO.Error (isPermissionError)
 import Data.List
 import Data.Ord (Down(..))
 
@@ -511,13 +514,19 @@ obeliskAction work_dir _fp = do
 -- the predicate.
 findFileUpwards :: (FilePath -> Bool) -> FilePath -> MaybeT IO FilePath
 findFileUpwards p dir = do
-    cnts <- liftIO $ findFile p dir
-    case cnts of
-        [] | dir' == dir -> fail "No cabal files"
-           | otherwise   -> findFileUpwards p dir'
-        _:_          -> return dir
-  where
-    dir' = takeDirectory dir
+  cnts <-
+    liftIO
+    $ handleJust
+        -- Catch permission errors
+        (\(e :: IOError) -> if isPermissionError e then Just [] else Nothing)
+        pure
+        (findFile p dir)
+
+  case cnts of
+    [] | dir' == dir -> fail "No cabal files"
+            | otherwise   -> findFileUpwards p dir'
+    _ : _ -> return dir
+  where dir' = takeDirectory dir
 
 -- | Sees if any file in the directory matches the predicate
 findFile :: (FilePath -> Bool) -> FilePath -> IO [FilePath]
