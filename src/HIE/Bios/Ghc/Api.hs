@@ -3,7 +3,6 @@
 module HIE.Bios.Ghc.Api (
     initializeFlagsWithCradle
   , initializeFlagsWithCradleWithMessage
-  , initSessionWithMessage
   , G.SuccessFlag(..)
   -- * Utility functions for running the GHC monad and implementing internal utilities
   , withGHC
