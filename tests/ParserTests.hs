@@ -1,9 +1,14 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Test.Tasty
 import Test.Tasty.HUnit
 import HIE.Bios.Config
+import qualified Data.HashMap.Strict as Map
+import Data.Void
+import Data.Yaml
 import System.FilePath
+import Control.Applicative ( (<|>) )
 
 configDir :: FilePath
 configDir = "tests/configs"
@@ -39,12 +44,50 @@ main = defaultMain $
                                                                     StackMulti [("./src", "lib:hie-bios")
                                                                               ,("./tests", "parser-tests")]))]))
 
-assertParser :: FilePath -> Config -> Assertion
+    assertCustomParser "ch-cabal.yaml" (noDeps (Other CabalHelperCabal))
+    assertCustomParser "ch-stack.yaml" (noDeps (Other CabalHelperStack))
+    assertCustomParser "multi-ch.yaml"
+      (noDeps (Multi
+        [ ("./src", CradleConfig [] (Other CabalHelperStack))
+        , ("./input", CradleConfig [] (Other CabalHelperCabal))
+        , ("./test", CradleConfig [] (Cabal (Just "test")))
+        , (".", CradleConfig [] None)
+        ]))
+
+assertParser :: FilePath -> Config Void -> Assertion
 assertParser fp cc = do
   conf <- readConfig (configDir </> fp)
   (conf == cc) @? (unlines [("Parser Failed: " ++ fp)
                            , "Expected: " ++ show cc
                            , "Actual: " ++ show conf ])
 
-noDeps :: CradleType -> Config
+assertCustomParser :: FilePath -> Config CabalHelper -> Assertion
+assertCustomParser fp cc = do
+  conf <- readConfig' (configDir </> fp)
+  (conf == cc) @? (unlines [("Parser Failed: " ++ fp)
+                          , "Expected: " ++ show cc
+                          , "Actual: " ++ show conf ])
+
+noDeps :: CradleType a -> Config a
 noDeps c = Config (CradleConfig [] c)
+
+-- ------------------------------------------------------------------
+
+data CabalHelper
+  = CabalHelperCabal
+  | CabalHelperStack
+  deriving (Show, Eq)
+
+instance FromJSON CabalHelper where
+  parseJSON (Object o)
+    | Just obj <- Map.lookup "cabal-helper" o = chCabal obj <|> chStack obj
+    where
+      chCabal (Object val)
+        | Just _val <- Map.lookup "cabal" val = return CabalHelperCabal
+      chCabal _ = fail "CH: not a cabal cradle."
+
+      chStack (Object val)
+        | Just _val <- Map.lookup "stack" val = return CabalHelperStack
+      chStack _ = fail "CH: not a stack cradle."
+
+  parseJSON _ = fail "Not a valid cabal-helper specification"

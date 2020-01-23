@@ -3,30 +3,32 @@
 -- | Logic and datatypes for parsing @hie.yaml@ files.
 module HIE.Bios.Config(
     readConfig,
+    readConfig',
     Config(..),
     CradleConfig(..),
     CradleType(..)
     ) where
 
+import           Data.Void
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as Map
-import Data.Foldable (foldrM)
+import           Data.Foldable (foldrM)
 import           Data.Yaml
 
-data CradleConfig =
+data CradleConfig a =
     CradleConfig
         { cradleDependencies :: [FilePath]
         -- ^ Dependencies of a cradle.
         -- Dependencies are expected to be relative to the root directory.
         -- The given files are not required to exist.
-        , cradleType :: CradleType
+        , cradleType :: CradleType a
         -- ^ Type of the cradle to use. Actions to obtain
         -- compiler flags from are dependant on this field.
         }
         deriving (Show, Eq)
 
-data CradleType
+data CradleType a
     = Cabal { component :: Maybe String }
     | CabalMulti [ (FilePath, String) ]
     | Stack { component :: Maybe String }
@@ -46,14 +48,15 @@ data CradleType
         }
     | Direct { arguments :: [String] }
     | None
-    | Multi [ (FilePath, CradleConfig) ]
+    | Multi [ (FilePath, CradleConfig a) ]
+    | Other { otherConfig :: a }
     deriving (Show, Eq)
 
-instance FromJSON CradleType where
+instance FromJSON a => FromJSON (CradleType a) where
     parseJSON (Object o) = parseCradleType o
     parseJSON _ = fail "Not a known cradle type. Possible are: cabal, stack, bios, direct, default, none, multi"
 
-parseCradleType :: Object -> Parser CradleType
+parseCradleType :: FromJSON a => Object -> Parser (CradleType a)
 parseCradleType o
     | Just val <- Map.lookup "cabal" o = parseCabal val
     | Just val <- Map.lookup "stack" o = parseStack val
@@ -63,13 +66,14 @@ parseCradleType o
     | Just val <- Map.lookup "direct" o = parseDirect val
     | Just _val <- Map.lookup "none" o = return None
     | Just val  <- Map.lookup "multi" o = parseMulti val
+    | Just val  <- Map.lookup "other" o = Other <$> parseJSON val
 parseCradleType o = fail $ "Unknown cradle type: " ++ show o
 
 parseStackOrCabal
-  :: (Maybe String -> CradleType)
-  -> ([(FilePath, String)] -> CradleType)
+  :: (Maybe String -> CradleType a)
+  -> ([(FilePath, String)] -> CradleType a)
   -> Value
-  -> Parser CradleType
+  -> Parser (CradleType a)
 parseStackOrCabal singleConstructor _ (Object x)
   | Map.size x == 1, Just (String stackComponent) <- Map.lookup "component" x
   = return $ singleConstructor $ Just $ T.unpack stackComponent
@@ -92,13 +96,13 @@ parseStackOrCabal _ multiConstructor (Array x) = do
 parseStackOrCabal singleConstructor _ Null = return $ singleConstructor Nothing
 parseStackOrCabal _ _ _ = fail "Configuration is expected to be an object."
 
-parseStack :: Value -> Parser CradleType
+parseStack :: Value -> Parser (CradleType a)
 parseStack = parseStackOrCabal Stack StackMulti
 
-parseCabal :: Value -> Parser CradleType
+parseCabal :: Value -> Parser (CradleType a)
 parseCabal = parseStackOrCabal Cabal CabalMulti
 
-parseBios :: Value -> Parser CradleType
+parseBios :: Value -> Parser (CradleType a)
 parseBios (Object x)
     | 2 == Map.size x
     , Just (String biosProgram) <- Map.lookup "program" x
@@ -113,7 +117,7 @@ parseBios (Object x)
     = fail "Not a valid Bios Configuration type, following keys are allowed: program, dependency-program"
 parseBios _ = fail "Bios Configuration is expected to be an object."
 
-parseDirect :: Value -> Parser CradleType
+parseDirect :: Value -> Parser (CradleType a)
 parseDirect (Object x)
     | Map.size x == 1
     , Just (Array v) <- Map.lookup "arguments" x
@@ -123,12 +127,12 @@ parseDirect (Object x)
     = fail "Not a valid Direct Configuration type, following keys are allowed: arguments"
 parseDirect _ = fail "Direct Configuration is expected to be an object."
 
-parseMulti :: Value -> Parser CradleType
+parseMulti :: FromJSON a => Value -> Parser (CradleType a)
 parseMulti (Array x)
     = Multi <$> mapM parsePath (V.toList x)
 parseMulti _ = fail "Multi Configuration is expected to be an array."
 
-parsePath :: Value -> Parser (FilePath, CradleConfig)
+parsePath :: FromJSON a => Value -> Parser (FilePath, CradleConfig a)
 parsePath (Object v)
   | Just (String path) <- Map.lookup "path" v
   , Just c <- Map.lookup "config" v
@@ -143,10 +147,10 @@ parsePath o = fail ("Multi component is expected to be an object." ++ show o)
 --   cabal:
 --     component: "lib:hie-bios"
 -- @
-newtype Config = Config { cradle :: CradleConfig }
+newtype Config a = Config { cradle :: CradleConfig a }
     deriving (Show, Eq)
 
-instance FromJSON CradleConfig where
+instance FromJSON a => FromJSON (CradleConfig a) where
     parseJSON (Object val) = do
             crd     <- val .: "cradle"
             crdDeps <- case Map.size val of
@@ -161,12 +165,15 @@ instance FromJSON CradleConfig where
     parseJSON _ = fail "Expected a cradle: key containing the preferences, possible values: cradle, dependencies"
 
 
-instance FromJSON Config where
+instance FromJSON a => FromJSON (Config a) where
     parseJSON o = Config <$> parseJSON o
 
 
 -- | Decode given file to a 'Config' value.
 -- If the contents of the file is not a valid 'Config',
 -- an 'Control.Exception.IOException' is thrown.
-readConfig :: FilePath -> IO Config
+readConfig :: FilePath -> IO (Config Void)
 readConfig = decodeFileThrow
+
+readConfig' :: FromJSON a => FilePath -> IO (Config a)
+readConfig' = decodeFileThrow
