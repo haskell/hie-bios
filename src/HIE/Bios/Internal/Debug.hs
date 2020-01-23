@@ -91,7 +91,7 @@ findCradle' :: FilePath -> IO String
 findCradle' fp =
   findCradle fp >>= \case
     Just yaml -> do
-      crdl <- loadCradle yaml :: IO (Cradle Void)
+      crdl <- loadCradle yaml
       return $ show crdl
     Nothing -> do
       crdl <- loadImplicitCradle fp :: IO (Cradle Void)

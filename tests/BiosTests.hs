@@ -63,7 +63,7 @@ testDirectory cradlePred fp step = do
   step $ "Finding Cradle for: " ++ a_fp
   mcfg <- findCradle a_fp
   step $ "Loading Cradle: " ++ show mcfg
-  crd :: Cradle Void <- case mcfg of
+  crd <- case mcfg of
           Just cfg -> loadCradle cfg
           Nothing -> loadImplicitCradle a_fp
   when (not $ cradlePred crd) $ error $ "Cradle is incorrect: " ++ show (actionName $ cradleOptsProg crd)

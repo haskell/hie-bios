@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, LambdaCase, ScopedTypeVariables #-}
+{-# LANGUAGE DeriveDataTypeable, LambdaCase #-}
 
 module Main where
 
@@ -59,7 +59,7 @@ main = flip E.catches handlers $ do
     hSetEncoding stdout utf8
     args <- getArgs
     cwd <- getCurrentDirectory
-    cradle :: Cradle Void <-
+    cradle <-
         -- find cradle does a takeDirectory on the argument, so make it into a file
         findCradle (cwd </> "File.hs") >>= \case
           Just yaml -> loadCradle yaml
