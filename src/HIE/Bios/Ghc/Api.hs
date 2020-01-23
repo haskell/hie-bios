@@ -63,7 +63,7 @@ initializeFlagsWithCradle ::
     GhcMonad m
     => FilePath -- ^ The file we are loading the 'Cradle' because of
     -> Cradle a   -- ^ The cradle we want to load
-    -> m (CradleLoadResult (m G.SuccessFlag))
+    -> m (CradleLoadResult (m G.SuccessFlag, ComponentOptions))
 initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMsg)
 
 -- | The same as 'initializeFlagsWithCradle' but with an additional argument to control
@@ -74,9 +74,9 @@ initializeFlagsWithCradleWithMessage ::
   => Maybe G.Messager
   -> FilePath -- ^ The file we are loading the 'Cradle' because of
   -> Cradle a  -- ^ The cradle we want to load
-  -> m (CradleLoadResult (m G.SuccessFlag)) -- ^ Whether we actually loaded the cradle or not.
+  -> m (CradleLoadResult (m G.SuccessFlag, ComponentOptions)) -- ^ Whether we actually loaded the cradle or not.
 initializeFlagsWithCradleWithMessage msg fp cradle =
-    fmap (initSessionWithMessage msg) <$> (liftIO $ getCompilerOptions fp cradle)
+    fmap (initSessionWithMessage msg) <$> liftIO (getCompilerOptions fp cradle)
 
 -- | Actually perform the initialisation of the session. Initialising the session corresponds to
 -- parsing the command line flags, setting the targets for the session and then attempting to load
@@ -84,13 +84,13 @@ initializeFlagsWithCradleWithMessage msg fp cradle =
 initSessionWithMessage :: (GhcMonad m)
             => Maybe G.Messager
             -> ComponentOptions
-            -> m G.SuccessFlag
-initSessionWithMessage msg compOpts = do
+            -> (m G.SuccessFlag, ComponentOptions)
+initSessionWithMessage msg compOpts = (do
     targets <- initSession compOpts
     G.setTargets targets
     -- Get the module graph using the function `getModuleGraph`
     mod_graph <- G.depanal [] True
-    G.load' LoadAllTargets msg mod_graph
+    G.load' LoadAllTargets msg mod_graph, compOpts)
 
 ----------------------------------------------------------------
 
