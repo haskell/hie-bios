@@ -6,12 +6,21 @@ module HIE.Bios.Cradle (
     , loadCradle
     , loadImplicitCradle
     , defaultCradle
+    , isCabalCradle
+    , isStackCradle
+    , isDirectCradle
+    , isBiosCradle
+    , isNoneCradle
+    , isMultiCradle
+    , isDefaultCradle
+    , isOtherCradle
   ) where
 
 import Control.Exception (handleJust)
 import System.Process
 import System.Exit
-import HIE.Bios.Types
+import HIE.Bios.Types hiding (ActionName(..))
+import qualified HIE.Bios.Types as Types
 import HIE.Bios.Config
 import HIE.Bios.Environment (getCacheDir)
 import System.Directory hiding (findFile)
@@ -50,11 +59,11 @@ findCradle wfile = do
     runMaybeT (yamlConfig wdir)
 
 -- | Given root\/hie.yaml load the Cradle.
-loadCradle :: FilePath -> IO Cradle
-loadCradle = loadCradleWithOpts defaultCradleOpts
+loadCradle :: FilePath -> IO (Cradle a)
+loadCradle = loadCradleWithOpts Types.defaultCradleOpts
 
 -- | Given root\/foo\/bar.hs, load an implicit cradle
-loadImplicitCradle :: FilePath -> IO Cradle
+loadImplicitCradle :: FilePath -> IO (Cradle a)
 loadImplicitCradle wfile = do
   let wdir = takeDirectory wfile
   cfg <- runMaybeT (implicitConfig wdir)
@@ -66,12 +75,12 @@ loadImplicitCradle wfile = do
 --   Find a cabal file by tracing ancestor directories.
 --   Find a sandbox according to a cabal sandbox config
 --   in a cabal directory.
-loadCradleWithOpts :: CradleOpts -> FilePath -> IO Cradle
+loadCradleWithOpts :: CradleOpts -> FilePath -> IO (Cradle a)
 loadCradleWithOpts _copts wfile = do
     cradleConfig <- readCradleConfig wfile
     return $ getCradle (cradleConfig, takeDirectory wfile)
 
-getCradle :: (CradleConfig, FilePath) -> Cradle
+getCradle :: (CradleConfig, FilePath) -> Cradle a
 getCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
     Cabal mc -> cabalCradle wdir mc
     CabalMulti ms ->
@@ -94,11 +103,11 @@ getCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
     where
       cradleDeps = cradleDependencies cc
 
-addCradleDeps :: [FilePath] -> Cradle -> Cradle
+addCradleDeps :: [FilePath] -> Cradle a -> Cradle a
 addCradleDeps deps c =
   c { cradleOptsProg = addActionDeps (cradleOptsProg c) }
   where
-    addActionDeps :: CradleAction -> CradleAction
+    addActionDeps :: CradleAction a -> CradleAction a
     addActionDeps ca =
       ca { runCradle = \l fp ->
             (fmap (\(ComponentOptions os' ds) -> ComponentOptions os' (ds `union` deps)))
@@ -136,14 +145,56 @@ configFileName = "hie.yaml"
 
 ---------------------------------------------------------------
 
+isCabalCradle :: Cradle a -> Bool
+isCabalCradle crdl = case actionName (cradleOptsProg crdl) of
+  Types.Cabal -> True
+  _ -> False
+
+isStackCradle :: Cradle a -> Bool
+isStackCradle crdl = case actionName (cradleOptsProg crdl) of
+  Types.Stack -> True
+  _ -> False
+
+isDirectCradle :: Cradle a -> Bool
+isDirectCradle crdl = case actionName (cradleOptsProg crdl) of
+  Types.Direct -> True
+  _ -> False
+
+isBiosCradle :: Cradle a -> Bool
+isBiosCradle crdl = case actionName (cradleOptsProg crdl) of
+  Types.Bios -> True
+  _ -> False
+
+isMultiCradle :: Cradle a -> Bool
+isMultiCradle crdl = case actionName (cradleOptsProg crdl) of
+  Types.Multi -> True
+  _ -> False
+
+isNoneCradle :: Cradle a -> Bool
+isNoneCradle crdl = case actionName (cradleOptsProg crdl) of
+  Types.None -> True
+  _ -> False
+
+isDefaultCradle :: Cradle a -> Bool
+isDefaultCradle crdl = case actionName (cradleOptsProg crdl) of
+  Types.Default -> True
+  _ -> False
+
+isOtherCradle :: Cradle a -> Bool
+isOtherCradle crdl = case actionName (cradleOptsProg crdl) of
+  Types.Other _ -> True
+  _ -> False
+
+---------------------------------------------------------------
+
 -- | Default cradle has no special options, not very useful for loading
 -- modules.
-defaultCradle :: FilePath -> Cradle
+defaultCradle :: FilePath -> Cradle a
 defaultCradle cur_dir =
   Cradle
     { cradleRootDir = cur_dir
     , cradleOptsProg = CradleAction
-        { actionName = "default"
+        { actionName = Types.Default
         , runCradle = \_ _ -> return (CradleSuccess (ComponentOptions [] []))
         }
     }
@@ -151,12 +202,12 @@ defaultCradle cur_dir =
 ---------------------------------------------------------------
 -- The none cradle tells us not to even attempt to load a certain directory
 
-noneCradle :: FilePath -> Cradle
+noneCradle :: FilePath -> Cradle a
 noneCradle cur_dir =
   Cradle
     { cradleRootDir = cur_dir
     , cradleOptsProg = CradleAction
-        { actionName = "none"
+        { actionName = Types.None
         , runCradle = \_ _ -> return CradleNone
         }
     }
@@ -164,15 +215,39 @@ noneCradle cur_dir =
 ---------------------------------------------------------------
 -- The multi cradle selects a cradle based on the filepath
 
-multiCradle :: FilePath -> [(FilePath, CradleConfig)] -> Cradle
+multiCradle :: FilePath -> [(FilePath, CradleConfig)] -> Cradle a
 multiCradle cur_dir cs =
   Cradle
-    { cradleRootDir = cur_dir
+    { cradleRootDir  = cur_dir
     , cradleOptsProg = CradleAction
-        { actionName = "multi"
-        , runCradle = \l fp -> canonicalizePath fp >>= multiAction cur_dir cs l
+        { actionName = multiActionName
+        , runCradle  = \l fp -> canonicalizePath fp >>= multiAction cur_dir cs l
         }
     }
+  where
+    cfgs = map snd cs
+
+    multiActionName
+      | all (\c -> isStackCradleConfig c || isNoneCradleConfig c) cfgs
+      = Types.Stack
+      | all (\c -> isCabalCradleConfig c || isNoneCradleConfig c) cfgs
+      = Types.Cabal
+      | otherwise
+      = Types.Multi
+
+    isStackCradleConfig cfg = case cradleType cfg of
+      Stack{}      -> True
+      StackMulti{} -> True
+      _            -> False
+
+    isCabalCradleConfig cfg = case cradleType cfg of
+      Cabal{}      -> True
+      CabalMulti{} -> True
+      _            -> False
+
+    isNoneCradleConfig cfg = case cradleType cfg of
+      None -> True
+      _    -> False
 
 multiAction :: FilePath
             -> [(FilePath, CradleConfig)]
@@ -206,12 +281,12 @@ multiAction cur_dir cs l cur_fp = selectCradle =<< canonicalizeCradles
 
 -------------------------------------------------------------------------
 
-directCradle :: FilePath -> [String] -> Cradle
+directCradle :: FilePath -> [String] -> Cradle a
 directCradle wdir args  =
   Cradle
     { cradleRootDir = wdir
     , cradleOptsProg = CradleAction
-        { actionName = "direct"
+        { actionName = Types.Direct
         , runCradle = \_ _ -> return (CradleSuccess (ComponentOptions args []))
         }
     }
@@ -221,12 +296,12 @@ directCradle wdir args  =
 
 -- | Find a cradle by finding an executable `hie-bios` file which will
 -- be executed to find the correct GHC options to use.
-biosCradle :: FilePath -> FilePath -> Maybe FilePath -> Cradle
+biosCradle :: FilePath -> FilePath -> Maybe FilePath -> Cradle a
 biosCradle wdir biosProg biosDepsProg =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
-        { actionName = "bios"
+        { actionName = Types.Bios
         , runCradle = biosAction wdir biosProg biosDepsProg
         }
     }
@@ -263,13 +338,12 @@ biosAction wdir bios bios_deps l fp = do
 -- Cabal Cradle
 -- Works for new-build by invoking `v2-repl` does not support components
 -- yet.
-
-cabalCradle :: FilePath -> Maybe String -> Cradle
+cabalCradle :: FilePath -> Maybe String -> Cradle a
 cabalCradle wdir mc =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
-        { actionName = "cabal"
+        { actionName = Types.Cabal
         , runCradle = cabalAction wdir mc
         }
     }
@@ -380,12 +454,12 @@ cabalWorkDir = findFileUpwards isCabal
 -- Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
 
-stackCradle :: FilePath -> Maybe String -> Cradle
+stackCradle :: FilePath -> Maybe String -> Cradle a
 stackCradle wdir mc =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
-        { actionName = "stack"
+        { actionName = Types.Stack
         , runCradle = stackAction wdir mc
         }
     }

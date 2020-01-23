@@ -63,7 +63,7 @@ withGhcT body = do
 initializeFlagsWithCradle ::
     GhcMonad m
     => FilePath -- ^ The file we are loading the 'Cradle' because of
-    -> Cradle   -- ^ The cradle we want to load
+    -> Cradle a   -- ^ The cradle we want to load
     -> m (CradleLoadResult (m G.SuccessFlag))
 initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMsg)
 
@@ -74,7 +74,7 @@ initializeFlagsWithCradleWithMessage ::
   GhcMonad m
   => Maybe G.Messager
   -> FilePath -- ^ The file we are loading the 'Cradle' because of
-  -> Cradle   -- ^ The cradle we want to load
+  -> Cradle a  -- ^ The cradle we want to load
   -> m (CradleLoadResult (m G.SuccessFlag)) -- ^ Whether we actually loaded the cradle or not.
 initializeFlagsWithCradleWithMessage msg fp cradle =
     fmap (initSessionWithMessage msg) <$> (liftIO $ getCompilerOptions fp cradle)

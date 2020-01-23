@@ -31,6 +31,9 @@ Extra-Source-Files:     ChangeLog
                         tests/configs/obelisk.yaml
                         tests/configs/stack-config.yaml
                         tests/configs/stack-multi.yaml
+                        tests/projects/multi-direct/A.hs
+                        tests/projects/multi-direct/B.hs
+                        tests/projects/multi-direct/hie.yaml
                         tests/projects/multi-cabal/Setup.hs
                         tests/projects/multi-cabal/app/Main.hs
                         tests/projects/multi-cabal/cabal.project

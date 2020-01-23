@@ -1,0 +1,12 @@
+cradle:
+  multi:
+    - path: "A.hs"
+      config:
+        cradle:
+          direct:
+            arguments: ["-Walaaal", "A", "B"]
+    - path: "B.hs"
+      config:
+        cradle:
+          direct:
+            arguments: ["-Walaaal", "A", "B"]
