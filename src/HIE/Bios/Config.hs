@@ -169,11 +169,16 @@ instance FromJSON a => FromJSON (Config a) where
     parseJSON o = Config <$> parseJSON o
 
 
--- | Decode given file to a 'Config' value.
--- If the contents of the file is not a valid 'Config',
+-- | Decode given file to a 'Config Void' value.
+-- If the contents of the file is not a valid 'Config Void',
 -- an 'Control.Exception.IOException' is thrown.
 readConfig :: FilePath -> IO (Config Void)
 readConfig = decodeFileThrow
 
+-- | Decode given file to a 'Config a' value.
+-- Type variable 'a' can be used to extend the 'hie.yaml' file format
+-- to extend configuration in the user-library.
+-- If the contents of the file is not a valid 'Config a',
+-- an 'Control.Exception.IOException' is thrown.
 readConfig' :: FromJSON a => FilePath -> IO (Config a)
 readConfig' = decodeFileThrow
