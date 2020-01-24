@@ -34,9 +34,7 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.Text as T
-import           Data.Maybe                     ( maybeToList
-                                                , fromMaybe
-                                                )
+import           Data.Maybe (fromMaybe)
 import           GHC.Fingerprint (fingerprintString)
 ----------------------------------------------------------------
 
@@ -328,9 +326,9 @@ getCabalWrapperTool (ghcPath, ghcArgs) wdir = do
   return wrapper_fp
 
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
-cabalAction work_dir _mc l fp = do
+cabalAction work_dir mc l fp = do
   wrapper_fp <- getCabalWrapperTool ("ghc", []) work_dir
-  let cab_args = ["v2-repl", "--with-compiler", wrapper_fp, fixTargetPath fp]
+  let cab_args = ["v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
   (ex, output, stde, args) <-
     readProcessWithOutputFile l Nothing work_dir "cabal" cab_args
   deps <- cabalCradleDependencies work_dir
@@ -388,14 +386,14 @@ stackCradleDependencies wdir = do
   return $ cabalFiles ++ ["package.yaml", "stack.yaml"]
 
 stackAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
-stackAction work_dir mc l _fp = do
+stackAction work_dir mc l fp = do
   let ghcProcArgs = ("stack", ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
   wrapper_fp <- getCabalWrapperTool ghcProcArgs work_dir
 
   (ex1, _stdo, stde, args) <-
     readProcessWithOutputFile l Nothing work_dir
-            "stack" $ ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp] ++ maybeToList mc
+            "stack" $ ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp, fromMaybe fp mc]
   (ex2, pkg_args, stdr, _) <-
     readProcessWithOutputFile l Nothing work_dir "stack" ["path", "--ghc-package-path"]
   let split_pkgs = concatMap splitSearchPath pkg_args
