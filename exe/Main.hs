@@ -9,7 +9,6 @@ import qualified Control.Exception as E
 import Control.Monad ( forM )
 import Data.Typeable (Typeable)
 import Data.Version (showVersion)
-import Data.Void
 import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
