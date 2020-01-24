@@ -1,0 +1,10 @@
+cradle:
+  multi:
+    - path: "./src"
+      config: { cradle: {other: {cabal-helper: {stack: } } } }
+    - path: "./input"
+      config: { cradle: {other: {cabal-helper: {cabal: } } } }
+    - path: "./test"
+      config: { cradle: {cabal: {component: "test"}} }
+    - path: "."
+      config: { cradle: { none: } }

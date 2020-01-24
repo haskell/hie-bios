@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, LambdaCase, ScopedTypeVariables #-}
+{-# LANGUAGE DeriveDataTypeable, LambdaCase #-}
 
 module Main where
 
@@ -9,7 +9,6 @@ import qualified Control.Exception as E
 import Control.Monad ( forM )
 import Data.Typeable (Typeable)
 import Data.Version (showVersion)
-import Data.Void
 import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
@@ -59,7 +58,7 @@ main = flip E.catches handlers $ do
     hSetEncoding stdout utf8
     args <- getArgs
     cwd <- getCurrentDirectory
-    cradle :: Cradle Void <-
+    cradle <-
         -- find cradle does a takeDirectory on the argument, so make it into a file
         findCradle (cwd </> "File.hs") >>= \case
           Just yaml -> loadCradle yaml

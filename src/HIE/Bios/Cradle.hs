@@ -4,6 +4,7 @@
 module HIE.Bios.Cradle (
       findCradle
     , loadCradle
+    , loadCustomCradle
     , loadImplicitCradle
     , defaultCradle
     , isCabalCradle
@@ -17,6 +18,8 @@ module HIE.Bios.Cradle (
   ) where
 
 import Control.Exception (handleJust)
+import qualified Data.Yaml as Yaml
+import Data.Void
 import System.Process
 import System.Exit
 import HIE.Bios.Types hiding (ActionName(..))
@@ -59,38 +62,41 @@ findCradle wfile = do
     runMaybeT (yamlConfig wdir)
 
 -- | Given root\/hie.yaml load the Cradle.
-loadCradle :: FilePath -> IO (Cradle a)
-loadCradle = loadCradleWithOpts Types.defaultCradleOpts
+loadCradle :: FilePath -> IO (Cradle Void)
+loadCradle = loadCradleWithOpts Types.defaultCradleOpts absurd
+
+loadCustomCradle :: (Show a, Show b, Yaml.FromJSON b) => (b -> Cradle a) -> FilePath -> IO (Cradle a)
+loadCustomCradle = loadCradleWithOpts Types.defaultCradleOpts
 
 -- | Given root\/foo\/bar.hs, load an implicit cradle
-loadImplicitCradle :: FilePath -> IO (Cradle a)
+loadImplicitCradle :: Show a => FilePath -> IO (Cradle a)
 loadImplicitCradle wfile = do
   let wdir = takeDirectory wfile
   cfg <- runMaybeT (implicitConfig wdir)
   return $ case cfg of
-    Just bc -> getCradle bc
+    Just bc -> getCradle absurd bc
     Nothing -> defaultCradle wdir
 
 -- | Finding 'Cradle'.
 --   Find a cabal file by tracing ancestor directories.
 --   Find a sandbox according to a cabal sandbox config
 --   in a cabal directory.
-loadCradleWithOpts :: CradleOpts -> FilePath -> IO (Cradle a)
-loadCradleWithOpts _copts wfile = do
+loadCradleWithOpts :: (Show b, Yaml.FromJSON b) => CradleOpts -> (b -> Cradle a) -> FilePath -> IO (Cradle a)
+loadCradleWithOpts _copts buildCustomCradle wfile = do
     cradleConfig <- readCradleConfig wfile
-    return $ getCradle (cradleConfig, takeDirectory wfile)
+    return $ getCradle buildCustomCradle (cradleConfig, takeDirectory wfile)
 
-getCradle :: (CradleConfig, FilePath) -> Cradle a
-getCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
+getCradle :: (Show b) => (b -> Cradle a) -> (CradleConfig b, FilePath) -> Cradle a
+getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
     Cabal mc -> cabalCradle wdir mc
     CabalMulti ms ->
-      getCradle $
+      getCradle buildCustomCradle $
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Cabal (Just c))) | (p, c) <- ms])
         , wdir)
     Stack mc -> stackCradle wdir mc
     StackMulti ms ->
-      getCradle $
+      getCradle buildCustomCradle $
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Stack (Just c))) | (p, c) <- ms])
         , wdir)
@@ -99,7 +105,8 @@ getCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
     Bios bios deps  -> biosCradle wdir bios deps
     Direct xs -> directCradle wdir xs
     None      -> noneCradle wdir
-    Multi ms  -> multiCradle wdir ms
+    Multi ms  -> multiCradle buildCustomCradle wdir ms
+    Other val -> buildCustomCradle val
     where
       cradleDeps = cradleDependencies cc
 
@@ -113,12 +120,12 @@ addCradleDeps deps c =
             (fmap (\(ComponentOptions os' ds) -> ComponentOptions os' (ds `union` deps)))
               <$> runCradle ca l fp }
 
-implicitConfig :: FilePath -> MaybeT IO (CradleConfig, FilePath)
+implicitConfig :: FilePath -> MaybeT IO (CradleConfig a, FilePath)
 implicitConfig fp = do
   (crdType, wdir) <- implicitConfig' fp
   return (CradleConfig [] crdType, wdir)
 
-implicitConfig' :: FilePath -> MaybeT IO (CradleType, FilePath)
+implicitConfig' :: FilePath -> MaybeT IO (CradleType a, FilePath)
 implicitConfig' fp = (\wdir ->
          (Bios (wdir </> ".hie-bios") Nothing, wdir)) <$> biosWorkDir fp
   --   <|> (Obelisk,) <$> obeliskWorkDir fp
@@ -135,9 +142,9 @@ yamlConfig fp = do
 yamlConfigDirectory :: FilePath -> MaybeT IO FilePath
 yamlConfigDirectory = findFileUpwards (configFileName ==)
 
-readCradleConfig :: FilePath -> IO CradleConfig
+readCradleConfig :: Yaml.FromJSON b => FilePath -> IO (CradleConfig b)
 readCradleConfig yamlHie = do
-  cfg  <- liftIO $ readConfig yamlHie
+  cfg  <- liftIO $ readConfig' yamlHie
   return (cradle cfg)
 
 configFileName :: FilePath
@@ -215,13 +222,13 @@ noneCradle cur_dir =
 ---------------------------------------------------------------
 -- The multi cradle selects a cradle based on the filepath
 
-multiCradle :: FilePath -> [(FilePath, CradleConfig)] -> Cradle a
-multiCradle cur_dir cs =
+multiCradle :: (Show b) => (b -> Cradle a) -> FilePath -> [(FilePath, CradleConfig b)] -> Cradle a
+multiCradle buildCustomCradle cur_dir cs =
   Cradle
     { cradleRootDir  = cur_dir
     , cradleOptsProg = CradleAction
         { actionName = multiActionName
-        , runCradle  = \l fp -> canonicalizePath fp >>= multiAction cur_dir cs l
+        , runCradle  = \l fp -> canonicalizePath fp >>= multiAction buildCustomCradle cur_dir cs l
         }
     }
   where
@@ -249,24 +256,27 @@ multiCradle cur_dir cs =
       None -> True
       _    -> False
 
-multiAction :: FilePath
-            -> [(FilePath, CradleConfig)]
+multiAction ::  forall b a. (Show b)
+            => (b -> Cradle a)
+            -> FilePath
+            -> [(FilePath, CradleConfig b)]
             -> LoggingFunction
             -> FilePath
             -> IO (CradleLoadResult ComponentOptions)
-multiAction cur_dir cs l cur_fp = selectCradle =<< canonicalizeCradles
+multiAction buildCustomCradle cur_dir cs l cur_fp =
+    selectCradle =<< canonicalizeCradles
 
   where
     err_msg = ["Multi Cradle: No prefixes matched"
-                      , "pwd: " ++ cur_dir
-                      , "filepath" ++ cur_fp
-                      , "prefixes:"
-                      ] ++ [show (pf, cradleType cc) | (pf, cc) <- cs]
+              , "pwd: " ++ cur_dir
+              , "filepath" ++ cur_fp
+              , "prefixes:"
+              ] ++ [show (pf, cradleType cc) | (pf, cc) <- cs]
 
     -- Canonicalize the relative paths present in the multi-cradle and
     -- also order the paths by most specific first. In the cradle selection
     -- function we want to choose the most specific cradle possible.
-    canonicalizeCradles :: IO [(FilePath, CradleConfig)]
+    canonicalizeCradles :: IO [(FilePath, CradleConfig b)]
     canonicalizeCradles =
       sortOn (Down . fst)
         <$> mapM (\(p, c) -> (,c) <$> (canonicalizePath (cur_dir </> p))) cs
@@ -275,7 +285,10 @@ multiAction cur_dir cs l cur_fp = selectCradle =<< canonicalizeCradles
       return (CradleFail (CradleError ExitSuccess err_msg))
     selectCradle ((p, c): css) =
         if p `isPrefixOf` cur_fp
-          then runCradle (cradleOptsProg (getCradle (c, cur_dir))) l cur_fp
+          then runCradle
+                  (cradleOptsProg (getCradle buildCustomCradle (c, cur_dir)))
+                  l
+                  cur_fp
           else selectCradle css
 
 
