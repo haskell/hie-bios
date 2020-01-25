@@ -90,4 +90,4 @@ data ComponentOptions = ComponentOptions {
   -- This is useful, because, sometimes, adding specific files
   -- changes the options that a Cradle may return, thus, needs reload
   -- as soon as these files are created.
-  } deriving (Eq, Show)
+  } deriving (Eq, Ord, Show)
