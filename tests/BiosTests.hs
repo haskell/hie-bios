@@ -52,6 +52,10 @@ main = do
                          $  testDirectory isStackCradle "./tests/projects/multi-stack/app/Main.hs"
                          >> testDirectory isStackCradle "./tests/projects/multi-stack/src/Lib.hs"
            ]
+      , testGroup "Implicit cradle tests" $
+        [ testCaseSteps "implicit-cabal" $ testImplicitCradle "./tests/projects/implicit-cabal/Main.hs" Cabal
+        , testCaseSteps "implicit-stack" $ testImplicitCradle "./tests/projects/implicit-stack/Main.hs" Stack
+        ]
       ]
 
 linuxExlusiveTestCases :: [TestTree]
@@ -68,6 +72,11 @@ testDirectory cradlePred fp step = do
           Nothing -> loadImplicitCradle a_fp
   when (not $ cradlePred crd) $ error $ "Cradle is incorrect: " ++ show (actionName $ cradleOptsProg crd)
   step "Initialise Flags"
+  testLoadFile crd a_fp step
+
+testLoadFile :: Cradle a -> FilePath -> (String -> IO ()) -> IO ()
+testLoadFile crd fp step = do
+  a_fp <- canonicalizePath fp
   withCurrentDirectory (cradleRootDir crd) $
     withGHC' $ do
       let relFp = makeRelative (cradleRootDir crd) a_fp
@@ -96,6 +105,16 @@ findCradleForModule fp expected' step = do
     ++ ", Actual: "
     ++ show mcfg
 
+testImplicitCradle :: FilePath -> ActionName Void -> (String -> IO ()) -> IO ()
+testImplicitCradle fp' expectedActionName step = do
+  fp <- canonicalizePath fp'
+  step "Inferring implicit cradle"
+  crd <- loadImplicitCradle fp :: IO (Cradle Void)
+  unless (actionName (cradleOptsProg crd) == expectedActionName)
+    $ error $ "Expected cradle: " <> show expectedActionName
+    <> "\n, Actual: " <> show (actionName (cradleOptsProg crd))
+  step "Initialize flags"
+  testLoadFile crd fp step
 
 writeStackYamlFiles :: IO ()
 writeStackYamlFiles = do
@@ -107,6 +126,7 @@ stackProjects :: [FilePath]
 stackProjects =
   [ "tests" </> "projects" </> "multi-stack"
   , "tests" </> "projects" </> "simple-stack"
+  , "tests" </> "projects" </> "implicit-stack"
   ]
 
 stackYaml :: String -> String
