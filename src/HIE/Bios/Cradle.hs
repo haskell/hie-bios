@@ -607,7 +607,8 @@ rulesHaskellAction work_dir fp = do
 obeliskWorkDir :: FilePath -> MaybeT IO FilePath
 obeliskWorkDir fp = do
   -- Find a possible root which will contain the cabal.project
-  wdir <- findFileUpwards (== "cabal.project") fp -- Check for the ".obelisk" folder in this directory
+  wdir <- findFileUpwards (== "cabal.project") fp
+  -- Check for the ".obelisk" folder in this directory
   check <- liftIO $ doesDirectoryExist (wdir </> ".obelisk")
   unless check (fail "Not obelisk dir")
   return wdir
