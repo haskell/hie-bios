@@ -55,6 +55,9 @@ main = do
       , testGroup "Implicit cradle tests" $
         [ testCaseSteps "implicit-cabal" $ testImplicitCradle "./tests/projects/implicit-cabal/Main.hs" Cabal
         , testCaseSteps "implicit-stack" $ testImplicitCradle "./tests/projects/implicit-stack/Main.hs" Stack
+        , testCaseSteps "implicit-stack-multi"
+            $ testImplicitCradle "./tests/projects/implicit-stack-multi/Main.hs" Stack
+            >> testImplicitCradle "./tests/projects/implicit-stack-multi/other-package/Main.hs" Stack
         ]
       ]
 
@@ -127,6 +130,7 @@ stackProjects =
   [ "tests" </> "projects" </> "multi-stack"
   , "tests" </> "projects" </> "simple-stack"
   , "tests" </> "projects" </> "implicit-stack"
+  , "tests" </> "projects" </> "implicit-stack-multi"
   ]
 
 stackYaml :: String -> String
