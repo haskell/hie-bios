@@ -46,7 +46,8 @@ main = do
             unless (yamlFile == Nothing) (error "Didn't respect stop file")
         , testCaseSteps "loadImplicitCradle" $ \_ -> do
             crd <- loadImplicitCradle "./tests/projects/stop-file/sub-package/Main.hs"  :: IO (Cradle Void)
-            unless (actionName (cradleOptsProg crd) == Cabal) (error "Didn't respect stop file")
+            unless (actionName (cradleOptsProg crd) == Cabal) $
+              error $ "Didn't respect stop file: " <> show crd
         ]
       , testGroup "Loading tests"
         $ linuxExlusiveTestCases
