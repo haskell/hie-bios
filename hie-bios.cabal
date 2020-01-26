@@ -70,6 +70,14 @@ Extra-Source-Files:     ChangeLog
                         tests/projects/simple-stack/cabal.project
                         tests/projects/simple-stack/hie.yaml
                         tests/projects/simple-stack/simple-stack.cabal
+                        tests/projects/implicit-cabal/Setup.hs
+                        tests/projects/implicit-cabal/cabal.project
+                        tests/projects/implicit-cabal/implicit-cabal.cabal
+                        tests/projects/implicit-cabal/Main.hs
+                        tests/projects/implicit-stack/Setup.hs
+                        tests/projects/implicit-stack/implicit-stack.cabal
+                        tests/projects/implicit-stack/stack.yaml
+                        tests/projects/implicit-stack/Main.hs
 
 
 tested-with: GHC==8.6.5, GHC==8.4.4

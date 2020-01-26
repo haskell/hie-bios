@@ -15,7 +15,6 @@ maintainer:          luke_lau@icloud.com
 -- copyright:
 -- category:
 build-type:          Simple
-extra-source-files:  CHANGELOG.md
 
 executable implicit-cabal
   main-is:             Main.hs
