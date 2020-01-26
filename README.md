@@ -308,6 +308,30 @@ This is useful if you are designing a new build system or the other modes
 fail to setup the correct session for some reason. For example, this is
 how hadrian (GHC's build system) is integrated into `hie-bios`.
 
+
+## .hie-bios.stop files
+
+Say you have a setup like
+
+```
+- hie.yaml
+- foo.cabal
+- subdir
+  - bar.cabal
+```
+
+Calling `loadImplicitCradle` or `findCradle` will search upwards and find the
+`foo.cabal` and `hie.yaml` files. Inserting a ".hie-bios.stop" file will prevent
+this.
+
+```
+- hie.yaml
+- foo.cabal
+- subdir
+  - .hie-bios.stop
+  - bar.cabal
+```
+
 ## Supporting Bazel and Obelisk
 
 In previous versions of `hie-bios` there was also support for projects using `rules_haskell` and `obelisk`.

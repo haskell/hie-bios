@@ -606,8 +606,7 @@ rulesHaskellAction work_dir fp = do
 obeliskWorkDir :: FilePath -> MaybeT IO FilePath
 obeliskWorkDir fp = do
   -- Find a possible root which will contain the cabal.project
-  wdir <- findFileUpwards (== "cabal.project") fp
-  -- Check for the ".obelisk" folder in this directory
+  wdir <- findFileUpwards (== "cabal.project") fp -- Check for the ".obelisk" folder in this directory
   check <- liftIO $ doesDirectoryExist (wdir </> ".obelisk")
   unless check (fail "Not obelisk dir")
   return wdir
@@ -640,6 +639,7 @@ obeliskAction work_dir _fp = do
 
 -- | Searches upwards for the first directory containing a file to match
 -- the predicate.
+-- Stops searching upwards if there is a ".hie-bios.stop" file in the directory.
 findFileUpwards :: (FilePath -> Bool) -> FilePath -> MaybeT IO FilePath
 findFileUpwards p dir = do
   cnts <-
@@ -650,9 +650,10 @@ findFileUpwards p dir = do
         pure
         (findFile p dir)
 
+  stopFileExists <- liftIO $ doesFileExist (dir </> ".hie-bios.stop")
   case cnts of
-    [] | dir' == dir -> fail "No cabal files"
-            | otherwise   -> findFileUpwards p dir'
+    [] | dir' == dir || stopFileExists -> fail "No cabal files"
+       | otherwise                     -> findFileUpwards p dir'
     _ : _ -> return dir
   where dir' = takeDirectory dir
 
