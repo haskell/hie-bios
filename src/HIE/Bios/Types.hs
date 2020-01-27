@@ -37,7 +37,7 @@ data Cradle a = Cradle {
   -- | The action which needs to be executed to get the correct
   -- command line arguments.
   , cradleOptsProg   :: CradleAction a
-  } deriving (Show)
+  } deriving (Show, Functor)
 
 type LoggingFunction = String -> IO ()
 
@@ -50,7 +50,7 @@ data ActionName a
   | Direct
   | None
   | Other a
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Functor)
 
 data CradleAction a = CradleAction {
                       actionName :: ActionName a
@@ -58,6 +58,7 @@ data CradleAction a = CradleAction {
                       , runCradle :: LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
                       }
+  deriving (Functor)
 
 instance Show a => Show (CradleAction a) where
   show CradleAction { actionName = name } = "CradleAction: " ++ show name
