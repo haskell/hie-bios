@@ -64,7 +64,7 @@ main = do
 linuxExlusiveTestCases :: [TestTree]
 linuxExlusiveTestCases = [ testCaseSteps "simple-bios" $ testDirectory isBiosCradle "./tests/projects/simple-bios/B.hs" | not isWindows ]
 
-testDirectory :: (Cradle Void -> Bool) -> FilePath -> (String -> IO ()) -> IO ()
+testDirectory :: (Cradle () -> Bool) -> FilePath -> (String -> IO ()) -> IO ()
 testDirectory cradlePred fp step = do
   a_fp <- canonicalizePath fp
   step $ "Finding Cradle for: " ++ a_fp

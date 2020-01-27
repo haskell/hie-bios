@@ -60,7 +60,7 @@ findCradle wfile = do
     runMaybeT (yamlConfig wdir)
 
 -- | Given root\/hie.yaml load the Cradle.
-loadCradle :: FilePath -> IO (Cradle Void)
+loadCradle :: FilePath -> IO (Cradle ())
 loadCradle = loadCradleWithOpts Types.defaultCradleOpts absurd
 
 loadCustomCradle :: (Show a, Show b, Yaml.FromJSON b) => (b -> Cradle a) -> FilePath -> IO (Cradle a)
