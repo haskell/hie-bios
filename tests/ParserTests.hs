@@ -63,7 +63,7 @@ assertParser fp cc = do
 
 assertCustomParser :: FilePath -> Config CabalHelper -> Assertion
 assertCustomParser fp cc = do
-  conf <- readConfig' (configDir </> fp)
+  conf <- readConfig (configDir </> fp)
   (conf == cc) @? (unlines [("Parser Failed: " ++ fp)
                           , "Expected: " ++ show cc
                           , "Actual: " ++ show conf ])

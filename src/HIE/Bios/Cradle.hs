@@ -142,7 +142,7 @@ yamlConfigDirectory = findFileUpwards (configFileName ==)
 
 readCradleConfig :: Yaml.FromJSON b => FilePath -> IO (CradleConfig b)
 readCradleConfig yamlHie = do
-  cfg  <- liftIO $ readConfig' yamlHie
+  cfg  <- liftIO $ readConfig yamlHie
   return (cradle cfg)
 
 configFileName :: FilePath
