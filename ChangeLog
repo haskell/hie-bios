@@ -1,3 +1,22 @@
+2020-01-29 - 0.4.0
+
+	* Return CompilerOptions in initialization (#130)
+	* Implement hook into config parser (#131)
+	* Enable GHC 8.8.1 windows ci (#128)
+	* Catch permission errors in cradle discovery (#127)
+	* Add explicit cradle predicates and multi cradle depend on its cradles (#119)
+	* Fix outdated direct cradle in README (#124)
+	* Pass filepath to cabal v2-repl when getting flags (#123)
+	* CPP for GHC 8.10 compatibility (#134)
+	* Derive Ord for ComponentOptions (#133)
+	* Lower the required version of the GHC dependency (#138)
+	* Add tests for implicit cradles (#135)
+	* Add Functor instance for Cradle and ActionName (#140)
+	* Remove Show instance from public API (#146)
+	* Add Show instance for CradleLoadResult (#145)
+	* Typo in debug message (#144)
+	* Add lower bound for aeson and clean-up API (#142)
+
 2019-12-19 - 0.3.2
 
 	* Compile windows wrapper script in a a more appropiate directory. (#109)
