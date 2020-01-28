@@ -3,13 +3,11 @@
 -- | Logic and datatypes for parsing @hie.yaml@ files.
 module HIE.Bios.Config(
     readConfig,
-    readConfig',
     Config(..),
     CradleConfig(..),
     CradleType(..)
     ) where
 
-import           Data.Void
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as Map
@@ -169,16 +167,10 @@ instance FromJSON a => FromJSON (Config a) where
     parseJSON o = Config <$> parseJSON o
 
 
--- | Decode given file to a 'Config Void' value.
--- If the contents of the file is not a valid 'Config Void',
--- an 'Control.Exception.IOException' is thrown.
-readConfig :: FilePath -> IO (Config Void)
-readConfig = decodeFileThrow
-
 -- | Decode given file to a 'Config a' value.
 -- Type variable 'a' can be used to extend the 'hie.yaml' file format
 -- to extend configuration in the user-library.
 -- If the contents of the file is not a valid 'Config a',
 -- an 'Control.Exception.IOException' is thrown.
-readConfig' :: FromJSON a => FilePath -> IO (Config a)
-readConfig' = decodeFileThrow
+readConfig :: FromJSON a => FilePath -> IO (Config a)
+readConfig = decodeFileThrow

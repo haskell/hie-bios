@@ -109,7 +109,8 @@ Library
   Other-Modules:        Paths_hie_bios
   autogen-modules:      Paths_hie_bios
   Build-Depends:
-                        base >= 4.8 && < 5,
+                        base                 >= 4.8 && < 5,
+                        aeson                >= 1.4.1 && < 2,
                         base16-bytestring    >= 0.1.1 && < 0.2,
                         bytestring           >= 0.10.8 && < 0.11,
                         deepseq              >= 1.4.3 && < 1.5,
