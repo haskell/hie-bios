@@ -70,7 +70,7 @@ data CradleLoadResult r
   = CradleSuccess r -- ^ The cradle succeeded and returned these options.
   | CradleFail CradleError -- ^ We tried to load the cradle and it failed.
   | CradleNone -- ^ No attempt was made to load the cradle.
-  deriving (Functor)
+  deriving (Functor, Show)
 
 
 data CradleError = CradleError ExitCode [String] deriving (Show)
