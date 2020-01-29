@@ -486,14 +486,15 @@ stackCradleDependencies wdir = do
   return $ cabalFiles ++ ["package.yaml", "stack.yaml"]
 
 stackAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
-stackAction work_dir mc l fp = do
+stackAction work_dir mc l _fp = do
   let ghcProcArgs = ("stack", ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
   wrapper_fp <- getCabalWrapperTool ghcProcArgs work_dir
 
   (ex1, _stdo, stde, args) <-
     readProcessWithOutputFile l Nothing work_dir
-            "stack" $ ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp, fromMaybe fp mc]
+            "stack" $ ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
+                      ++ [ comp | Just comp <- [mc] ]
   (ex2, pkg_args, stdr, _) <-
     readProcessWithOutputFile l Nothing work_dir "stack" ["path", "--ghc-package-path"]
   let split_pkgs = concatMap splitSearchPath pkg_args
