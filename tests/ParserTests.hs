@@ -7,6 +7,7 @@ import HIE.Bios.Config
 import qualified Data.HashMap.Strict as Map
 import Data.Void
 import Data.Yaml
+import qualified Data.Text as T
 import System.FilePath
 import Control.Applicative ( (<|>) )
 
@@ -44,12 +45,14 @@ main = defaultMain $
                                                                     StackMulti [("./src", "lib:hie-bios")
                                                                               ,("./tests", "parser-tests")]))]))
 
-    assertCustomParser "ch-cabal.yaml" (noDeps (Other CabalHelperCabal))
-    assertCustomParser "ch-stack.yaml" (noDeps (Other CabalHelperStack))
+    assertCustomParser "ch-cabal.yaml"
+      (noDeps (Other CabalHelperCabal $ simpleCabalHelperYaml "cabal"))
+    assertCustomParser "ch-stack.yaml"
+      (noDeps (Other CabalHelperStack $ simpleCabalHelperYaml "stack"))
     assertCustomParser "multi-ch.yaml"
       (noDeps (Multi
-        [ ("./src", CradleConfig [] (Other CabalHelperStack))
-        , ("./input", CradleConfig [] (Other CabalHelperCabal))
+        [ ("./src", CradleConfig [] (Other CabalHelperStack $ simpleCabalHelperYaml "stack"))
+        , ("./input", CradleConfig [] (Other CabalHelperCabal $ simpleCabalHelperYaml "cabal"))
         , ("./test", CradleConfig [] (Cabal (Just "test")))
         , (".", CradleConfig [] None)
         ]))
@@ -91,3 +94,12 @@ instance FromJSON CabalHelper where
       chStack _ = fail "CH: not a stack cradle."
 
   parseJSON _ = fail "Not a valid cabal-helper specification"
+
+simpleCabalHelperYaml :: T.Text -> Value
+simpleCabalHelperYaml tool =
+  object
+    [ ( "cabal-helper", object
+        [ (tool, Null)
+        ]
+      )
+    ]
