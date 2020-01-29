@@ -63,7 +63,7 @@ findCradle wfile = do
 loadCradle :: FilePath -> IO (Cradle Void)
 loadCradle = loadCradleWithOpts Types.defaultCradleOpts absurd
 
-loadCustomCradle :: (Show a, Show b, Yaml.FromJSON b) => (b -> Cradle a) -> FilePath -> IO (Cradle a)
+loadCustomCradle :: Yaml.FromJSON b => (b -> Cradle a) -> FilePath -> IO (Cradle a)
 loadCustomCradle = loadCradleWithOpts Types.defaultCradleOpts
 
 -- | Given root\/foo\/bar.hs, load an implicit cradle
@@ -79,12 +79,12 @@ loadImplicitCradle wfile = do
 --   Find a cabal file by tracing ancestor directories.
 --   Find a sandbox according to a cabal sandbox config
 --   in a cabal directory.
-loadCradleWithOpts :: (Show b, Yaml.FromJSON b) => CradleOpts -> (b -> Cradle a) -> FilePath -> IO (Cradle a)
+loadCradleWithOpts :: (Yaml.FromJSON b) => CradleOpts -> (b -> Cradle a) -> FilePath -> IO (Cradle a)
 loadCradleWithOpts _copts buildCustomCradle wfile = do
     cradleConfig <- readCradleConfig wfile
     return $ getCradle buildCustomCradle (cradleConfig, takeDirectory wfile)
 
-getCradle :: (Show b) => (b -> Cradle a) -> (CradleConfig b, FilePath) -> Cradle a
+getCradle :: (b -> Cradle a) -> (CradleConfig b, FilePath) -> Cradle a
 getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
     Cabal mc -> cabalCradle wdir mc
     CabalMulti ms ->
@@ -104,7 +104,7 @@ getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleT
     Direct xs -> directCradle wdir xs
     None      -> noneCradle wdir
     Multi ms  -> multiCradle buildCustomCradle wdir ms
-    Other val -> buildCustomCradle val
+    Other a _ -> buildCustomCradle a
     where
       cradleDeps = cradleDependencies cc
 
@@ -220,7 +220,7 @@ noneCradle cur_dir =
 ---------------------------------------------------------------
 -- The multi cradle selects a cradle based on the filepath
 
-multiCradle :: (Show b) => (b -> Cradle a) -> FilePath -> [(FilePath, CradleConfig b)] -> Cradle a
+multiCradle :: (b -> Cradle a) -> FilePath -> [(FilePath, CradleConfig b)] -> Cradle a
 multiCradle buildCustomCradle cur_dir cs =
   Cradle
     { cradleRootDir  = cur_dir
@@ -254,8 +254,8 @@ multiCradle buildCustomCradle cur_dir cs =
       None -> True
       _    -> False
 
-multiAction ::  forall b a. (Show b)
-            => (b -> Cradle a)
+multiAction ::  forall b a
+            . (b -> Cradle a)
             -> FilePath
             -> [(FilePath, CradleConfig b)]
             -> LoggingFunction

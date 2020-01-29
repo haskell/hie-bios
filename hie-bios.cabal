@@ -156,6 +156,7 @@ test-suite parser-tests
       hie-bios,
       tasty,
       tasty-hunit,
+      text,
       unordered-containers,
       yaml
 

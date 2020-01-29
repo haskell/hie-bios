@@ -1,5 +1,7 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE DeriveFunctor #-}
 -- | Logic and datatypes for parsing @hie.yaml@ files.
 module HIE.Bios.Config(
     readConfig,
@@ -14,6 +16,17 @@ import qualified Data.HashMap.Strict as Map
 import           Data.Foldable (foldrM)
 import           Data.Yaml
 
+-- | Configuration that can be used to load a 'Cradle'.
+-- A configuration has roughly the following form:
+--
+-- @
+-- cradle:
+--   cabal:
+--     component: "lib:hie-bios"
+-- @
+newtype Config a = Config { cradle :: CradleConfig a }
+    deriving (Show, Eq, Functor)
+
 data CradleConfig a =
     CradleConfig
         { cradleDependencies :: [FilePath]
@@ -24,7 +37,7 @@ data CradleConfig a =
         -- ^ Type of the cradle to use. Actions to obtain
         -- compiler flags from are dependant on this field.
         }
-        deriving (Show, Eq)
+        deriving (Show, Eq, Functor)
 
 data CradleType a
     = Cabal { component :: Maybe String }
@@ -47,12 +60,23 @@ data CradleType a
     | Direct { arguments :: [String] }
     | None
     | Multi [ (FilePath, CradleConfig a) ]
-    | Other { otherConfig :: a }
-    deriving (Show, Eq)
+    | Other { otherConfig :: a, originalYamlValue :: Value }
+    deriving (Eq, Functor)
 
 instance FromJSON a => FromJSON (CradleType a) where
     parseJSON (Object o) = parseCradleType o
     parseJSON _ = fail "Not a known cradle type. Possible are: cabal, stack, bios, direct, default, none, multi"
+
+instance Show (CradleType a) where
+    show (Cabal comp) = "Cabal {component = " ++ show comp ++ "}"
+    show (CabalMulti a) = "CabalMulti " ++ show a
+    show (Stack comp) = "Stack {component = " ++ show comp ++ "}"
+    show (StackMulti a) = "StackMulti " ++ show a
+    show Bios { prog, depsProg } = "Bios {prog = " ++ show prog ++ ", depsProg = " ++ show depsProg ++ "}"
+    show (Direct args) = "Direct {arguments = " ++ show args ++ "}"
+    show None = "None"
+    show (Multi a) = "Multi " ++ show a
+    show (Other _ val) = "Other {originalYamlValue = " ++ show val ++ "}"
 
 parseCradleType :: FromJSON a => Object -> Parser (CradleType a)
 parseCradleType o
@@ -64,7 +88,7 @@ parseCradleType o
     | Just val <- Map.lookup "direct" o = parseDirect val
     | Just _val <- Map.lookup "none" o = return None
     | Just val  <- Map.lookup "multi" o = parseMulti val
-    | Just val  <- Map.lookup "other" o = Other <$> parseJSON val
+    | Just val  <- Map.lookup "other" o = Other <$> parseJSON val <*> pure val
 parseCradleType o = fail $ "Unknown cradle type: " ++ show o
 
 parseStackOrCabal
@@ -136,17 +160,6 @@ parsePath (Object v)
   , Just c <- Map.lookup "config" v
   = (T.unpack path,) <$> parseJSON c
 parsePath o = fail ("Multi component is expected to be an object." ++ show o)
-
--- | Configuration that can be used to load a 'Cradle'.
--- A configuration has roughly the following form:
---
--- @
--- cradle:
---   cabal:
---     component: "lib:hie-bios"
--- @
-newtype Config a = Config { cradle :: CradleConfig a }
-    deriving (Show, Eq)
 
 instance FromJSON a => FromJSON (CradleConfig a) where
     parseJSON (Object val) = do
