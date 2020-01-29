@@ -267,7 +267,7 @@ multiAction buildCustomCradle cur_dir cs l cur_fp =
   where
     err_msg = ["Multi Cradle: No prefixes matched"
               , "pwd: " ++ cur_dir
-              , "filepath" ++ cur_fp
+              , "filepath: " ++ cur_fp
               , "prefixes:"
               ] ++ [show (pf, cradleType cc) | (pf, cc) <- cs]
 
