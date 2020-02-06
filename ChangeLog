@@ -1,3 +1,6 @@
+NEXT
+	* Add getCompilerOptionsWithLogger convenience function.
+
 2020-01-29 - 0.4.0
 
 	* Return CompilerOptions in initialization (#130)
