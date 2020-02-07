@@ -1,4 +1,4 @@
-module HIE.Bios.Flags (getCompilerOptions) where
+module HIE.Bios.Flags (getCompilerOptions, getCompilerOptionsWithLogger, LoggingFunction) where
 
 import HIE.Bios.Types
 import HIE.Bios.Internal.Log
@@ -10,8 +10,16 @@ getCompilerOptions ::
     FilePath -- The file we are loading it because of
     -> Cradle a
     -> IO (CradleLoadResult ComponentOptions)
-getCompilerOptions fp cradle =
-  runCradle (cradleOptsProg cradle) logm fp
+getCompilerOptions =
+  getCompilerOptionsWithLogger logm
+
+getCompilerOptionsWithLogger ::
+  LoggingFunction
+  -> FilePath
+  -> Cradle a
+  -> IO (CradleLoadResult ComponentOptions)
+getCompilerOptionsWithLogger l fp cradle =
+  runCradle (cradleOptsProg cradle) l fp
 
 
 ----------------------------------------------------------------
