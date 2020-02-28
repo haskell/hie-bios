@@ -454,11 +454,18 @@ removeVerbosityOpts = filter ((&&) <$> (/= "-v0") <*> (/= "-w"))
 
 fixImportDirs :: FilePath -> String -> String
 fixImportDirs base_dir arg =
-  if "-i" `isPrefixOf` arg
+  if "-i" `isPrefixOf` arg && not (any (`isPrefixOf` arg) ghcOptionsThatBeginWithI)
     then let dir = drop 2 arg
          in if not (null dir) && isRelative dir then "-i" ++ base_dir </> dir
                               else arg
     else arg
+  where
+    -- If we assume that e.g. "-instantiated-with" means "-i./stanstiated-with",
+    -- GHC gets rather confused!
+    ghcOptionsThatBeginWithI =
+      [ "-ignore-package"
+      , "-instantiated-with"
+      , "-include-pkg-deps" ]
 
 
 cabalWorkDir :: FilePath -> MaybeT IO FilePath
