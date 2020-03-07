@@ -285,7 +285,7 @@ A good guiding specification for this file is that the following command
 should work for any file in your project.
 
 ```
-ghci $(./hie-bios /path/to/foo.hs | tr '\n' ' ') /path/to/foo.hs
+ghci $(./.hie-bios /path/to/foo.hs | tr '\n' ' ') /path/to/foo.hs
 ```
 
 This is useful if you are designing a new build system or the other modes
