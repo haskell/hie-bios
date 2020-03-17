@@ -228,8 +228,8 @@ getTargetsFromGhciScript script = do
   let parseGhciLine = concatMap fst . filter (null . snd) . readP_to_S parser
   return $ concatMap parseGhciLine contents
 
--- |This parser aims to parse targets that are separated by space
--- and filepaths that are encloded by double-quotes.
+-- |This parser aims to parse targets and double-quoted filepaths that are separated by spaces
+-- and prefixed with the literal ":add"
 --
 -- >>> filter (null . snd) $ readP_to_S parser ":add Lib Lib2"
 -- [(["Lib","Lib2"],"")]
