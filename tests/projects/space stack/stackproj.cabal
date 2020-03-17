@@ -1,0 +1,15 @@
+cabal-version:       >=2.0
+name:                stackproj
+version:             0.1.0.0
+author:              Matthew Pickering
+maintainer:          matthewtpickering@gmail.com
+build-type:          Simple
+
+executable exe
+  other-modules: B
+  main-is: A.hs
+  -- other-extensions:
+  build-depends:       base >=4.10 && < 5
+  ghc-options:         -Wall +RTS -A1m -N -RTS
+  -- hs-source-dirs:
+  default-language:    Haskell2010

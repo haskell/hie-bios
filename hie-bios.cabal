@@ -70,6 +70,11 @@ Extra-Source-Files:     ChangeLog
                         tests/projects/simple-stack/cabal.project
                         tests/projects/simple-stack/hie.yaml
                         tests/projects/simple-stack/simple-stack.cabal
+                        "tests/projects/space stack/A.hs"
+                        "tests/projects/space stack/B.hs"
+                        "tests/projects/space stack/Setup.hs"
+                        "tests/projects/space stack/hie.yaml"
+                        "tests/projects/space stack/stackproj.cabal"
                         tests/projects/implicit-cabal/Setup.hs
                         tests/projects/implicit-cabal/cabal.project
                         tests/projects/implicit-cabal/implicit-cabal.cabal
