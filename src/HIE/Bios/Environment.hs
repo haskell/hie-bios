@@ -241,7 +241,7 @@ getTargetsFromGhciScript script = do
 -- [(["Lib","Lib2","Test Exa\"mple.hs"],"")]
 parser :: ReadP [String]
 parser = do
-  _ <- string ":add "
+  _ <- string ":add" <* space1
   scriptword `sepBy` space1
 
 space1 :: ReadP [Char]
