@@ -19,7 +19,9 @@ import qualified Crypto.Hash.SHA1 as H
 import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Base16
 import Data.List
-
+import Data.Char (isSpace)
+import Control.Applicative ((<|>))
+import Text.ParserCombinators.ReadP
 import HIE.Bios.Types
 import HIE.Bios.Ghc.Gap
 
@@ -78,7 +80,7 @@ however, it's not really necessary as
 -}
 
 -- | Prepends the cache directory used by the library to the supplied file path.
--- It tries to use the path under the environment variable `$HIE_BIOS_CACHE_DIR` 
+-- It tries to use the path under the environment variable `$HIE_BIOS_CACHE_DIR`
 -- and falls back to the standard `$XDG_CACHE_HOME/hie-bios` if the former is not set
 getCacheDir :: FilePath -> IO FilePath
 getCacheDir fp = do
@@ -223,7 +225,42 @@ disableOptimisation df = updOptLevel 0 df
 getTargetsFromGhciScript :: FilePath -> IO [String]
 getTargetsFromGhciScript script = do
   contents <- lines <$> readFile script
-  return
-    $ concatMap (tail {- first element is ":add" which we want to remove -}
-                      . words)
-    $ filter (":add" `isPrefixOf`) contents
+  let parseGhciLine = concatMap fst . filter (null . snd) . readP_to_S parser
+  return $ concatMap parseGhciLine contents
+
+-- |This parser aims to parse targets and double-quoted filepaths that are separated by spaces
+-- and prefixed with the literal ":add"
+--
+-- >>> filter (null . snd) $ readP_to_S parser ":add Lib Lib2"
+-- [(["Lib","Lib2"],"")]
+--
+-- >>> filter (null . snd) $ readP_to_S parser ":add Lib Lib2 \"Test Example.hs\""
+-- [(["Lib","Lib2","Test Example.hs"],"")]
+--
+-- >>> filter (null . snd) $ readP_to_S parser ":add Lib Lib2 \"Test Exa\\\"mple.hs\""
+-- [(["Lib","Lib2","Test Exa\"mple.hs"],"")]
+parser :: ReadP [String]
+parser = do
+  _ <- string ":add" <* space1
+  scriptword `sepBy` space1
+
+space1 :: ReadP [Char]
+space1 = many1 (char ' ')
+
+scriptword :: ReadP String
+scriptword = quoted <++ value
+
+-- | A balanced double-quoted string
+quoted :: ReadP String
+quoted = do
+    _ <- char '"'
+    manyTill (escaped '"' <|> anyToken) $ char '"'
+
+escaped :: Char -> ReadP Char
+escaped c = c <$ string ("\\" <> [c])
+
+value :: ReadP String
+value = many1 (satisfy (not . isSpace))
+
+anyToken :: ReadP Char
+anyToken = satisfy $ const True

@@ -51,6 +51,13 @@ main = do
            , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
                          $  testDirectory isStackCradle "./tests/projects/multi-stack/app/Main.hs"
                          >> testDirectory isStackCradle "./tests/projects/multi-stack/src/Lib.hs"
+
+           ,
+           -- Test for special characters in the path for parsing of the ghci-scripts.
+           -- Issue https://github.com/mpickering/hie-bios/issues/162
+           testCaseSteps "space stack"
+                         $  testDirectory isStackCradle "./tests/projects/space stack/A.hs"
+                         >> testDirectory isStackCradle "./tests/projects/space stack/B.hs"
            ]
       , testGroup "Implicit cradle tests" $
         [ testCaseSteps "implicit-cabal" $ testImplicitCradle "./tests/projects/implicit-cabal/Main.hs" Cabal
@@ -129,6 +136,7 @@ stackProjects :: [FilePath]
 stackProjects =
   [ "tests" </> "projects" </> "multi-stack"
   , "tests" </> "projects" </> "simple-stack"
+  , "tests" </> "projects" </> "space stack"
   , "tests" </> "projects" </> "implicit-stack"
   , "tests" </> "projects" </> "implicit-stack-multi"
   ]
