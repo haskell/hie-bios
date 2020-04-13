@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, CPP #-}
-module HIE.Bios.Environment (initSession, getSystemLibDir, getCacheDir, addCmdOpts) where
+module HIE.Bios.Environment (initSession, getSystemLibDir, makeDynFlagsAbsolute, getCacheDir, addCmdOpts) where
 
 import CoreMonad (liftIO)
 import GHC (DynFlags(..), GhcLink(..), HscTarget(..), GhcMonad)
@@ -39,12 +39,13 @@ initSession  ComponentOptions {..} = do
     cache_dir <- liftIO $ getCacheDir opts_hash
     -- Add the user specified options to a fresh GHC session.
     (df', targets) <- addCmdOpts componentOptions df
+    let df'' = makeDynFlagsAbsolute componentRoot df'
     void $ G.setSessionDynFlags
         (disableOptimisation -- Compile with -O0 as we are not going to produce object files.
         $ setIgnoreInterfacePragmas            -- Ignore any non-essential information in interface files such as unfoldings changing.
         $ writeInterfaceFiles (Just cache_dir) -- Write interface files to the cache
         $ setVerbosity 0                       -- Set verbosity to zero just in case the user specified `-vx` in the options.
-        $ setLinkerOptions df'                 -- Set `-fno-code` to avoid generating object files, unless we have to.
+        $ setLinkerOptions df''                 -- Set `-fno-code` to avoid generating object files, unless we have to.
         )
     -- Unset the default log action to avoid output going to stdout.
     unsetLogAction
@@ -123,7 +124,6 @@ addCmdOpts :: (GhcMonad m)
            => [String] -> DynFlags -> m (DynFlags, [G.Target])
 addCmdOpts cmdOpts df1 = do
   (df2, leftovers', _warns) <- G.parseDynamicFlags df1 (map G.noLoc cmdOpts)
-
   -- parse targets from ghci-scripts. Only extract targets that have been ":add"'ed.
   additionalTargets <- concat <$> mapM (liftIO . getTargetsFromGhciScript) (ghciScripts df2)
 
@@ -166,6 +166,19 @@ addCmdOpts cmdOpts df1 = do
     when (interactive_only && packageFlagsChanged idflags1 idflags0) $ do
        liftIO $ hPutStrLn stderr "cannot set package flags with :seti; use :set"
     -}
+
+-- | Make filepaths in the given 'DynFlags' absolute.
+-- This makes the 'DynFlags' independent of the current working directory.
+makeDynFlagsAbsolute :: FilePath -> DynFlags -> DynFlags
+makeDynFlagsAbsolute work_dir df =
+  mapOverIncludePaths (prependIfNotAbsolute work_dir)
+  $ df
+    { importPaths = map (prependIfNotAbsolute work_dir) (importPaths df)
+    }
+  where
+    prependIfNotAbsolute wdir f
+      | isAbsolute f = f
+      | otherwise = wdir </> f
 
 -- partition_args, along with some of the other code in this file,
 -- was copied from ghc/Main.hs

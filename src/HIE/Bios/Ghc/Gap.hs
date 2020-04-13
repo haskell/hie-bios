@@ -8,6 +8,7 @@ module HIE.Bios.Ghc.Gap (
   , getTyThing
   , fixInfo
   , getModSummaries
+  , mapOverIncludePaths
   , LExpression
   , LBinding
   , LPattern
@@ -20,7 +21,7 @@ module HIE.Bios.Ghc.Gap (
   , unsetLogAction
   ) where
 
-import DynFlags (DynFlags)
+import DynFlags (DynFlags, includePaths)
 import GHC(LHsBind, LHsExpr, LPat, Type, ModSummary, ModuleGraph, HscEnv, setLogAction, GhcMonad)
 import Outputable (PrintUnqualified, PprStyle, Depth(AllTheWay), mkUserStyle)
 
@@ -46,6 +47,7 @@ import GHC (mgModSummaries, mapMG)
 import GHC.Hs.Extension (GhcTc)
 import GHC.Hs.Expr (MatchGroup, MatchGroupTc(..), mg_ext)
 #elif __GLASGOW_HASKELL__ >= 806
+import DynFlags (IncludeSpecs(..))
 import HsExtension (GhcTc)
 import HsExpr (MatchGroup, MatchGroupTc(..))
 import GHC (mg_ext)
@@ -89,6 +91,20 @@ getTyThing (t,_,_,_,_) = t
 fixInfo :: (a, b, c, d, e) -> (a, b, c, d)
 fixInfo (t,f,cs,fs,_) = (t,f,cs,fs)
 #endif
+
+----------------------------------------------------------------
+
+mapOverIncludePaths :: (FilePath -> FilePath) -> DynFlags -> DynFlags
+mapOverIncludePaths f df = df
+  { includePaths = 
+#if __GLASGOW_HASKELL__ > 804
+      IncludeSpecs
+          (map f $ includePathsQuote  (includePaths df))
+          (map f $ includePathsGlobal (includePaths df))
+#else
+      map f (includePaths df)
+#endif
+  }
 
 ----------------------------------------------------------------
 

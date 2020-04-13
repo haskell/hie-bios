@@ -35,10 +35,11 @@ debugInfo fp cradle = unlines <$> do
     conf <- findConfig canonFp
     crdl <- findCradle' canonFp
     case res of
-      CradleSuccess (ComponentOptions gopts deps) -> do
+      CradleSuccess (ComponentOptions gopts croot deps) -> do
         mglibdir <- liftIO getSystemLibDir
         return [
             "Root directory:      " ++ rootDir
+          , "Component directory: " ++ croot
           , "GHC options:         " ++ unwords (map quoteIfNeeded gopts)
           , "System libraries:    " ++ fromMaybe "" mglibdir
           , "Config Location:     " ++ conf

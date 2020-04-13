@@ -86,6 +86,7 @@ main = flip E.catches handlers $ do
                                                 ++ "\": " ++ show err
                     CradleSuccess opts ->
                       return $ unlines ["Options: " ++ show (componentOptions opts)
+                                       ,"ComponentDir: " ++ (componentRoot opts)
                                        ,"Dependencies: " ++ show (componentDependencies opts) ]
                     CradleNone -> return "No flags: this component should not be loaded"
         return (unlines res)
