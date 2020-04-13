@@ -81,6 +81,9 @@ instance Exception CradleError where
 -- | Option information for GHC
 data ComponentOptions = ComponentOptions {
     componentOptions  :: [String]  -- ^ Command line options.
+  , componentRoot :: FilePath 
+  -- ^ Root directory of the component. All 'componentOptions' are either 
+  -- absolute, or relative to this directory.
   , componentDependencies :: [FilePath]
   -- ^ Dependencies of a cradle that might change the cradle.
   -- Contains both files specified in hie.yaml as well as

@@ -115,7 +115,7 @@ addCradleDeps deps c =
     addActionDeps :: CradleAction a -> CradleAction a
     addActionDeps ca =
       ca { runCradle = \l fp ->
-            (fmap (\(ComponentOptions os' ds) -> ComponentOptions os' (ds `union` deps)))
+            (fmap (\(ComponentOptions os' dir ds) -> ComponentOptions os' dir (ds `union` deps)))
               <$> runCradle ca l fp }
 
 implicitConfig :: FilePath -> MaybeT IO (CradleConfig a, FilePath)
@@ -200,7 +200,7 @@ defaultCradle cur_dir =
     { cradleRootDir = cur_dir
     , cradleOptsProg = CradleAction
         { actionName = Types.Default
-        , runCradle = \_ _ -> return (CradleSuccess (ComponentOptions [] []))
+        , runCradle = \_ _ -> return (CradleSuccess (ComponentOptions [] cur_dir []))
         }
     }
 
@@ -298,7 +298,7 @@ directCradle wdir args  =
     { cradleRootDir = wdir
     , cradleOptsProg = CradleAction
         { actionName = Types.Direct
-        , runCradle = \_ _ -> return (CradleSuccess (ComponentOptions args []))
+        , runCradle = \_ _ -> return (CradleSuccess (ComponentOptions args wdir []))
         }
     }
 
@@ -343,7 +343,7 @@ biosAction wdir bios bios_deps l fp = do
         -- delimited by newlines.
         -- Execute the bios action and add dependencies of the cradle.
         -- Removes all duplicates.
-  return $ makeCradleResult (ex, std, res) deps
+  return $ makeCradleResult (ex, std, wdir, res) deps
 
 ------------------------------------------------------------------------
 -- Cabal Cradle
@@ -370,7 +370,7 @@ findCabalFiles wdir = do
   return $ filter ((== ".cabal") . takeExtension) dirContent
 
 
-processCabalWrapperArgs :: [String] -> Maybe [String]
+processCabalWrapperArgs :: [String] -> Maybe (FilePath, [String])
 processCabalWrapperArgs args =
     case args of
         (dir: ghc_args) ->
@@ -378,9 +378,8 @@ processCabalWrapperArgs args =
                     removeVerbosityOpts
                     $ removeRTS
                     $ removeInteractive
-                    $ map (fixImportDirs dir)
                     $ ghc_args
-            in Just final_args
+            in Just (dir, final_args)
         _ -> Nothing
 
 -- | GHC process information.
@@ -429,7 +428,7 @@ cabalAction work_dir mc l fp = do
                    , unlines output
                    , unlines stde
                    , unlines args])
-      Just final_args -> pure $ makeCradleResult (ex, stde, final_args) deps
+      Just (componentDir, final_args) -> pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
   where
     -- Need to make relative on Windows, due to a Cabal bug with how it
     -- parses file targets with a C: drive in it
@@ -451,14 +450,6 @@ removeRTS []             = []
 
 removeVerbosityOpts :: [String] -> [String]
 removeVerbosityOpts = filter ((&&) <$> (/= "-v0") <*> (/= "-w"))
-
-fixImportDirs :: FilePath -> String -> String
-fixImportDirs base_dir arg =
-  if "-i" `isPrefixOf` arg
-    then let dir = drop 2 arg
-         in if not (null dir) && isRelative dir then "-i" ++ base_dir </> dir
-                              else arg
-    else arg
 
 
 cabalWorkDir :: FilePath -> MaybeT IO FilePath
@@ -506,8 +497,8 @@ stackAction work_dir mc l _fp = do
                     stde)
                    ++ args)
 
-      Just ghc_args ->
-        makeCradleResult (combineExitCodes [ex1, ex2], stde ++ stdr, ghc_args ++ pkg_ghc_args) deps
+      Just (componentDir, ghc_args) ->
+        makeCradleResult (combineExitCodes [ex1, ex2], stde ++ stdr, componentDir, ghc_args ++ pkg_ghc_args) deps
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess
@@ -677,10 +668,10 @@ readProcessWithOutputFile l ghcProc work_dir fp args =
 readProcessInDirectory :: FilePath -> FilePath -> [String] -> CreateProcess
 readProcessInDirectory wdir p args = (proc p args) { cwd = Just wdir }
 
-makeCradleResult :: (ExitCode, [String], [String]) -> [FilePath] -> CradleLoadResult ComponentOptions
-makeCradleResult (ex, err, gopts) deps =
+makeCradleResult :: (ExitCode, [String], FilePath, [String]) -> [FilePath] -> CradleLoadResult ComponentOptions
+makeCradleResult (ex, err, componentDir, gopts) deps =
   case ex of
     ExitFailure _ -> CradleFail (CradleError ex err)
     _ ->
-        let compOpts = ComponentOptions gopts deps
+        let compOpts = ComponentOptions gopts componentDir deps
         in CradleSuccess compOpts
