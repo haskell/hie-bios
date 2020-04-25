@@ -6,6 +6,9 @@ NEXT
 		Breaks backwards-compatibility, because ComponentOptions now may contain
 		filepaths relative to the component root directory.
 		This function needs to be invoked on the parsed 'DynFlags' to normalise the filepaths.
+	* Fix Ghci Script parses space in Filepath as Module (#162)
+	* Correct path to .hie-bios example in readme (#159)
+	* Relax upper bound for 'extra' (#161)
 
 2020-01-29 - 0.4.0
 
