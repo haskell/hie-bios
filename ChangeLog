@@ -1,5 +1,11 @@
 NEXT
 	* Add getCompilerOptionsWithLogger convenience function.
+	* Add componentRoot to ComponentOptions. [#166](https://github.com/mpickering/hie-bios/pull/166)
+		Options may be relative to the componentRoot.
+	* Add makeDynFlagsAbsolute to fix mangling of ghc options starting with "-i". [#166](https://github.com/mpickering/hie-bios/pull/166)
+		Breaks backwards-compatibility, because ComponentOptions now may contain
+		filepaths relative to the component root directory.
+		This function needs to be invoked on the parsed 'DynFlags' to normalise the filepaths.
 
 2020-01-29 - 0.4.0
 
