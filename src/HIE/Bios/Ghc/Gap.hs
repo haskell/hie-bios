@@ -21,7 +21,13 @@ module HIE.Bios.Ghc.Gap (
   , unsetLogAction
   ) where
 
-import DynFlags (DynFlags, includePaths)
+import DynFlags (
+    DynFlags
+  , includePaths
+#if __GLASGOW_HASKELL__ >= 810
+  , IncludeSpecs(..)
+#endif
+  )
 import GHC(LHsBind, LHsExpr, LPat, Type, ModSummary, ModuleGraph, HscEnv, setLogAction, GhcMonad)
 import Outputable (PrintUnqualified, PprStyle, Depth(AllTheWay), mkUserStyle)
 
