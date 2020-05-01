@@ -40,7 +40,6 @@ main = do
         $ linuxExlusiveTestCases
         ++
            [ testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal/B.hs"
-           , testCaseSteps "simple-stack" $ testDirectory isStackCradle "./tests/projects/simple-stack/B.hs"
            , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct/B.hs"
            , testCaseSteps "multi-direct" {- tests if both components can be loaded -}
                          $  testDirectory isMultiCradle "./tests/projects/multi-direct/A.hs"
@@ -48,23 +47,30 @@ main = do
            , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
                          $  testDirectory isCabalCradle "./tests/projects/multi-cabal/app/Main.hs"
                          >> testDirectory isCabalCradle "./tests/projects/multi-cabal/src/Lib.hs"
-           , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
-                         $  testDirectory isStackCradle "./tests/projects/multi-stack/app/Main.hs"
-                         >> testDirectory isStackCradle "./tests/projects/multi-stack/src/Lib.hs"
-
-           ,
-           -- Test for special characters in the path for parsing of the ghci-scripts.
-           -- Issue https://github.com/mpickering/hie-bios/issues/162
-           testCaseSteps "space stack"
-                         $  testDirectory isStackCradle "./tests/projects/space stack/A.hs"
-                         >> testDirectory isStackCradle "./tests/projects/space stack/B.hs"
            ]
+-- TODO: Remove once there's a stackage snapshot for ghc 8.10
+#if __GLASGOW_HASKELL__ < 810
+       ++ [ testCaseSteps "simple-stack" $ testDirectory isStackCradle "./tests/projects/simple-stack/B.hs"
+          , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
+                        $  testDirectory isStackCradle "./tests/projects/multi-stack/app/Main.hs"
+                        >> testDirectory isStackCradle "./tests/projects/multi-stack/src/Lib.hs"
+          ,
+          -- Test for special characters in the path for parsing of the ghci-scripts.
+          -- Issue https://github.com/mpickering/hie-bios/issues/162
+          testCaseSteps "space stack"
+                        $  testDirectory isStackCradle "./tests/projects/space stack/A.hs"
+                        >> testDirectory isStackCradle "./tests/projects/space stack/B.hs"
+          ]
+#endif
       , testGroup "Implicit cradle tests" $
         [ testCaseSteps "implicit-cabal" $ testImplicitCradle "./tests/projects/implicit-cabal/Main.hs" Cabal
+-- TODO: Remove once there's a stackage snapshot for ghc 8.10
+#if __GLASGOW_HASKELL__ < 810
         , testCaseSteps "implicit-stack" $ testImplicitCradle "./tests/projects/implicit-stack/Main.hs" Stack
         , testCaseSteps "implicit-stack-multi"
             $ testImplicitCradle "./tests/projects/implicit-stack-multi/Main.hs" Stack
             >> testImplicitCradle "./tests/projects/implicit-stack-multi/other-package/Main.hs" Stack
+#endif
         ]
       ]
 
@@ -146,8 +152,10 @@ stackYaml resolver = unlines ["resolver: " ++ resolver, "packages:", "- ."]
 
 stackYamlResolver :: String
 stackYamlResolver =
-#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)))
-  "nightly-2019-12-13"
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,10,1,0)))
+  "TODO"
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)))
+  "lts-15.10"
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,6,5,0)))
   "lts-14.17"
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,6,4,0)))

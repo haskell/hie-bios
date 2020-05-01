@@ -43,11 +43,14 @@ import qualified EnumSet as E (EnumSet, empty)
 import GHC (mgModSummaries, mapMG)
 #endif
 
+#if __GLASGOW_HASKELL__ >= 806
+import DynFlags (IncludeSpecs(..))
+#endif
+
 #if __GLASGOW_HASKELL__ >= 810
 import GHC.Hs.Extension (GhcTc)
 import GHC.Hs.Expr (MatchGroup, MatchGroupTc(..), mg_ext)
 #elif __GLASGOW_HASKELL__ >= 806
-import DynFlags (IncludeSpecs(..))
 import HsExtension (GhcTc)
 import HsExpr (MatchGroup, MatchGroupTc(..))
 import GHC (mg_ext)

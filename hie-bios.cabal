@@ -90,7 +90,7 @@ Extra-Source-Files:     ChangeLog
                         tests/projects/implicit-stack-multi/other-package/Main.hs
 
 
-tested-with: GHC==8.8.1, GHC==8.6.5, GHC==8.4.4
+tested-with: GHC==8.10.1, GHC==8.8.3, GHC==8.6.5, GHC==8.4.4
 
 Library
   Default-Language:     Haskell2010
@@ -126,7 +126,7 @@ Library
                         time                 >= 1.8.0 && < 1.10,
                         extra                >= 1.6.14 && < 1.8,
                         process              >= 1.6.1 && < 1.7,
-                        ghc                  >= 8.4.1 && < 8.9,
+                        ghc                  >= 8.4.1 && < 8.11,
                         transformers         >= 0.5.2 && < 0.6,
                         temporary            >= 1.2 && < 1.4,
                         text                 >= 1.2.3 && < 1.3,
