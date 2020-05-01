@@ -21,13 +21,7 @@ module HIE.Bios.Ghc.Gap (
   , unsetLogAction
   ) where
 
-import DynFlags (
-    DynFlags
-  , includePaths
-#if __GLASGOW_HASKELL__ >= 810
-  , IncludeSpecs(..)
-#endif
-  )
+import DynFlags (DynFlags, includePaths)
 import GHC(LHsBind, LHsExpr, LPat, Type, ModSummary, ModuleGraph, HscEnv, setLogAction, GhcMonad)
 import Outputable (PrintUnqualified, PprStyle, Depth(AllTheWay), mkUserStyle)
 
@@ -49,11 +43,14 @@ import qualified EnumSet as E (EnumSet, empty)
 import GHC (mgModSummaries, mapMG)
 #endif
 
+#if __GLASGOW_HASKELL__ >= 806
+import DynFlags (IncludeSpecs(..))
+#endif
+
 #if __GLASGOW_HASKELL__ >= 810
 import GHC.Hs.Extension (GhcTc)
 import GHC.Hs.Expr (MatchGroup, MatchGroupTc(..), mg_ext)
 #elif __GLASGOW_HASKELL__ >= 806
-import DynFlags (IncludeSpecs(..))
 import HsExtension (GhcTc)
 import HsExpr (MatchGroup, MatchGroupTc(..))
 import GHC (mg_ext)
