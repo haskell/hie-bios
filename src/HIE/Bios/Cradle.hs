@@ -645,7 +645,8 @@ readProcessWithOutputFile l ghcProc work_dir fp args = do
             ( fromMaybe "ghc" (lookup hieBiosGhc old_env)
             , fromMaybe "" (lookup hieBiosGhcArgs old_env)
             )
-  output_file <- emptySystemTempFile "hie-bios"
+  output_file <- maybe (emptySystemTempFile "hie-bios") return
+                       (lookup hieBiosOutput old_env)
 
   -- Pipe stdout directly into the logger
   let process = (readProcessInDirectory work_dir fp args)
