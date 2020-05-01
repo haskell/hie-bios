@@ -33,8 +33,8 @@ matrix:
   include:
     - compiler: "ghc-8.10.1"
       addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.0,ghc-8.10.1], sources: [hvr-ghc]}}
-    - compiler: "ghc-8.8.1"
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.0,ghc-8.8.1], sources: [hvr-ghc]}}
+    - compiler: "ghc-8.8.3"
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-3.0,ghc-8.8.3], sources: [hvr-ghc]}}
     - compiler: "ghc-8.6.5"
       addons: {apt: {packages: [ghc-ppa-tools,cabal-install-2.4,ghc-8.6.5], sources: [hvr-ghc]}}
     - compiler: "ghc-8.4.4"
