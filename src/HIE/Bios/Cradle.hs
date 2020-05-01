@@ -637,33 +637,38 @@ readProcessWithOutputFile
   -> FilePath -- ^ Process to call.
   -> [String] -- ^ Arguments to the process.
   -> IO (ExitCode, [String], [String], [String])
-readProcessWithOutputFile l ghcProc work_dir fp args =
-  withSystemTempFile "bios-output" $ \output_file h -> do
-    hSetBuffering h LineBuffering
-    old_env <- getEnvironment
-    let (ghcPath, ghcArgs) = case ghcProc of
-            Just (p, a) -> (p, unwords a)
-            Nothing ->
-              ( fromMaybe "ghc" (lookup hieBiosGhc old_env)
-              , fromMaybe "" (lookup hieBiosGhcArgs old_env)
-              )
-    -- Pipe stdout directly into the logger
-    let process = (readProcessInDirectory work_dir fp args)
-                      { env = Just
-                              $ (hieBiosGhc, ghcPath)
-                              : (hieBiosGhcArgs, ghcArgs)
-                              : ("HIE_BIOS_OUTPUT", output_file)
-                              : old_env
-                      }
-        -- Windows line endings are not converted so you have to filter out `'r` characters
-        loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map T.unpack C..| C.iterM l C..| C.sinkList)
-    (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
-    !res <- force <$> hGetContents h
-    return (ex, stdo, stde, lines (filter (/= '\r') res))
+readProcessWithOutputFile l ghcProc work_dir fp args = do
+  old_env <- getEnvironment
+  let (ghcPath, ghcArgs) = case ghcProc of
+          Just (p, a) -> (p, unwords a)
+          Nothing ->
+            ( fromMaybe "ghc" (lookup hieBiosGhc old_env)
+            , fromMaybe "" (lookup hieBiosGhcArgs old_env)
+            )
+  output_file <- emptySystemTempFile "hie-bios"
+
+  -- Pipe stdout directly into the logger
+  let process = (readProcessInDirectory work_dir fp args)
+                    { env = Just
+                            $ (hieBiosGhc, ghcPath)
+                            : (hieBiosGhcArgs, ghcArgs)
+                            : (hieBiosOutput, output_file)
+                            : old_env
+                    }
+      -- Windows line endings are not converted so you have to filter out `'r` characters
+      loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map T.unpack C..| C.iterM l C..| C.sinkList)
+  (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
+  res <- withFile output_file ReadMode $ \handle -> do
+           hSetBuffering handle LineBuffering
+           !res <- force <$> hGetContents handle
+           return res
+
+  return (ex, stdo, stde, lines (filter (/= '\r') res))
 
     where
       hieBiosGhc = "HIE_BIOS_GHC"
       hieBiosGhcArgs = "HIE_BIOS_GHC_ARGS"
+      hieBiosOutput = "HIE_BIOS_OUTPUT"
 
 readProcessInDirectory :: FilePath -> FilePath -> [String] -> CreateProcess
 readProcessInDirectory wdir p args = (proc p args) { cwd = Just wdir }
