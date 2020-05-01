@@ -90,7 +90,7 @@ Extra-Source-Files:     ChangeLog
                         tests/projects/implicit-stack-multi/other-package/Main.hs
 
 
-tested-with: GHC==8.10.1, GHC==8.8.1, GHC==8.6.5, GHC==8.4.4
+tested-with: GHC==8.10.1, GHC==8.8.3, GHC==8.6.5, GHC==8.4.4
 
 Library
   Default-Language:     Haskell2010
