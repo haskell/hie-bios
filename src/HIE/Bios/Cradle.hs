@@ -49,7 +49,7 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.Text as T
-import           Data.Maybe (fromMaybe)
+import           Data.Maybe (isNothing, fromMaybe)
 import           GHC.Fingerprint (fingerprintString)
 ----------------------------------------------------------------
 
@@ -645,8 +645,8 @@ readProcessWithOutputFile l ghcProc work_dir fp args = do
             ( fromMaybe "ghc" (lookup hieBiosGhc old_env)
             , fromMaybe "" (lookup hieBiosGhcArgs old_env)
             )
-  output_file <- maybe (emptySystemTempFile "hie-bios") return
-                       (lookup hieBiosOutput old_env)
+  let mbHieBiosOut = lookup hieBiosOutput old_env
+  output_file <- maybe (emptySystemTempFile "hie-bios") return mbHieBiosOut
 
   -- Pipe stdout directly into the logger
   let process = (readProcessInDirectory work_dir fp args)
@@ -663,6 +663,9 @@ readProcessWithOutputFile l ghcProc work_dir fp args = do
            hSetBuffering handle LineBuffering
            !res <- force <$> hGetContents handle
            return res
+
+  -- If the output was not provided by the user we delete it
+  when (isNothing mbHieBiosOut) (removeFile output_file)
 
   return (ex, stdo, stde, lines (filter (/= '\r') res))
 
