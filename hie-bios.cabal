@@ -137,7 +137,8 @@ Library
                         hslogger             >= 1.2 && < 1.4,
                         file-embed           >= 0.0.11 && < 1,
                         conduit              >= 1.3 && < 2,
-                        conduit-extra        >= 1.3 && < 2
+                        conduit-extra        >= 1.3 && < 2,
+                        implicit-hie
 
 
 Executable hie-bios

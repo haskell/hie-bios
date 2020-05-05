@@ -49,8 +49,12 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import           Data.Maybe (fromMaybe)
 import           GHC.Fingerprint (fingerprintString)
+
+import Hie.Cabal.Parser
+import Hie.Yaml
 ----------------------------------------------------------------
 
 -- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
@@ -88,13 +92,13 @@ getCradle :: (b -> Cradle a) -> (CradleConfig b, FilePath) -> Cradle a
 getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
     Cabal mc -> cabalCradle wdir mc
     CabalMulti ms ->
-      getCradle buildCustomCradle $
+      getCradle buildCustomCradle
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Cabal (Just c))) | (p, c) <- ms])
         , wdir)
     Stack mc -> stackCradle wdir mc
     StackMulti ms ->
-      getCradle buildCustomCradle $
+      getCradle buildCustomCradle
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Stack (Just c))) | (p, c) <- ms])
         , wdir)
@@ -128,9 +132,23 @@ implicitConfig' fp = (\wdir ->
          (Bios (wdir </> ".hie-bios") Nothing, wdir)) <$> biosWorkDir fp
   --   <|> (Obelisk,) <$> obeliskWorkDir fp
   --   <|> (Bazel,) <$> rulesHaskellWorkDir fp
-     <|> (stackExecutable >> (Stack Nothing,) <$> stackWorkDir fp)
-     <|> ((Cabal Nothing,) <$> cabalWorkDir fp)
-
+     <|> (cabalExecutable >> cabalProjectDir fp >> cabalDistDir fp >> cabal)
+     <|> (stackExecutable >> stackYamlDir fp >> stackWorkDir fp >> stack)
+     <|> (cabalExecutable >> cabalProjectDir fp >> cabal)
+     <|> (stackExecutable >> stackYamlDir fp >> stack)
+     <|> (cabalExecutable >> cabal)
+  where
+    stack = pkg >>= mc StackMulti stackComponent
+    cabal = pkg >>= mc CabalMulti cabalComponent
+    mc c f (pkg', fp') = pure (c (components f pkg'), fp')
+    components f (Package n cs) = map (f n) cs
+    pkg = do
+      d <- cabalFile fp
+      f <- liftIO $ findCabalFiles d
+      t <- liftIO $ T.readFile $ d </> head f
+      case parsePackage' t of
+        Left _ -> fail "could not parse cabal file"
+        Right p -> pure (p, fp)
 
 yamlConfig :: FilePath ->  MaybeT IO FilePath
 yamlConfig fp = do
@@ -456,11 +474,24 @@ removeRTS []             = []
 removeVerbosityOpts :: [String] -> [String]
 removeVerbosityOpts = filter ((&&) <$> (/= "-v0") <*> (/= "-w"))
 
+cabalExecutable :: MaybeT IO FilePath
+cabalExecutable = MaybeT $ findExecutable "cabal"
 
-cabalWorkDir :: FilePath -> MaybeT IO FilePath
-cabalWorkDir = findFileUpwards isCabal
+cabalDistDir :: FilePath -> MaybeT IO FilePath
+cabalDistDir = findFileUpwards isCabal
+  where
+    -- TODO do old style dist builds work?
+    isCabal name = name == "dist-newstyle" || name == "dist"
+
+cabalProjectDir :: FilePath -> MaybeT IO FilePath
+cabalProjectDir = findFileUpwards isCabal
   where
     isCabal name = name == "cabal.project"
+
+cabalFile :: FilePath -> MaybeT IO FilePath
+cabalFile = findFileUpwards isCabal
+  where
+    isCabal = (".cabal" ==) . takeExtension
 
 ------------------------------------------------------------------------
 -- Stack Cradle
@@ -515,6 +546,11 @@ stackExecutable = MaybeT $ findExecutable "stack"
 
 stackWorkDir :: FilePath -> MaybeT IO FilePath
 stackWorkDir = findFileUpwards isStack
+  where
+    isStack name = name == ".stack-work"
+
+stackYamlDir :: FilePath -> MaybeT IO FilePath
+stackYamlDir = findFileUpwards isStack
   where
     isStack name = name == "stack.yaml"
 
