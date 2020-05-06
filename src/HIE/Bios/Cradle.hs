@@ -49,7 +49,7 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.Text as T
-import           Data.Maybe (isNothing, fromMaybe)
+import           Data.Maybe (fromMaybe)
 import           GHC.Fingerprint (fingerprintString)
 ----------------------------------------------------------------
 
@@ -639,37 +639,43 @@ readProcessWithOutputFile
   -> IO (ExitCode, [String], [String], [String])
 readProcessWithOutputFile l ghcProc work_dir fp args = do
   old_env <- getEnvironment
-  let (ghcPath, ghcArgs) = case ghcProc of
-          Just (p, a) -> (p, unwords a)
-          Nothing ->
-            ( fromMaybe "ghc" (lookup hieBiosGhc old_env)
-            , fromMaybe "" (lookup hieBiosGhcArgs old_env)
-            )
-  let mbHieBiosOut = lookup hieBiosOutput old_env
-  output_file <- maybe (emptySystemTempFile "hie-bios") return mbHieBiosOut
 
-  -- Pipe stdout directly into the logger
-  let process = (readProcessInDirectory work_dir fp args)
-                    { env = Just
-                            $ (hieBiosGhc, ghcPath)
-                            : (hieBiosGhcArgs, ghcArgs)
-                            : (hieBiosOutput, output_file)
-                            : old_env
-                    }
-      -- Windows line endings are not converted so you have to filter out `'r` characters
-      loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map T.unpack C..| C.iterM l C..| C.sinkList)
-  (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
-  res <- withFile output_file ReadMode $ \handle -> do
-           hSetBuffering handle LineBuffering
-           !res <- force <$> hGetContents handle
-           return res
+  withHieBiosOutput old_env $ \output_file -> do
+    let (ghcPath, ghcArgs) = case ghcProc of
+            Just (p, a) -> (p, unwords a)
+            Nothing ->
+              ( fromMaybe "ghc" (lookup hieBiosGhc old_env)
+              , fromMaybe "" (lookup hieBiosGhcArgs old_env)
+              )
 
-  -- If the output was not provided by the user we delete it
-  when (isNothing mbHieBiosOut) (removeFile output_file)
+    -- Pipe stdout directly into the logger
+    let process = (readProcessInDirectory work_dir fp args)
+                      { env = Just
+                              $ (hieBiosGhc, ghcPath)
+                              : (hieBiosGhcArgs, ghcArgs)
+                              : (hieBiosOutput, output_file)
+                              : old_env
+                      }
 
-  return (ex, stdo, stde, lines (filter (/= '\r') res))
+    -- Windows line endings are not converted so you have to filter out `'r` characters
+    let  loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map T.unpack C..| C.iterM l C..| C.sinkList)
+    (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
+    res <- withFile output_file ReadMode $ \handle -> do
+             hSetBuffering handle LineBuffering
+             !res <- force <$> hGetContents handle
+             return res
+
+    return (ex, stdo, stde, lines (filter (/= '\r') res))
 
     where
+      withHieBiosOutput :: [(String,String)] -> (FilePath -> IO a) -> IO a
+      withHieBiosOutput env action = do
+        let mbHieBiosOut = lookup hieBiosOutput env
+        case mbHieBiosOut of
+          Just file -> action file
+          Nothing -> withSystemTempDirectory "hie-bios" $ 
+                      \ tmpDir -> action $ tmpDir </> "output"
+
       hieBiosGhc = "HIE_BIOS_GHC"
       hieBiosGhcArgs = "HIE_BIOS_GHC_ARGS"
       hieBiosOutput = "HIE_BIOS_OUTPUT"
