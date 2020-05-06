@@ -660,10 +660,13 @@ readProcessWithOutputFile l ghcProc work_dir fp args = do
     -- Windows line endings are not converted so you have to filter out `'r` characters
     let  loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map T.unpack C..| C.iterM l C..| C.sinkList)
     (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
-    res <- withFile output_file ReadMode $ \handle -> do
-             hSetBuffering handle LineBuffering
-             !res <- force <$> hGetContents handle
-             return res
+    existsFile <- doesFileExist output_file
+    res <- if existsFile
+             then withFile output_file ReadMode $ \handle -> do
+                    hSetBuffering handle LineBuffering
+                    !res <- force <$> hGetContents handle
+                    return res
+             else return ""
 
     return (ex, stdo, stde, lines (filter (/= '\r') res))
 
