@@ -4,3 +4,4 @@ dist-newstyle/
 stack.yaml
 stack.yaml.lock
 cabal.project.local*
+.vscode/
