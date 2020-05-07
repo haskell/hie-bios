@@ -417,10 +417,7 @@ withCabalWrapperTool (ghcPath, ghcArgs) wdir k = do
                         k loc)
 
   where
-    setMode wrapper_fp = do
-      setFileMode wrapper_fp accessModes
-      _check <- readFile wrapper_fp
-      return ()
+    setMode wrapper_fp = setFileMode wrapper_fp accessModes
 
 
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
