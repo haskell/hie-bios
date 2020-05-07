@@ -675,9 +675,12 @@ readProcessWithOutputFile l ghcProc work_dir fp args = do
       withHieBiosOutput env action = do
         let mbHieBiosOut = lookup hieBiosOutput env
         case mbHieBiosOut of
-          Just file -> action file
-          Nothing -> withSystemTempDirectory "hie-bios" $ 
-                      \ tmpDir -> action $ tmpDir </> "output"
+          Just file@(_:_) -> action file
+          _ -> withTempHieBiosOutput action
+
+      withTempHieBiosOutput action = 
+        withSystemTempDirectory "hie-bios" $ 
+          \ tmpDir -> action $ tmpDir </> "output"
 
       hieBiosGhc = "HIE_BIOS_GHC"
       hieBiosGhcArgs = "HIE_BIOS_GHC_ARGS"
