@@ -660,13 +660,10 @@ readProcessWithOutputFile l ghcProc work_dir fp args = do
     -- Windows line endings are not converted so you have to filter out `'r` characters
     let  loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map T.unpack C..| C.iterM l C..| C.sinkList)
     (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
-    existsFile <- doesFileExist output_file
-    res <- if existsFile
-             then withFile output_file ReadMode $ \handle -> do
-                    hSetBuffering handle LineBuffering
-                    !res <- force <$> hGetContents handle
-                    return res
-             else return ""
+    res <- withFile output_file ReadMode $ \handle -> do
+             hSetBuffering handle LineBuffering
+             !res <- force <$> hGetContents handle
+             return res
 
     return (ex, stdo, stde, lines (filter (/= '\r') res))
 
@@ -676,11 +673,8 @@ readProcessWithOutputFile l ghcProc work_dir fp args = do
         let mbHieBiosOut = lookup hieBiosOutput env
         case mbHieBiosOut of
           Just file@(_:_) -> action file
-          _ -> withTempHieBiosOutput action
-
-      withTempHieBiosOutput action = 
-        withSystemTempDirectory "hie-bios" $ 
-          \ tmpDir -> action $ tmpDir </> "output"
+          _ -> withSystemTempFile "hie-bios" $ 
+                 \ file h -> hClose h >> action file
 
       hieBiosGhc = "HIE_BIOS_GHC"
       hieBiosGhcArgs = "HIE_BIOS_GHC_ARGS"
