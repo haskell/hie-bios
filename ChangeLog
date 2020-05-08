@@ -1,4 +1,10 @@
-NEXT
+2020-05-08 - 0.5.0
+
+	* Add cabal.project.local to cabal cradle dependencies [#184](https://github.com/mpickering/hie-bios/pull/184)
+	* Remove unused environment variables to simplify code. [#182](https://github.com/mpickering/hie-bios/pull/182)
+	* Clean up hie-bios wrapper scripts after they are used. [#179](https://github.com/mpickering/hie-bios/pull/179)
+	* Avoid error in windows due to temp file being locked. [#175](https://github.com/mpickering/hie-bios/pull/175)
+	* Get building with ghc-8.10. [#173](https://github.com/mpickering/hie-bios/pull/173)
 	* Add getCompilerOptionsWithLogger convenience function.
 	* Add componentRoot to ComponentOptions. [#166](https://github.com/mpickering/hie-bios/pull/166)
 		Options may be relative to the componentRoot.
