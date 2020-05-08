@@ -362,7 +362,7 @@ cabalCradle wdir mc =
 cabalCradleDependencies :: FilePath -> IO [FilePath]
 cabalCradleDependencies rootDir = do
     cabalFiles <- findCabalFiles rootDir
-    return $ cabalFiles ++ ["cabal.project"]
+    return $ cabalFiles ++ ["cabal.project", "cabal.project.local"]
 
 findCabalFiles :: FilePath -> IO [FilePath]
 findCabalFiles wdir = do
