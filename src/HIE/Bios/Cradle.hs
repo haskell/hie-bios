@@ -323,7 +323,7 @@ biosWorkDir = findFileUpwards (".hie-bios" ==)
 biosDepsAction :: LoggingFunction -> FilePath -> Maybe FilePath -> IO [FilePath]
 biosDepsAction l wdir (Just biosDepsProg) = do
   biosDeps' <- canonicalizePath biosDepsProg
-  (ex, sout, serr, args) <- readProcessWithOutputFile l Nothing wdir biosDeps' []
+  (ex, sout, serr, args) <- readProcessWithOutputFile l wdir biosDeps' []
   case ex of
     ExitFailure _ ->  error $ show (ex, sout, serr)
     ExitSuccess -> return args
@@ -337,7 +337,7 @@ biosAction :: FilePath
            -> IO (CradleLoadResult ComponentOptions)
 biosAction wdir bios bios_deps l fp = do
   bios' <- canonicalizePath bios
-  (ex, _stdo, std, res) <- readProcessWithOutputFile l Nothing wdir bios' [fp]
+  (ex, _stdo, std, res) <- readProcessWithOutputFile l wdir bios' [fp]
   deps <- biosDepsAction l wdir bios_deps
         -- Output from the program should be written to the output file and
         -- delimited by newlines.
@@ -425,7 +425,7 @@ cabalAction work_dir mc l fp = do
   withCabalWrapperTool ("ghc", []) work_dir $ \wrapper_fp -> do
     let cab_args = ["v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
     (ex, output, stde, args) <-
-      readProcessWithOutputFile l Nothing work_dir "cabal" cab_args
+      readProcessWithOutputFile l work_dir "cabal" cab_args
     deps <- cabalCradleDependencies work_dir
     case processCabalWrapperArgs args of
         Nothing -> pure $ CradleFail (CradleError ex
@@ -487,11 +487,11 @@ stackAction work_dir mc l _fp = do
   -- Same wrapper works as with cabal
   withCabalWrapperTool ghcProcArgs work_dir $ \wrapper_fp -> do
     (ex1, _stdo, stde, args) <-
-      readProcessWithOutputFile l Nothing work_dir
+      readProcessWithOutputFile l work_dir
               "stack" $ ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
                         ++ [ comp | Just comp <- [mc] ]
     (ex2, pkg_args, stdr, _) <-
-      readProcessWithOutputFile l Nothing work_dir "stack" ["path", "--ghc-package-path"]
+      readProcessWithOutputFile l work_dir "stack" ["path", "--ghc-package-path"]
     let split_pkgs = concatMap splitSearchPath pkg_args
         pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
     deps <- stackCradleDependencies work_dir
@@ -634,30 +634,18 @@ findFile p dir = do
 --   Additionally, arguments to ghc are supplied via @HIE_BIOS_GHC_ARGS@
 readProcessWithOutputFile
   :: LoggingFunction -- ^ Output of the process is streamed into this function.
-  -> Maybe GhcProc -- ^ Optional FilePath to GHC and arguments that should
-                   -- be passed to ghc.
-                   -- In the process to call, filepath and arguments
   -> FilePath -- ^ Working directory. Process is executed in this directory.
   -> FilePath -- ^ Process to call.
   -> [String] -- ^ Arguments to the process.
   -> IO (ExitCode, [String], [String], [String])
-readProcessWithOutputFile l ghcProc work_dir fp args = do
+readProcessWithOutputFile l work_dir fp args = do
   old_env <- getEnvironment
 
   withHieBiosOutput old_env $ \output_file -> do
-    let (ghcPath, ghcArgs) = case ghcProc of
-            Just (p, a) -> (p, unwords a)
-            Nothing ->
-              ( fromMaybe "ghc" (lookup hieBiosGhc old_env)
-              , fromMaybe "" (lookup hieBiosGhcArgs old_env)
-              )
-
     -- Pipe stdout directly into the logger
     let process = (readProcessInDirectory work_dir fp args)
                       { env = Just
-                              $ (hieBiosGhc, ghcPath)
-                              : (hieBiosGhcArgs, ghcArgs)
-                              : (hieBiosOutput, output_file)
+                              $ (hieBiosOutput, output_file)
                               : old_env
                       }
 
@@ -677,11 +665,9 @@ readProcessWithOutputFile l ghcProc work_dir fp args = do
         let mbHieBiosOut = lookup hieBiosOutput env
         case mbHieBiosOut of
           Just file@(_:_) -> action file
-          _ -> withSystemTempFile "hie-bios" $ 
+          _ -> withSystemTempFile "hie-bios" $
                  \ file h -> hClose h >> action file
 
-      hieBiosGhc = "HIE_BIOS_GHC"
-      hieBiosGhcArgs = "HIE_BIOS_GHC_ARGS"
       hieBiosOutput = "HIE_BIOS_OUTPUT"
 
 readProcessInDirectory :: FilePath -> FilePath -> [String] -> CreateProcess
