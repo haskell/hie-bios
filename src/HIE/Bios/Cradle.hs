@@ -641,33 +641,48 @@ readProcessWithOutputFile
   -> FilePath -- ^ Process to call.
   -> [String] -- ^ Arguments to the process.
   -> IO (ExitCode, [String], [String], [String])
-readProcessWithOutputFile l ghcProc work_dir fp args =
-  withSystemTempFile "bios-output" $ \output_file h -> do
-    hSetBuffering h LineBuffering
-    old_env <- getEnvironment
+readProcessWithOutputFile l ghcProc work_dir fp args = do
+  old_env <- getEnvironment
+
+  withHieBiosOutput old_env $ \output_file -> do
     let (ghcPath, ghcArgs) = case ghcProc of
             Just (p, a) -> (p, unwords a)
             Nothing ->
               ( fromMaybe "ghc" (lookup hieBiosGhc old_env)
               , fromMaybe "" (lookup hieBiosGhcArgs old_env)
               )
+
     -- Pipe stdout directly into the logger
     let process = (readProcessInDirectory work_dir fp args)
                       { env = Just
                               $ (hieBiosGhc, ghcPath)
                               : (hieBiosGhcArgs, ghcArgs)
-                              : ("HIE_BIOS_OUTPUT", output_file)
+                              : (hieBiosOutput, output_file)
                               : old_env
                       }
-        -- Windows line endings are not converted so you have to filter out `'r` characters
-        loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map T.unpack C..| C.iterM l C..| C.sinkList)
+
+    -- Windows line endings are not converted so you have to filter out `'r` characters
+    let  loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map T.unpack C..| C.iterM l C..| C.sinkList)
     (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
-    !res <- force <$> hGetContents h
+    res <- withFile output_file ReadMode $ \handle -> do
+             hSetBuffering handle LineBuffering
+             !res <- force <$> hGetContents handle
+             return res
+
     return (ex, stdo, stde, lines (filter (/= '\r') res))
 
     where
+      withHieBiosOutput :: [(String,String)] -> (FilePath -> IO a) -> IO a
+      withHieBiosOutput env action = do
+        let mbHieBiosOut = lookup hieBiosOutput env
+        case mbHieBiosOut of
+          Just file@(_:_) -> action file
+          _ -> withSystemTempFile "hie-bios" $ 
+                 \ file h -> hClose h >> action file
+
       hieBiosGhc = "HIE_BIOS_GHC"
       hieBiosGhcArgs = "HIE_BIOS_GHC_ARGS"
+      hieBiosOutput = "HIE_BIOS_OUTPUT"
 
 readProcessInDirectory :: FilePath -> FilePath -> [String] -> CreateProcess
 readProcessInDirectory wdir p args = (proc p args) { cwd = Just wdir }
