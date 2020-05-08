@@ -80,7 +80,7 @@ main = flip E.catches handlers $ do
         res <- forM remainingArgs $ \fp -> do
                 res <- getCompilerOptions fp cradle
                 case res of
-                    CradleFail (CradleError _ex err) ->
+                    CradleFail (CradleError _deps _ex err) ->
                       return $ "Failed to show flags for \""
                                                 ++ fp
                                                 ++ "\": " ++ show err
