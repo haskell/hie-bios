@@ -37,6 +37,7 @@ import Control.Applicative ((<|>))
 import System.IO.Temp
 import System.IO.Error (isPermissionError)
 import Data.List
+import Data.Maybe
 import Data.Ord (Down(..))
 
 import System.PosixCompat.Files
@@ -50,11 +51,11 @@ import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import           Data.Maybe (fromMaybe)
 import           GHC.Fingerprint (fingerprintString)
 
 import Hie.Cabal.Parser
 import Hie.Yaml
+import Hie.Locate
 ----------------------------------------------------------------
 
 -- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
@@ -132,23 +133,22 @@ implicitConfig' fp = (\wdir ->
          (Bios (wdir </> ".hie-bios") Nothing, wdir)) <$> biosWorkDir fp
   --   <|> (Obelisk,) <$> obeliskWorkDir fp
   --   <|> (Bazel,) <$> rulesHaskellWorkDir fp
-     <|> (cabalExecutable >> cabalProjectDir fp >> cabalDistDir fp >> cabal)
-     <|> (stackExecutable >> stackYamlDir fp >> stackWorkDir fp >> stack)
-     <|> (cabalExecutable >> cabalProjectDir fp >> cabal)
-     <|> (stackExecutable >> stackYamlDir fp >> stack)
-     <|> (cabalExecutable >> cabal)
+     <|> (cabalExecutable >> cabalProjectDir fp >> cabalDistDir fp >>= cabal)
+     <|> (stackExecutable >> stackYamlDir fp >> stackWorkDir fp >>= stack)
+     <|> (cabalExecutable >> cabalProjectDir fp >>= cabal)
+     <|> (stackExecutable >> stackYamlDir fp >>= stack)
+     <|> (cabalExecutable >> cabalFile fp >>= cabal)
   where
-    stack = pkg >>= mc StackMulti stackComponent
-    cabal = pkg >>= mc CabalMulti cabalComponent
-    mc c f (pkg', fp') = pure (c (components f pkg'), fp')
+    readPkgs f p = do
+      cfs <- nestedCabalFiles p
+      pkgs <- catMaybes <$> mapM (nestedPkg p) cfs
+      pure $ concatMap (components f) pkgs
+    build cn cc p = do
+      c <- liftIO $ cn <$> readPkgs cc p
+      pure (c, p)
+    cabal = build CabalMulti cabalComponent
+    stack = build StackMulti stackComponent
     components f (Package n cs) = map (f n) cs
-    pkg = do
-      d <- cabalFile fp
-      f <- liftIO $ findCabalFiles d
-      t <- liftIO $ T.readFile $ d </> head f
-      case parsePackage' t of
-        Left _ -> fail "could not parse cabal file"
-        Right p -> pure (p, fp)
 
 yamlConfig :: FilePath ->  MaybeT IO FilePath
 yamlConfig fp = do
