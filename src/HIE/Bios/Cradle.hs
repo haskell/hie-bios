@@ -139,15 +139,16 @@ implicitConfig' fp = (\wdir ->
      <|> (stackExecutable >> stackYamlDir fp >>= stack)
      <|> (cabalExecutable >> cabalFile fp >>= cabal)
   where
-    readPkgs f p = do
-      cfs <- nestedCabalFiles p
-      pkgs <- catMaybes <$> mapM (nestedPkg p) cfs
+    readPkgs f gp p = do
+      cfs <- gp p
+      pkgs <- liftIO $ catMaybes <$> mapM (nestedPkg p) cfs
       pure $ concatMap (components f) pkgs
-    build cn cc p = do
-      c <- liftIO $ cn <$> readPkgs cc p
+    build cn cc gp p = do
+      c <- cn <$> readPkgs cc gp p
       pure (c, p)
-    cabal = build CabalMulti cabalComponent
-    stack = build StackMulti stackComponent
+    cabal :: FilePath -> MaybeT IO (CradleType a, FilePath)
+    cabal = build CabalMulti cabalComponent cabalPkgs
+    stack = build StackMulti stackComponent stackYamlPkgs
     components f (Package n cs) = map (f n) cs
 
 yamlConfig :: FilePath ->  MaybeT IO FilePath
