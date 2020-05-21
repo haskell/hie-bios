@@ -7,7 +7,8 @@ module HIE.Bios.Config(
     readConfig,
     Config(..),
     CradleConfig(..),
-    CradleType(..)
+    CradleType(..),
+    Callable(..)
     ) where
 
 import qualified Data.Text as T
@@ -39,6 +40,9 @@ data CradleConfig a =
         }
         deriving (Show, Eq, Functor)
 
+data Callable = Program FilePath | Command String
+    deriving (Show, Eq)
+
 data CradleType a
     = Cabal { component :: Maybe String }
     | CabalMulti [ (FilePath, String) ]
@@ -49,13 +53,12 @@ data CradleType a
 --    | Bazel
 --    | Obelisk
     | Bios
-        { prog :: FilePath
-        -- ^ Path to program that retrieves options to compile a file
-        , depsProg :: Maybe FilePath
-        -- ^ Optional Path to program to obtain cradle dependencies.
+        { call :: Callable
+        -- ^ Path to program or shell command that retrieves options to compile a file
+        , depsCall :: Maybe Callable
+        -- ^ Optional path to program or shell command to obtain cradle dependencies.
         -- Each cradle dependency is to be expected to be on a separate line
-        -- and relative to the root dir of the cradle, not relative
-        -- to the location of this program.
+        -- and relative to the root dir of the cradle.
         }
     | Direct { arguments :: [String] }
     | None
@@ -72,7 +75,7 @@ instance Show (CradleType a) where
     show (CabalMulti a) = "CabalMulti " ++ show a
     show (Stack comp) = "Stack {component = " ++ show comp ++ "}"
     show (StackMulti a) = "StackMulti " ++ show a
-    show Bios { prog, depsProg } = "Bios {prog = " ++ show prog ++ ", depsProg = " ++ show depsProg ++ "}"
+    show Bios { call, depsCall } = "Bios {call = " ++ show call ++ ", depsCall = " ++ show depsCall ++ "}"
     show (Direct args) = "Direct {arguments = " ++ show args ++ "}"
     show None = "None"
     show (Multi a) = "Multi " ++ show a
@@ -127,16 +130,28 @@ parseCabal = parseStackOrCabal Cabal CabalMulti
 parseBios :: Value -> Parser (CradleType a)
 parseBios (Object x)
     | 2 == Map.size x
-    , Just (String biosProgram) <- Map.lookup "program" x
-    , Just (String biosDepsProgram) <- Map.lookup "dependency-program" x
-    = return $ Bios (T.unpack biosProgram) (Just (T.unpack biosDepsProgram))
+    , Just biosCallable <- exclusive (stringTypeFromMap Program "program") (stringTypeFromMap Command "shell")
+    , Just biosDepsCallable <- exclusive (stringTypeFromMap Program "dependency-program") (stringTypeFromMap Command "dependency-shell")
+    = return $ Bios biosCallable (Just biosDepsCallable)
 
     | 1 == Map.size x
-    , Just (String biosProgram) <- Map.lookup "program" x
-    = return $ Bios (T.unpack biosProgram) Nothing
+    , Just biosCallable <- exclusive (stringTypeFromMap Program "program") (stringTypeFromMap Command "shell")
+    = return $ Bios biosCallable Nothing
 
     | otherwise
-    = fail "Not a valid Bios Configuration type, following keys are allowed: program, dependency-program"
+    = fail "Not a valid Bios Configuration type, following keys are allowed: program or shell, dependency-program or dependency-shell"
+
+    where
+        exclusive :: Maybe a -> Maybe a -> Maybe a
+        exclusive (Just _) (Just _) = Nothing
+        exclusive l Nothing = l
+        exclusive Nothing r = r
+        stringTypeFromMap :: (String -> t) -> T.Text -> Maybe t
+        stringTypeFromMap constructor name = constructor <$> (intoString =<< Map.lookup name x)
+        intoString :: Value -> Maybe String
+        intoString (String s) = Just (T.unpack s)
+        intoString _ = Nothing
+
 parseBios _ = fail "Bios Configuration is expected to be an object."
 
 parseDirect :: Value -> Parser (CradleType a)
