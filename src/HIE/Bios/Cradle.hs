@@ -630,8 +630,6 @@ findFile p dir = do
 -- * The logging function is called every time the process emits anything to stdout or stderr.
 -- it can be used to report progress of the process to a user.
 -- * The process is executed in the given directory.
--- * The path to the GHC version to use is supplied in the environment variable @HIE_BIOS_GHC@.
---   Additionally, arguments to ghc are supplied via @HIE_BIOS_GHC_ARGS@
 readProcessWithOutputFile
   :: LoggingFunction -- ^ Output of the process is streamed into this function.
   -> FilePath -- ^ Working directory. Process is executed in this directory.
