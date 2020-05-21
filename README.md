@@ -50,16 +50,24 @@ components.
 cradle: {cabal: {component: "lib:haskell-ide-engine"}}
 ```
 
-Or you can explicitly state the program which should be used to collect
-the options by supplying the path to the program. It is interpreted
-relative to the current working directory if it is not an absolute path.
-The bios program should consult the `HIE_BIOS_OUTPUT` env var and write a list of
-options to this file separated by newlines. Once the program finishes running `hie-bios`
-reads this file and uses the arguments to set up the GHC session. This is how GHC's
-build system is able to support `hie-bios`.
+Alternatively you can explicitly state a program or shell command which should
+be used to collect the options.
+
+The path of the `program` attribute is interpreted relative to the current
+working directory if it isn't absolute. A program is passed the file to
+return options for as its first argument, and a shell command will have it
+available in the `HIE_BIOS_ARG` environment variable.
+
+The process must consult the `HIE_BIOS_OUTPUT` environment variable and write a
+list of options to this file separated by newlines. Once the process finishes
+running, `hie-bios` reads this file and uses the arguments to set up the GHC
+session. This is how GHC's build system is able to support `hie-bios`.
 
 ```yaml
 cradle: {bios: {program: ".hie-bios"}}
+```
+```yaml
+cradle: {bios: {shell: "build-tool flags $HIE_BIOS_ARG"}}
 ```
 
 The `direct` cradle allows you to specify exactly the GHC options that should be used to load
@@ -188,7 +196,7 @@ dependencies:
 ```
 
 For the `Bios` cradle type, there is an optional field to specify a program
-to obtain cradle dependencies from:
+or shell command to obtain cradle dependencies from:
 
 ```yaml
 cradle:
@@ -196,10 +204,18 @@ cradle:
     program: ./flags.sh
     dependency-program: ./dependency.sh
 ```
+```yaml
+cradle:
+  bios:
+    shell: build-tool flags $HIE_BIOS_ARG
+    dependency-shell: build-tool dependencies
+```
 
-The program `./dependency.sh` is executed with no paramaters and it is
+The dependency program or command is executed with no parameters and it is
 expected to output on stdout on each line exactly one filepath relative
 to the root of the cradle, not relative to the location of the program.
+
+Programs and shell commands for flags and dependencies can be mixed and matched.
 
 ## Configuration specification
 

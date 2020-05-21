@@ -19,6 +19,9 @@ Extra-Source-Files:     ChangeLog
                         tests/configs/bazel.yaml
                         tests/configs/bios-1.yaml
                         tests/configs/bios-2.yaml
+                        tests/configs/bios-3.yaml
+                        tests/configs/bios-4.yaml
+                        tests/configs/bios-5.yaml
                         tests/configs/cabal-1.yaml
                         tests/configs/cabal-multi.yaml
                         tests/configs/ch-cabal.yaml
@@ -53,6 +56,9 @@ Extra-Source-Files:     ChangeLog
                         tests/projects/simple-bios/B.hs
                         tests/projects/simple-bios/hie-bios.sh
                         tests/projects/simple-bios/hie.yaml
+                        tests/projects/simple-bios-shell/A.hs
+                        tests/projects/simple-bios-shell/B.hs
+                        tests/projects/simple-bios-shell/hie.yaml
                         tests/projects/simple-cabal/A.hs
                         tests/projects/simple-cabal/B.hs
                         tests/projects/simple-cabal/CHANGELOG.md

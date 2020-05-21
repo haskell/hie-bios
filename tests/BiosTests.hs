@@ -39,7 +39,8 @@ main = do
       , testGroup "Loading tests"
         $ linuxExlusiveTestCases
         ++
-           [ testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal/B.hs"
+           [ testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell/B.hs"
+           , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal/B.hs"
            , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct/B.hs"
            , testCaseSteps "multi-direct" {- tests if both components can be loaded -}
                          $  testDirectory isMultiCradle "./tests/projects/multi-direct/A.hs"

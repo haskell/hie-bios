@@ -1,0 +1,4 @@
+cradle:
+  bios:
+    shell: "shellcommand"
+    dependency-program: "dep-program"

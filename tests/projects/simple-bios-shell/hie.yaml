@@ -1,0 +1,10 @@
+cradle:
+  bios:
+    shell: |
+      :; echo "-Wall" >> $HIE_BIOS_OUTPUT
+      :; echo "A" >> $HIE_BIOS_OUTPUT
+      :; echo "B" >> $HIE_BIOS_OUTPUT
+      :; exit 0
+      ECHO "-Wall" >> %HIE_BIOS_OUTPUT%
+      ECHO "A" >> %HIE_BIOS_OUTPUT%
+      ECHO "B" >> %HIE_BIOS_OUTPUT%
