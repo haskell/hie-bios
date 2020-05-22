@@ -15,6 +15,9 @@ module HIE.Bios.Cradle (
     , isMultiCradle
     , isDefaultCradle
     , isOtherCradle
+    , getCradle
+    , readProcessWithOutputFile
+    , makeCradleResult
   ) where
 
 import Control.Exception (handleJust)
