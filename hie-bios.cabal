@@ -183,6 +183,7 @@ test-suite bios-tests
       extra,
       tasty,
       tasty-hunit,
+      hspec-expectations,
       hie-bios,
       filepath,
       directory,

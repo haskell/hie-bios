@@ -4,13 +4,14 @@ module Main where
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Test.Hspec.Expectations
 import HIE.Bios
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Load
 import HIE.Bios.Cradle
 import HIE.Bios.Types
 import Control.Monad.IO.Class
-import Control.Monad ( unless, forM_, when )
+import Control.Monad ( forM_ )
 import Data.Void
 import System.Directory
 import System.FilePath ( makeRelative, (</>) )
@@ -76,7 +77,8 @@ main = do
       ]
 
 linuxExlusiveTestCases :: [TestTree]
-linuxExlusiveTestCases = [ testCaseSteps "simple-bios" $ testDirectory isBiosCradle "./tests/projects/simple-bios/B.hs" | not isWindows ]
+linuxExlusiveTestCases =
+  [ testCaseSteps "simple-bios" $ testDirectory isBiosCradle "./tests/projects/simple-bios/B.hs" | not isWindows ]
 
 testDirectory :: (Cradle Void -> Bool) -> FilePath -> (String -> IO ()) -> IO ()
 testDirectory cradlePred fp step = do
@@ -87,7 +89,7 @@ testDirectory cradlePred fp step = do
   crd <- case mcfg of
           Just cfg -> loadCradle cfg
           Nothing -> loadImplicitCradle a_fp
-  when (not $ cradlePred crd) $ error $ "Cradle is incorrect: " ++ show (actionName $ cradleOptsProg crd)
+  crd `shouldSatisfy` cradlePred
   step "Initialise Flags"
   testLoadFile crd a_fp step
 
@@ -105,31 +107,34 @@ testLoadFile crd fp step = do
           case sf of
             -- Test resetting the targets
             Succeeded -> setTargetFilesWithMessage (Just (\_ n _ _ -> step (show n))) [(a_fp, a_fp)]
-            Failed -> error "Module loading failed"
-        CradleNone -> error "None"
-        CradleFail (CradleError _ex stde) -> error (unlines stde)
+            Failed -> liftIO $ expectationFailure "Module loading failed"
+        CradleNone -> liftIO $ expectationFailure "None"
+        CradleFail (CradleError _deps _ex stde) -> liftIO $ expectationFailure (unlines stde)
+
+testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Bool) -> (String -> IO ()) -> IO ()
+testLoadFileCradleFail crd fp cradleFailPred step = do
+  a_fp <- canonicalizePath fp
+  withCurrentDirectory (cradleRootDir crd) $
+    withGHC' $ do
+      let relFp = makeRelative (cradleRootDir crd) a_fp
+      res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
+      case res of
+        CradleSuccess _ -> liftIO $ expectationFailure "Cradle loaded successfully"
+        CradleFail crdlFail -> liftIO $ crdlFail `shouldSatisfy` cradleFailPred
 
 findCradleForModule :: FilePath -> Maybe FilePath -> (String -> IO ()) -> IO ()
 findCradleForModule fp expected' step = do
   expected <- maybe (return Nothing) (fmap Just . canonicalizePath) expected'
   a_fp <- canonicalizePath fp
   step "Finding cradle"
-  mcfg <- findCradle a_fp
-  unless (mcfg == expected)
-    $  error
-    $  "Expected cradle: "
-    ++ show expected
-    ++ ", Actual: "
-    ++ show mcfg
+  findCradle a_fp `shouldReturn` expected
 
 testImplicitCradle :: FilePath -> ActionName Void -> (String -> IO ()) -> IO ()
 testImplicitCradle fp' expectedActionName step = do
   fp <- canonicalizePath fp'
   step "Inferring implicit cradle"
   crd <- loadImplicitCradle fp :: IO (Cradle Void)
-  unless (actionName (cradleOptsProg crd) == expectedActionName)
-    $ error $ "Expected cradle: " <> show expectedActionName
-    <> "\n, Actual: " <> show (actionName (cradleOptsProg crd))
+  actionName (cradleOptsProg crd) `shouldBe` expectedActionName
   step "Initialize flags"
   testLoadFile crd fp step
 
