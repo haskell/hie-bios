@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns #-}
@@ -118,8 +119,16 @@ addCradleDeps deps c =
     addActionDeps :: CradleAction a -> CradleAction a
     addActionDeps ca =
       ca { runCradle = \l fp ->
-            (fmap (\(ComponentOptions os' dir ds) -> ComponentOptions os' dir (ds `union` deps)))
-              <$> runCradle ca l fp }
+            runCradle ca l fp
+              >>= \case
+                CradleSuccess (ComponentOptions os' dir ds) ->
+                  pure $ CradleSuccess (ComponentOptions os' dir (ds `union` deps))
+                CradleFail err ->
+                  pure $ CradleFail
+                    (err { cradleErrorDependencies = cradleErrorDependencies err `union` deps })
+                CradleNone -> pure CradleNone
+         }
+
 
 implicitConfig :: FilePath -> MaybeT IO (CradleConfig a, FilePath)
 implicitConfig fp = do

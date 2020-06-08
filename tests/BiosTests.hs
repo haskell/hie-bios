@@ -1,8 +1,10 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
 module Main where
 
 import Test.Tasty
+import Test.Tasty.ExpectedFailure
 import Test.Tasty.HUnit
 import Test.Hspec.Expectations
 import HIE.Bios
@@ -16,6 +18,7 @@ import Data.Void
 import System.Directory
 import System.FilePath ( makeRelative, (</>) )
 import System.Info.Extra ( isWindows )
+import System.Exit (ExitCode(ExitFailure))
 
 main :: IO ()
 main = do
@@ -40,7 +43,15 @@ main = do
       , testGroup "Loading tests"
         $ linuxExlusiveTestCases
         ++
-           [ testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell/B.hs"
+           [ testCaseSteps "failing-cabal" $ testDirectoryFail isCabalCradle "./tests/projects/failing-cabal/MyLib.hs"
+              (\CradleError {..} -> do
+                  cradleErrorExitCode `shouldBe` ExitFailure 1
+                  cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
+           , testCaseSteps "failing-bios" $ testDirectoryFail isBiosCradle "./tests/projects/failing-bios/B.hs"
+              (\CradleError {..} -> do
+                  cradleErrorExitCode `shouldBe` ExitFailure 1
+                  cradleErrorDependencies `shouldMatchList` ["hie.yaml"])
+           , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell/B.hs"
            , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal/B.hs"
            , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct/B.hs"
            , testCaseSteps "multi-direct" {- tests if both components can be loaded -}
@@ -52,7 +63,12 @@ main = do
            ]
 -- TODO: Remove once there's a stackage snapshot for ghc 8.10
 #if __GLASGOW_HASKELL__ < 810
-       ++ [ testCaseSteps "simple-stack" $ testDirectory isStackCradle "./tests/projects/simple-stack/B.hs"
+       ++ [ expectFailBecause "stack repl does not fail on an invalid cabal file" $
+              testCaseSteps "failing-stack" $ testDirectoryFail isStackCradle "./tests/projects/failing-stack/src/Lib.hs"
+                (\CradleError {..} -> do
+                    cradleErrorExitCode `shouldBe` ExitFailure 1
+                    cradleErrorDependencies `shouldMatchList` ["failing-stack.cabal", "stack.yaml", "package.yaml"])
+          , testCaseSteps "simple-stack" $ testDirectory isStackCradle "./tests/projects/simple-stack/B.hs"
           , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
                         $  testDirectory isStackCradle "./tests/projects/multi-stack/app/Main.hs"
                         >> testDirectory isStackCradle "./tests/projects/multi-stack/src/Lib.hs"
@@ -83,6 +99,19 @@ linuxExlusiveTestCases =
 testDirectory :: (Cradle Void -> Bool) -> FilePath -> (String -> IO ()) -> IO ()
 testDirectory cradlePred fp step = do
   a_fp <- canonicalizePath fp
+  crd <- initialiseCradle cradlePred a_fp step
+  step "Initialise Flags"
+  testLoadFile crd a_fp step
+
+testDirectoryFail :: (Cradle Void -> Bool) -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
+testDirectoryFail cradlePred fp cradleFailPred step = do
+  a_fp <- canonicalizePath fp
+  crd <- initialiseCradle cradlePred a_fp step
+  step "Initialise Flags"
+  testLoadFileCradleFail crd a_fp cradleFailPred step
+
+initialiseCradle :: (Cradle Void -> Bool) -> FilePath -> (String -> IO ()) -> IO (Cradle Void)
+initialiseCradle cradlePred a_fp step = do
   step $ "Finding Cradle for: " ++ a_fp
   mcfg <- findCradle a_fp
   step $ "Loading Cradle: " ++ show mcfg
@@ -90,8 +119,7 @@ testDirectory cradlePred fp step = do
           Just cfg -> loadCradle cfg
           Nothing -> loadImplicitCradle a_fp
   crd `shouldSatisfy` cradlePred
-  step "Initialise Flags"
-  testLoadFile crd a_fp step
+  pure crd
 
 testLoadFile :: Cradle a -> FilePath -> (String -> IO ()) -> IO ()
 testLoadFile crd fp step = do
@@ -111,8 +139,8 @@ testLoadFile crd fp step = do
         CradleNone -> liftIO $ expectationFailure "None"
         CradleFail (CradleError _deps _ex stde) -> liftIO $ expectationFailure (unlines stde)
 
-testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Bool) -> (String -> IO ()) -> IO ()
-testLoadFileCradleFail crd fp cradleFailPred step = do
+testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
+testLoadFileCradleFail crd fp cradleErrorExpectation step = do
   a_fp <- canonicalizePath fp
   withCurrentDirectory (cradleRootDir crd) $
     withGHC' $ do
@@ -120,7 +148,8 @@ testLoadFileCradleFail crd fp cradleFailPred step = do
       res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
       case res of
         CradleSuccess _ -> liftIO $ expectationFailure "Cradle loaded successfully"
-        CradleFail crdlFail -> liftIO $ crdlFail `shouldSatisfy` cradleFailPred
+        CradleNone -> liftIO $ expectationFailure "Unexpected none-Cradle"
+        CradleFail crdlFail -> liftIO $ cradleErrorExpectation crdlFail
 
 findCradleForModule :: FilePath -> Maybe FilePath -> (String -> IO ()) -> IO ()
 findCradleForModule fp expected' step = do
@@ -147,6 +176,7 @@ writeStackYamlFiles = do
 stackProjects :: [FilePath]
 stackProjects =
   [ "tests" </> "projects" </> "multi-stack"
+  , "tests" </> "projects" </> "failing-stack"
   , "tests" </> "projects" </> "simple-stack"
   , "tests" </> "projects" </> "space stack"
   , "tests" </> "projects" </> "implicit-stack"
