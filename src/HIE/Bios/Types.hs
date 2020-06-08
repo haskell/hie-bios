@@ -73,7 +73,17 @@ data CradleLoadResult r
   deriving (Functor, Show)
 
 
-data CradleError = CradleError [FilePath] ExitCode [String] deriving (Show)
+data CradleError = CradleError
+  { cradleErrorDependencies :: [FilePath]
+  -- ^ Dependencies of the cradle that failed to load.
+  -- Can be watched for changes to attempt a reload of the cradle.
+  , cradleErrorExitCode :: ExitCode
+  -- ^ ExitCode of the cradle loading mechanism.
+  , cradleErrorStderr :: [String]
+  -- ^ Standard error output that can be shown to users to explain
+  -- the loading error.
+  }
+  deriving (Show, Eq)
 
 instance Exception CradleError where
 ----------------------------------------------------------------
