@@ -171,12 +171,19 @@ addCmdOpts cmdOpts df1 = do
 -- This makes the 'DynFlags' independent of the current working directory.
 makeDynFlagsAbsolute :: FilePath -> DynFlags -> DynFlags
 makeDynFlagsAbsolute work_dir df =
-  mapOverIncludePaths (prependIfNotAbsolute work_dir)
+  mapOverIncludePaths (prependIfRelative work_dir)
   $ df
-    { importPaths = map (prependIfNotAbsolute work_dir) (importPaths df)
+    { importPaths = map (prependIfRelative work_dir) (importPaths df)
+    , packageDBFlags =
+        let makePackageDbAbsolute (PackageDB pkgConfRef) = PackageDB
+              $ case pkgConfRef of
+                PkgConfFile fp -> PkgConfFile (prependIfRelative work_dir fp)
+                conf -> conf
+            makePackageDbAbsolute db = db
+        in map makePackageDbAbsolute (packageDBFlags df)
     }
   where
-    prependIfNotAbsolute wdir f
+    prependIfRelative wdir f
       | isAbsolute f = f
       | otherwise = wdir </> f
 
