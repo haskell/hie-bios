@@ -73,7 +73,17 @@ data CradleLoadResult r
   deriving (Functor, Show)
 
 
-data CradleError = CradleError ExitCode [String] deriving (Show)
+data CradleError = CradleError
+  { cradleErrorDependencies :: [FilePath]
+  -- ^ Dependencies of the cradle that failed to load.
+  -- Can be watched for changes to attempt a reload of the cradle.
+  , cradleErrorExitCode :: ExitCode
+  -- ^ ExitCode of the cradle loading mechanism.
+  , cradleErrorStderr :: [String]
+  -- ^ Standard error output that can be shown to users to explain
+  -- the loading error.
+  }
+  deriving (Show, Eq)
 
 instance Exception CradleError where
 ----------------------------------------------------------------
@@ -81,8 +91,8 @@ instance Exception CradleError where
 -- | Option information for GHC
 data ComponentOptions = ComponentOptions {
     componentOptions  :: [String]  -- ^ Command line options.
-  , componentRoot :: FilePath 
-  -- ^ Root directory of the component. All 'componentOptions' are either 
+  , componentRoot :: FilePath
+  -- ^ Root directory of the component. All 'componentOptions' are either
   -- absolute, or relative to this directory.
   , componentDependencies :: [FilePath]
   -- ^ Dependencies of a cradle that might change the cradle.

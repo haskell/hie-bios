@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns #-}
@@ -118,8 +119,16 @@ addCradleDeps deps c =
     addActionDeps :: CradleAction a -> CradleAction a
     addActionDeps ca =
       ca { runCradle = \l fp ->
-            (fmap (\(ComponentOptions os' dir ds) -> ComponentOptions os' dir (ds `union` deps)))
-              <$> runCradle ca l fp }
+            runCradle ca l fp
+              >>= \case
+                CradleSuccess (ComponentOptions os' dir ds) ->
+                  pure $ CradleSuccess (ComponentOptions os' dir (ds `union` deps))
+                CradleFail err ->
+                  pure $ CradleFail
+                    (err { cradleErrorDependencies = cradleErrorDependencies err `union` deps })
+                CradleNone -> pure CradleNone
+         }
+
 
 implicitConfig :: FilePath -> MaybeT IO (CradleConfig a, FilePath)
 implicitConfig fp = do
@@ -283,7 +292,7 @@ multiAction buildCustomCradle cur_dir cs l cur_fp =
         <$> mapM (\(p, c) -> (,c) <$> (canonicalizePath (cur_dir </> p))) cs
 
     selectCradle [] =
-      return (CradleFail (CradleError ExitSuccess err_msg))
+      return (CradleFail (CradleError [] ExitSuccess err_msg))
     selectCradle ((p, c): css) =
         if p `isPrefixOf` cur_fp
           then runCradle
@@ -441,7 +450,7 @@ cabalAction work_dir mc l fp = do
       readProcessWithOutputFile l work_dir (proc "cabal" cab_args)
     deps <- cabalCradleDependencies work_dir
     case processCabalWrapperArgs args of
-        Nothing -> pure $ CradleFail (CradleError ex
+        Nothing -> pure $ CradleFail (CradleError deps ex
                     ["Failed to parse result of calling cabal"
                      , unlines output
                      , unlines stde
@@ -510,7 +519,7 @@ stackAction work_dir mc l _fp = do
         pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
     deps <- stackCradleDependencies work_dir
     return $ case processCabalWrapperArgs args of
-        Nothing -> CradleFail (CradleError ex1 $
+        Nothing -> CradleFail (CradleError deps ex1 $
                     ("Failed to parse result of calling stack":
                       stde)
                      ++ args)
@@ -684,7 +693,7 @@ readProcessWithOutputFile l work_dir cp = do
 makeCradleResult :: (ExitCode, [String], FilePath, [String]) -> [FilePath] -> CradleLoadResult ComponentOptions
 makeCradleResult (ex, err, componentDir, gopts) deps =
   case ex of
-    ExitFailure _ -> CradleFail (CradleError ex err)
+    ExitFailure _ -> CradleFail (CradleError deps ex err)
     _ ->
         let compOpts = ComponentOptions gopts componentDir deps
         in CradleSuccess compOpts
