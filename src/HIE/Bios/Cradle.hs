@@ -409,7 +409,7 @@ processCabalWrapperArgs args =
 -- arguments to the executable.
 type GhcProc = (FilePath, [String])
 
--- generate a fake GHC that can be passed to cabal
+-- | Generate a fake GHC that can be passed to cabal
 -- when run with --interactive, it will print out its
 -- command-line arguments and exit
 withCabalWrapperTool :: GhcProc -> FilePath -> (FilePath -> IO a) -> IO a
@@ -466,14 +466,35 @@ cabalAction work_dir mc l fp = do
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
 
--- Strip out any ["+RTS", ..., "-RTS"] sequences in the command string list.
+-- | Strip out any ["+RTS", ..., "-RTS"] sequences in the command string list.
+data InRTS = OutsideRTS | InsideRTS
+
+-- | Strip out any ["+RTS", ..., "-RTS"] sequences in the command string list.
+--
+-- >>> removeRTS ["option1", "+RTS -H32m -RTS", "option2"]
+-- ["option1", "option2"]
+--
+-- >>> removeRTS ["option1", "+RTS", "-H32m", "-RTS", "option2"]
+-- ["option1", "option2"]
+--
+-- >>> removeRTS ["option1", "+RTS -H32m"]
+-- ["option1"]
+--
+-- >>> removeRTS ["option1", "+RTS -H32m", "-RTS", "option2"]
+-- ["option1", "option2"]
+--
+-- >>> removeRTS ["option1", "+RTS -H32m", "-H32m -RTS", "option2"]
+-- ["option1", "option2"]
 removeRTS :: [String] -> [String]
-removeRTS ("+RTS" : xs)  =
-  case dropWhile (/= "-RTS") xs of
-    [] -> []
-    (_ : ys) -> removeRTS ys
-removeRTS (y:ys)         = y : removeRTS ys
-removeRTS []             = []
+removeRTS = go OutsideRTS
+  where
+    go :: InRTS -> [String] -> [String]
+    go _ [] = []
+    go OutsideRTS (y:ys)
+      | "+RTS" `isPrefixOf` y = go (if "-RTS" `isSuffixOf` y then OutsideRTS else InsideRTS) ys
+      | otherwise = y : go OutsideRTS ys
+    go InsideRTS (y:ys) = go (if "-RTS" `isSuffixOf` y then OutsideRTS else InsideRTS) ys
+
 
 removeVerbosityOpts :: [String] -> [String]
 removeVerbosityOpts = filter ((&&) <$> (/= "-v0") <*> (/= "-w"))
@@ -485,9 +506,8 @@ cabalWorkDir = findFileUpwards isCabal
     isCabal name = name == "cabal.project"
 
 ------------------------------------------------------------------------
--- Stack Cradle
+-- | Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
-
 stackCradle :: FilePath -> Maybe String -> Cradle a
 stackCradle wdir mc =
   Cradle
