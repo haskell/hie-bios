@@ -217,7 +217,7 @@ defaultCradle cur_dir =
     }
 
 ---------------------------------------------------------------
--- The none cradle tells us not to even attempt to load a certain directory
+-- | The none cradle tells us not to even attempt to load a certain directory
 
 noneCradle :: FilePath -> Cradle a
 noneCradle cur_dir =
@@ -230,7 +230,7 @@ noneCradle cur_dir =
     }
 
 ---------------------------------------------------------------
--- The multi cradle selects a cradle based on the filepath
+-- | The multi cradle selects a cradle based on the filepath
 
 multiCradle :: (b -> Cradle a) -> FilePath -> [(FilePath, CradleConfig b)] -> Cradle a
 multiCradle buildCustomCradle cur_dir cs =
@@ -368,9 +368,8 @@ callableToProcess (Program path) file = do
   return $ proc canon_path (maybeToList file)
 
 ------------------------------------------------------------------------
--- Cabal Cradle
--- Works for new-build by invoking `v2-repl` does not support components
--- yet.
+-- |Cabal Cradle
+-- Works for new-build by invoking `v2-repl`.
 cabalCradle :: FilePath -> Maybe String -> Cradle a
 cabalCradle wdir mc =
   Cradle
