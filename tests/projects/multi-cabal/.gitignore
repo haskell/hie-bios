@@ -1,0 +1,5 @@
+.stack-work/
+.direnv/
+dist-newstyle/
+*.swp
+result
