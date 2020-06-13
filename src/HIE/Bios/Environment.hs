@@ -38,7 +38,7 @@ initSession  ComponentOptions {..} = do
     let opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init (map B.pack componentOptions)
     cache_dir <- liftIO $ getCacheDir opts_hash
     -- Add the user specified options to a fresh GHC session.
-    (df', targets) <- addCmdOpts componentOptions df
+    (df', targets) <- addCmdOpts componentOptions componentRoot df
     let df'' = makeDynFlagsAbsolute componentRoot df'
     void $ G.setSessionDynFlags
         (disableOptimisation -- Compile with -O0 as we are not going to produce object files.
@@ -121,8 +121,8 @@ setHiDir f d = d { hiDir      = Just f}
 -- It would be good to move this code into a library module so we can just use it
 -- rather than copy it.
 addCmdOpts :: (GhcMonad m)
-           => [String] -> DynFlags -> m (DynFlags, [G.Target])
-addCmdOpts cmdOpts df1 = do
+           => [String] -> FilePath -> DynFlags -> m (DynFlags, [G.Target])
+addCmdOpts cmdOpts componentRoot df1 = do
   (df2, leftovers', _warns) <- G.parseDynamicFlags df1 (map G.noLoc cmdOpts)
   -- parse targets from ghci-scripts. Only extract targets that have been ":add"'ed.
   additionalTargets <- concat <$> mapM (liftIO . getTargetsFromGhciScript) (ghciScripts df2)
@@ -148,7 +148,9 @@ addCmdOpts cmdOpts df1 = do
 #endif
           cur_dir = '.' : [pathSeparator]
           nfp = normalise fp
-    normal_fileish_paths = map (normalise_hyp . G.unLoc) leftovers
+    -- #200: Cabal will add main-is module as a path relative to component root,
+    -- therefore we need to make it absolute.
+    normal_fileish_paths = map (prependIfRelative componentRoot . normalise_hyp . G.unLoc) leftovers
   let
    (srcs, objs) = partition_args normal_fileish_paths [] []
    df3 = df2 { ldInputs = map (FileOption "") objs ++ ldInputs df2 }
@@ -166,6 +168,11 @@ addCmdOpts cmdOpts df1 = do
     when (interactive_only && packageFlagsChanged idflags1 idflags0) $ do
        liftIO $ hPutStrLn stderr "cannot set package flags with :seti; use :set"
     -}
+  where
+    prependIfRelative wdir f
+      | isAbsolute f = f
+        -- Only alter something that is a file path, not module name
+      | otherwise = if ".hs" `isSuffixOf` f || ".lhs" `isSuffixOf` f then wdir </> f else f
 
 -- | Make filepaths in the given 'DynFlags' absolute.
 -- This makes the 'DynFlags' independent of the current working directory.

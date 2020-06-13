@@ -70,5 +70,5 @@ allWarningFlags = unsafePerformIO $ do
     mlibdir <- getSystemLibDir
     G.runGhcT mlibdir $ do
         df <- G.getSessionDynFlags
-        (df', _) <- addCmdOpts ["-Wall"] df
+        (df', _) <- addCmdOpts ["-Wall"] "" df
         return $ G.warningFlags df'
