@@ -8,7 +8,8 @@ let
     name = "multi-cabal";
     modifier = drv:
       with pkgs.haskellPackages;
-      pkgs.haskell.lib.disableOptimization (pkgs.haskell.lib.overrideCabal drv (attrs: {
+      with pkgs.haskell.lib;
+      disableOptimization (overrideCabal drv (attrs: {
         doCoverage = false;
         doCheck = true; # whether to run tests
         enableLibraryProfiling = false;
