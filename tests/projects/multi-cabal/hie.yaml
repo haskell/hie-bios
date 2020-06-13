@@ -1,7 +1,8 @@
 cradle:
-  cabal:
-      - path: ./src
-        component: "lib:multi-cabal"
-
-      - path: ./app
-        component: "exe:multi-cabal"
+  multi:
+    - path: "./Setup.hs"
+      config: { cradle: { none:  } }
+    - path: "./"
+      config: { cradle: { cabal:
+                            [ { path: "./src", component: "lib:multi-cabal" }
+                            , { path: "./app", component: "exe:multi-cabal" } ] } }
