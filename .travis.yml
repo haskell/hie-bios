@@ -6,6 +6,7 @@
 #
 # version: 0.3
 #
+# Additional changes included a shellcheck step
 language: c
 dist: xenial
 
@@ -86,6 +87,10 @@ install:
 # Here starts the actual work to be performed for the package under test;
 # any command which exits with a non-zero exit code causes the build to fail.
 script:
+  # Sanity checks for wrapper scripts
+  - shellcheck wrappers/cabal
+  - (cd wrappers && ${HC} -hide-all-packages -package base -package directory -package process -Wall -Werror cabal.hs -o CabalWrapper -hidir ${TMPDIR} -odir ${TMPDIR})
+
   # test that source-distributions can be generated
   - ${CABAL} new-sdist all
   - mv dist-newstyle/sdist/*.tar.gz ${DISTDIR}/
@@ -114,6 +119,3 @@ script:
 
   # Build without installed constraints for packages in global-db
   - rm -f cabal.project.local; ${CABAL} new-build -w ${HC} --disable-tests --disable-benchmarks all
-
-# REGENDATA ["hie-bios.cabal"]
-# EOF

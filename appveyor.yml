@@ -10,8 +10,10 @@ install:
   - choco install -y haskell-stack
   - choco install -y cabal
   - choco install ghc --version %GHCVER%
+  - choco install -y shellcheck
   - refreshenv
   - "set PATH=C:\\ProgramData\\chocolatey\\lib\\ghc\\tools\\ghc-%GHCVER%\\bin;C:\\msys64\\mingw64\\bin;C:\\msys64\\usr\\bin;%PATH%"
+  - shellcheck --version
   - stack --version
   - cabal --version
   - ghc --version
@@ -30,6 +32,10 @@ build_script:
 
 before_test:
   - cabal v2-build --enable-tests -w ghc-%GHCVER%.exe tests
+  # sanity check the wrappers
+  - shellcheck wrappers/cabal
+  - ghc -hide-all-packages -package base -package directory -package process -Wall -Werror wrappers/cabal.hs -o CabalWrapper -hidir %TMP% -odir %TMP%
+
 
 test_script:
   - cabal v2-test -w ghc-%GHCVER%.exe
