@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 function out(){
-  echo "$1" >> $HIE_BIOS_OUTPUT
+  echo "$1" >> "$HIE_BIOS_OUTPUT"
 }
 
 if [ "$1" == "--interactive" ]; then
