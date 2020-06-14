@@ -5,7 +5,7 @@ function out(){
 }
 
 if [ "$1" == "--interactive" ]; then
-  out $(pwd)
+  out "$(pwd)"
   for arg in "$@"; do
     out "$arg"
   done
