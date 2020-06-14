@@ -1,11 +1,12 @@
 module Main (main) where
 
 import System.Directory (getCurrentDirectory)
-import System.Environment (getArgs, getEnv, lookupEnv)
+import System.Environment (getArgs, getEnv)
 import System.Exit (exitWith)
 import System.Process (spawnProcess, waitForProcess)
 import System.IO (openFile, hClose, hPutStrLn, IOMode(..))
 
+main :: IO ()
 main = do
   args <- getArgs
   output_file <- getEnv "HIE_BIOS_OUTPUT"
