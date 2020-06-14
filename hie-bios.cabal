@@ -53,7 +53,7 @@ Extra-Source-Files:     ChangeLog
                         tests/projects/multi-stack/multi-stack.cabal
                         tests/projects/multi-stack/src/Lib.hs
                         tests/projects/failing-bios/A.hs
-                        tests/projects/failing-bios/B.cabal
+                        tests/projects/failing-bios/B.hs
                         tests/projects/failing-bios/hie.yaml
                         tests/projects/failing-cabal/failing-cabal.cabal
                         tests/projects/failing-cabal/hie.yaml
