@@ -73,6 +73,9 @@ main = do
            , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
                          $  testDirectory isCabalCradle "./tests/projects/multi-cabal/app/Main.hs"
                          >> testDirectory isCabalCradle "./tests/projects/multi-cabal/src/Lib.hs"
+           , testCaseSteps "monorepo-cabal" {- issue https://github.com/mpickering/hie-bios/issues/200 -}
+                         $  testDirectory isCabalCradle "./tests/projects/monorepo-cabal/A/Main.hs"
+                         >> testDirectory isCabalCradle "./tests/projects/monorepo-cabal/B/MyLib.hs"
            ]
 -- TODO: Remove once stack and ghc-8.10.1 play well
 -- https://github.com/bubba/hie-bios/runs/811271872?check_suite_focus=true
