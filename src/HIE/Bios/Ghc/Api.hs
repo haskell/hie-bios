@@ -4,57 +4,21 @@ module HIE.Bios.Ghc.Api (
     initializeFlagsWithCradle
   , initializeFlagsWithCradleWithMessage
   , G.SuccessFlag(..)
-  -- * Utility functions for running the GHC monad and implementing internal utilities
-  , withGHC
-  , withGHC'
-  , withGhcT
-  , getSystemLibDir
   , withDynFlags
   ) where
 
 import CoreMonad (liftIO)
-import Exception (ghandle, SomeException(..), ExceptionMonad(..))
-import GHC (Ghc, LoadHowMuch(..), GhcMonad, GhcT)
+import GHC (LoadHowMuch(..), GhcMonad)
 import DynFlags
 
 import qualified GHC as G
-import qualified MonadUtils as G
 import qualified HscMain as G
 import qualified GhcMake as G
 
 import Control.Monad (void)
-import System.Exit (exitSuccess)
 import HIE.Bios.Types
-import qualified HIE.Bios.Internal.Log as Log
 import HIE.Bios.Environment
 import HIE.Bios.Flags
-
-----------------------------------------------------------------
-
--- | Converting the 'Ghc' monad to the 'IO' monad. All exceptions are ignored and logged.
-withGHC :: FilePath  -- ^ A target file displayed in an error message.
-        -> Ghc a -- ^ 'Ghc' actions created by the Ghc utilities.
-        -> IO a
-withGHC file body = ghandle ignore $ withGHC' body
-  where
-    ignore :: SomeException -> IO a
-    ignore e = do
-        Log.logm $ file ++ ":0:0:Error:"
-        Log.logm (show e)
-        exitSuccess
-
--- | Run a Ghc monad computation with an automatically discovered libdir.
--- It calculates the lib dir by calling ghc with the `--print-libdir` flag.
-withGHC' :: Ghc a -> IO a
-withGHC' body = do
-    -- TODO: Why is this not using ghc-paths?
-    mlibdir <- getSystemLibDir
-    G.runGhc mlibdir body
-
-withGhcT :: (Exception.ExceptionMonad m, G.MonadIO m, Monad m) => GhcT m a -> m a
-withGhcT body = do
-  mlibdir <- G.liftIO $ getSystemLibDir
-  G.runGhcT mlibdir body
 
 ----------------------------------------------------------------
 

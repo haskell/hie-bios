@@ -10,7 +10,7 @@ import DynFlags (LogAction, dopt, DumpFlag(Opt_D_dump_splices))
 import ErrUtils
 import Exception (ghandle)
 import FastString (unpackFS)
-import GHC (DynFlags(..), SrcSpan(..), Severity(SevError), GhcMonad)
+import GHC (DynFlags(..), SrcSpan(..), GhcMonad)
 import qualified GHC as G
 import HscTypes (SourceError, srcErrorMessages)
 import Outputable (PprStyle, SDoc)

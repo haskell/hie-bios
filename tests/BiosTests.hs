@@ -4,13 +4,17 @@
 module Main where
 
 import Test.Tasty
-import Test.Tasty.ExpectedFailure
 import Test.Tasty.HUnit
 import Test.Hspec.Expectations
+#if __GLASGOW_HASKELL__ < 810
+import Test.Tasty.ExpectedFailure
+#endif
+import qualified GHC as G
 import HIE.Bios
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Load
 import HIE.Bios.Cradle
+import HIE.Bios.Environment
 import HIE.Bios.Types
 import Control.Monad.IO.Class
 import Control.Monad ( forM_, unless )
@@ -109,8 +113,16 @@ testDirectory :: (Cradle Void -> Bool) -> FilePath -> (String -> IO ()) -> IO ()
 testDirectory cradlePred fp step = do
   a_fp <- canonicalizePath fp
   crd <- initialiseCradle cradlePred a_fp step
+  step "Get GHC library directory"
+  testGetGhcLibDir crd
   step "Initialise Flags"
   testLoadFile crd a_fp step
+
+-- Here we are testing that the cradle's method of obtaining the ghcLibDir
+-- always works.
+testGetGhcLibDir :: Cradle a -> IO ()
+testGetGhcLibDir crd =
+  runGhcLibDir (cradleOptsProg crd) `shouldNotReturn` Nothing
 
 testDirectoryFail :: (Cradle Void -> Bool) -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
 testDirectoryFail cradlePred fp cradleFailPred step = do
@@ -133,8 +145,9 @@ initialiseCradle cradlePred a_fp step = do
 testLoadFile :: Cradle a -> FilePath -> (String -> IO ()) -> IO ()
 testLoadFile crd fp step = do
   a_fp <- canonicalizePath fp
+  libDir <- getRuntimeGhcLibDir crd False
   withCurrentDirectory (cradleRootDir crd) $
-    withGHC' $ do
+    G.runGhc libDir $ do
       let relFp = makeRelative (cradleRootDir crd) a_fp
       res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
       case res of
@@ -151,8 +164,9 @@ testLoadFile crd fp step = do
 testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
 testLoadFileCradleFail crd fp cradleErrorExpectation step = do
   a_fp <- canonicalizePath fp
+  libDir <- getRuntimeGhcLibDir crd False
   withCurrentDirectory (cradleRootDir crd) $
-    withGHC' $ do
+    G.runGhc libDir $ do
       let relFp = makeRelative (cradleRootDir crd) a_fp
       res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
       case res of
