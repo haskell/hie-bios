@@ -1,27 +1,30 @@
 {-# LANGUAGE RecordWildCards, CPP #-}
-module HIE.Bios.Environment (initSession, getSystemLibDir, makeDynFlagsAbsolute, getCacheDir, addCmdOpts) where
+module HIE.Bios.Environment (initSession, getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, getCacheDir, addCmdOpts) where
 
 import CoreMonad (liftIO)
-import GHC (DynFlags(..), GhcLink(..), HscTarget(..), GhcMonad)
+import GHC (GhcMonad)
 import qualified GHC as G
 import qualified DriverPhases as G
 import qualified Util as G
 import DynFlags
+import qualified GHC.Paths as Paths
 
-import Control.Monad (void)
+import Control.Applicative
+import Control.Monad (msum, void)
+import Control.Monad.Trans.Maybe
 
-import System.Process (readProcess)
 import System.Directory
 import System.FilePath
 import System.Environment (lookupEnv)
+import System.Process
 
 import qualified Crypto.Hash.SHA1 as H
 import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Base16
 import Data.List
 import Data.Char (isSpace)
-import Control.Applicative ((<|>))
-import Text.ParserCombinators.ReadP
+import Data.Maybe
+import Text.ParserCombinators.ReadP hiding (optional)
 import HIE.Bios.Types
 import HIE.Bios.Ghc.Gap
 
@@ -53,13 +56,51 @@ initSession  ComponentOptions {..} = do
 
 ----------------------------------------------------------------
 
--- | Obtain the directory for system libraries.
-getSystemLibDir :: IO (Maybe FilePath)
-getSystemLibDir = do
-    res <- readProcess "ghc" ["--print-libdir"] []
-    return $ case res of
-        ""   -> Nothing
-        dirn -> Just (init dirn)
+-- | @getRuntimeGhcLibDir cradle avoidHardcoding@ will give you the ghc libDir:
+-- __do not__ use 'runGhcLibDir' directly.
+-- This will also perform additional lookups and fallbacks to try and get a
+-- reliable library directory.
+--
+-- It tries this specific order of paths:
+--
+-- 1. the @NIX_GHC_LIBDIR@ if it is set
+-- 2. calling 'runCradleGhc' on the provided cradle
+-- 3. using @ghc-paths@
+--
+-- If @avoidHardcoding@ is 'True', then 'getRuntimeGhcLibDir' will __not__ fall
+-- back on @ghc-paths@. Set this to 'False' whenever you are planning on
+-- distributing the resulting binary you are compiling, otherwise paths from
+-- the system you were compiling on will be baked in!
+getRuntimeGhcLibDir :: Cradle a
+                    -> Bool -- ^ If 'True', avoid hardcoding the paths.
+                    -> IO (Maybe FilePath)
+getRuntimeGhcLibDir cradle avoidHardcoding =
+  runMaybeT $ fromNix <|> fromCradle <|> fromGhcPaths
+  where
+    fromNix = MaybeT $ lookupEnv "NIX_GHC_LIBDIR"
+    fromCradle = MaybeT $ runGhcLibDir $ cradleOptsProg cradle
+    fromGhcPaths = MaybeT $ pure $
+      if avoidHardcoding then Just Paths.libdir else Nothing
+
+-- | Gets the version of ghc used when compiling the cradle. It is based off of
+-- 'getRuntimeGhcLibDir'. If it can't work out the verison reliably, it will
+-- fall back to the version of ghc used to compile hie-bios.
+getRuntimeGhcVersion :: Cradle a
+                     -> IO String
+getRuntimeGhcVersion cradle = fmap (fromMaybe VERSION_ghc) $ runMaybeT $ do
+  libDir <- MaybeT $ getRuntimeGhcLibDir cradle True
+  let possibleExes = guessExecutablePathFromLibdir libDir
+  MaybeT $ msum (fmap getGhcVersion possibleExes)
+  where
+    getGhcVersion :: FilePath -> IO (Maybe String)
+    getGhcVersion ghc = (Just <$> readProcess ghc ["--numeric-version"] "")
+                    <|> (pure Nothing)
+    -- Taken from ghc-check GHC.Check.Executable
+    guessExecutablePathFromLibdir :: FilePath -> [FilePath]
+    guessExecutablePathFromLibdir fp =
+        [ fp </> "bin" </> "ghc"               -- Linux
+        , fp </> ".." </> "bin" </> "ghc.exe"  -- Windows
+        ]
 
 ----------------------------------------------------------------
 

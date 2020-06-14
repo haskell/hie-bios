@@ -53,10 +53,14 @@ data ActionName a
   deriving (Show, Eq, Ord, Functor)
 
 data CradleAction a = CradleAction {
-                      actionName :: ActionName a
+                        actionName   :: ActionName a
                       -- ^ Name of the action.
-                      , runCradle :: LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
+                      , runCradle    :: LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
+                      , runGhcLibDir :: IO (Maybe FilePath)
+                      -- ^ Try to find the path to /the libdir/ of the GHC that
+                      -- this cradle uses to compile stuff normally. You don't
+                      -- want to call this directly, use 'getGhcLibDir' instead.
                       }
   deriving (Functor)
 

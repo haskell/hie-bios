@@ -37,10 +37,12 @@ import Control.Monad
 import System.Info.Extra
 import Control.Monad.IO.Class
 import System.Environment
-import Control.Applicative ((<|>))
+import Control.Applicative ((<|>), optional)
 import System.IO.Temp
 import System.IO.Error (isPermissionError)
+import Data.Char
 import Data.List
+import Data.Foldable
 import Data.Ord (Down(..))
 
 import System.PosixCompat.Files
@@ -55,6 +57,7 @@ import qualified Data.Conduit.Text as C
 import qualified Data.Text as T
 import           Data.Maybe (fromMaybe, maybeToList)
 import           GHC.Fingerprint (fingerprintString)
+
 ----------------------------------------------------------------
 
 -- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
@@ -212,7 +215,9 @@ defaultCradle cur_dir =
     { cradleRootDir = cur_dir
     , cradleOptsProg = CradleAction
         { actionName = Types.Default
-        , runCradle = \_ _ -> return (CradleSuccess (ComponentOptions [] cur_dir []))
+        , runCradle = \_ _ ->
+            return (CradleSuccess (ComponentOptions [] cur_dir []))
+        , runGhcLibDir = getGhcOnPathLibDir cur_dir
         }
     }
 
@@ -226,6 +231,7 @@ noneCradle cur_dir =
     , cradleOptsProg = CradleAction
         { actionName = Types.None
         , runCradle = \_ _ -> return CradleNone
+        , runGhcLibDir = pure Nothing
         }
     }
 
@@ -239,6 +245,14 @@ multiCradle buildCustomCradle cur_dir cs =
     , cradleOptsProg = CradleAction
         { actionName = multiActionName
         , runCradle  = \l fp -> canonicalizePath fp >>= multiAction buildCustomCradle cur_dir cs l
+        , runGhcLibDir =
+            -- We're being lazy here and just returning the ghc path for the
+            -- first non-none cradle. This shouldn't matter in practice: all
+            -- sub cradles should be using the same ghc version!
+            case filter (not . isNoneCradleConfig) $ map snd cs of
+              [] -> return Nothing
+              (cfg:_) -> runGhcLibDir $ cradleOptsProg $
+                getCradle buildCustomCradle (cfg, cur_dir)
         }
     }
   where
@@ -305,12 +319,14 @@ multiAction buildCustomCradle cur_dir cs l cur_fp =
 -------------------------------------------------------------------------
 
 directCradle :: FilePath -> [String] -> Cradle a
-directCradle wdir args  =
+directCradle wdir args =
   Cradle
     { cradleRootDir = wdir
     , cradleOptsProg = CradleAction
         { actionName = Types.Direct
-        , runCradle = \_ _ -> return (CradleSuccess (ComponentOptions args wdir []))
+        , runCradle = \_ _ ->
+            return (CradleSuccess (ComponentOptions args wdir []))
+        , runGhcLibDir = getGhcOnPathLibDir wdir
         }
     }
 
@@ -326,6 +342,7 @@ biosCradle wdir biosCall biosDepsCall =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Bios
         , runCradle = biosAction wdir biosCall biosDepsCall
+        , runGhcLibDir = getGhcOnPathLibDir wdir
         }
     }
 
@@ -377,6 +394,15 @@ cabalCradle wdir mc =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Cabal
         , runCradle = cabalAction wdir mc
+        , runGhcLibDir = optional $ fmap trim $ do
+            -- Workaround for a cabal-install bug on 3.0.0.0:
+            -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
+            -- (It's ok to pass 'dist-newstyle' here, as it can only be changed
+            -- with the --builddir flag and not cabal.project, which we aren't
+            -- using in our call to v2-exec)
+            createDirectoryIfMissing True (wdir </> "dist-newstyle" </> "tmp")
+            -- Need to pass -v0 otherwise we get "resolving dependencies..."
+            readProcessWithCwd wdir "cabal" ["v2-exec", "ghc", "-v0", "--", "--print-libdir"] ""
         }
     }
 
@@ -514,6 +540,8 @@ stackCradle wdir mc =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Stack
         , runCradle = stackAction wdir mc
+        , runGhcLibDir = optional $ fmap trim $
+            readProcessWithCwd wdir "stack" ["exec", "--silent", "ghc", "--", "--print-libdir"] ""
         }
     }
 
@@ -716,3 +744,16 @@ makeCradleResult (ex, err, componentDir, gopts) deps =
     _ ->
         let compOpts = ComponentOptions gopts componentDir deps
         in CradleSuccess compOpts
+
+-- Used for clipping the trailing newlines on some commands
+trim :: String -> String
+trim = dropWhileEnd isSpace
+
+-- | Calls @ghc --print-libdir@, with just whatever's on the PATH.
+getGhcOnPathLibDir :: FilePath -> IO (Maybe FilePath)
+getGhcOnPathLibDir wdir = optional $
+  fmap trim $ readProcessWithCwd wdir "ghc" ["--print-libdir"] ""
+
+-- | Wrapper around 'readCreateProcess' that sets the working directory
+readProcessWithCwd :: FilePath -> FilePath -> [String] -> String -> IO String
+readProcessWithCwd dir cmd args = readCreateProcess (proc cmd args) { cwd = Just dir }

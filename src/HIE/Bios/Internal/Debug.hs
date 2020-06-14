@@ -1,15 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
 module HIE.Bios.Internal.Debug (debugInfo, rootInfo, configInfo, cradleInfo) where
 
-import Control.Monad.IO.Class (liftIO)
 import Control.Monad
 import Data.Void
 
 import qualified Data.Char as Char
-import Data.Maybe (fromMaybe)
 
-import HIE.Bios.Ghc.Api
 import HIE.Bios.Cradle
+import HIE.Bios.Environment
 import HIE.Bios.Types
 import HIE.Bios.Flags
 
@@ -34,17 +32,17 @@ debugInfo fp cradle = unlines <$> do
     canonFp <- canonicalizePath fp
     conf <- findConfig canonFp
     crdl <- findCradle' canonFp
+    ghcLibDir <- getRuntimeGhcLibDir cradle False
     case res of
       CradleSuccess (ComponentOptions gopts croot deps) -> do
-        mglibdir <- liftIO getSystemLibDir
         return [
-            "Root directory:      " ++ rootDir
-          , "Component directory: " ++ croot
-          , "GHC options:         " ++ unwords (map quoteIfNeeded gopts)
-          , "System libraries:    " ++ fromMaybe "" mglibdir
-          , "Config Location:     " ++ conf
-          , "Cradle:              " ++ crdl
-          , "Dependencies:        " ++ unwords deps
+            "Root directory:        " ++ rootDir
+          , "Component directory:   " ++ croot
+          , "GHC options:           " ++ unwords (map quoteIfNeeded gopts)
+          , "GHC library directory: " ++ show ghcLibDir
+          , "Config Location:       " ++ conf
+          , "Cradle:                " ++ crdl
+          , "Dependencies:          " ++ unwords deps
           ]
       CradleFail (CradleError deps ext stderr) ->
         return ["Cradle failed to load"
