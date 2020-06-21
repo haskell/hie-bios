@@ -1,0 +1,6 @@
+cradle:
+  stack:
+    - path: ./sub-comp
+      component: "sub-comp:lib"
+    - path: ./
+      component: "nested-stack:lib"

@@ -46,7 +46,7 @@ main = do
         ]
       , testGroup "Stop files"
         [ testCaseSteps "findCradle" $ \_ -> do
-            yamlFile <- findCradle "./tests/projects/stop-file/sub-package/Main.hs" 
+            yamlFile <- findCradle "./tests/projects/stop-file/sub-package/Main.hs"
             unless (yamlFile == Nothing) (error "Didn't respect stop file")
         , testCaseSteps "loadImplicitCradle" $ \_ -> do
             crd <- loadImplicitCradle "./tests/projects/stop-file/sub-package/Main.hs"  :: IO (Cradle Void)
@@ -67,6 +67,12 @@ main = do
            , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell/B.hs"
            , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal/B.hs"
            , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct/B.hs"
+           , testCaseSteps "nested-cabal" $ testLoadCradleDependencies isCabalCradle "./tests/projects/nested-cabal/sub-comp/Lib.hs"
+              (\deps -> deps `shouldMatchList` ["sub-comp" </> "sub-comp.cabal", "cabal.project", "cabal.project.local"]
+              )
+           , testCaseSteps "nested-cabal2" $ testLoadCradleDependencies isCabalCradle "./tests/projects/nested-cabal/MyLib.hs"
+              (\deps -> deps `shouldMatchList` ["nested-cabal.cabal", "cabal.project", "cabal.project.local"]
+              )
            , testCaseSteps "multi-direct" {- tests if both components can be loaded -}
                          $  testDirectory isMultiCradle "./tests/projects/multi-direct/A.hs"
                          >> testDirectory isMultiCradle "./tests/projects/multi-direct/B.hs"
@@ -89,6 +95,14 @@ main = do
           , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
                         $  testDirectory isStackCradle "./tests/projects/multi-stack/app/Main.hs"
                         >> testDirectory isStackCradle "./tests/projects/multi-stack/src/Lib.hs"
+          , expectFailBecause "stack repl set the component directory to the root directory" $
+              testCaseSteps "nested-stack" $ testLoadCradleDependencies isStackCradle "./tests/projects/nested-stack/sub-comp/Lib.hs"
+                (\deps -> deps `shouldMatchList`
+                  ["sub-comp" </> "sub-comp.cabal", "sub-comp" </> "package.yaml", "stack.yaml"]
+                )
+          , testCaseSteps "nested-stack2" $ testLoadCradleDependencies isStackCradle "./tests/projects/nested-stack/MyLib.hs"
+              (\deps -> deps `shouldMatchList` ["nested-stack.cabal", "package.yaml", "stack.yaml"]
+              )
           ,
           -- Test for special characters in the path for parsing of the ghci-scripts.
           -- Issue https://github.com/mpickering/hie-bios/issues/162
@@ -157,8 +171,7 @@ initialiseCradle cradlePred a_fp step = do
   pure crd
 
 testLoadFile :: Cradle a -> FilePath -> (String -> IO ()) -> IO ()
-testLoadFile crd fp step = do
-  a_fp <- canonicalizePath fp
+testLoadFile crd a_fp step = do
   libDir <- getRuntimeGhcLibDir crd
   withCurrentDirectory (cradleRootDir crd) $
     G.runGhc libDir $ do
@@ -176,8 +189,7 @@ testLoadFile crd fp step = do
         CradleFail (CradleError _deps _ex stde) -> liftIO $ expectationFailure (unlines stde)
 
 testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
-testLoadFileCradleFail crd fp cradleErrorExpectation step = do
-  a_fp <- canonicalizePath fp
+testLoadFileCradleFail crd a_fp cradleErrorExpectation step = do
   libDir <- getRuntimeGhcLibDir crd
   withCurrentDirectory (cradleRootDir crd) $
     G.runGhc libDir $ do
@@ -187,6 +199,21 @@ testLoadFileCradleFail crd fp cradleErrorExpectation step = do
         CradleSuccess _ -> liftIO $ expectationFailure "Cradle loaded successfully"
         CradleNone -> liftIO $ expectationFailure "Unexpected none-Cradle"
         CradleFail crdlFail -> liftIO $ cradleErrorExpectation crdlFail
+
+testLoadCradleDependencies :: (Cradle Void -> Bool) -> FilePath -> ([FilePath] -> Expectation) -> (String -> IO ()) -> IO ()
+testLoadCradleDependencies cradlePred fp dependencyPred step = do
+  a_fp <- canonicalizePath fp
+  crd <- initialiseCradle cradlePred a_fp step
+  libDir <- getRuntimeGhcLibDir crd
+  step "Initialise Flags"
+  withCurrentDirectory (cradleRootDir crd) $
+    G.runGhc libDir $ do
+      let relFp = makeRelative (cradleRootDir crd) a_fp
+      res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
+      case res of
+        CradleSuccess (_, options) -> liftIO $ dependencyPred (componentDependencies options)
+        CradleNone -> liftIO $ expectationFailure "Unexpected none-Cradle"
+        CradleFail (CradleError _deps _ex stde) -> liftIO $ expectationFailure ("Unexpected cradle fail" ++ unlines stde)
 
 findCradleForModule :: FilePath -> Maybe FilePath -> (String -> IO ()) -> IO ()
 findCradleForModule fp expected' step = do
@@ -205,23 +232,25 @@ testImplicitCradle fp' expectedActionName step = do
   testLoadFile crd fp step
 
 writeStackYamlFiles :: IO ()
-writeStackYamlFiles = do
-  let yamlFile = stackYaml stackYamlResolver
-  forM_ stackProjects $ \proj ->
-    writeFile (proj </> "stack.yaml") yamlFile
+writeStackYamlFiles =
+  forM_ stackProjects $ \(proj, pkgs) ->
+    writeFile (proj </> "stack.yaml") (stackYaml stackYamlResolver pkgs)
 
-stackProjects :: [FilePath]
+stackProjects :: [(FilePath, [FilePath])]
 stackProjects =
-  [ "tests" </> "projects" </> "multi-stack"
-  , "tests" </> "projects" </> "failing-stack"
-  , "tests" </> "projects" </> "simple-stack"
-  , "tests" </> "projects" </> "space stack"
-  , "tests" </> "projects" </> "implicit-stack"
-  , "tests" </> "projects" </> "implicit-stack-multi"
+  [ ("tests" </> "projects" </> "multi-stack", ["."])
+  , ("tests" </> "projects" </> "failing-stack", ["."])
+  , ("tests" </> "projects" </> "simple-stack", ["."])
+  , ("tests" </> "projects" </> "nested-stack", [".", "./sub-comp"])
+  , ("tests" </> "projects" </> "space stack", ["."])
+  , ("tests" </> "projects" </> "implicit-stack", ["."])
+  , ("tests" </> "projects" </> "implicit-stack-multi", ["."])
   ]
 
-stackYaml :: String -> String
-stackYaml resolver = unlines ["resolver: " ++ resolver, "packages:", "- ."]
+stackYaml :: String -> [FilePath] -> String
+stackYaml resolver pkgs = unlines
+  $ ["resolver: " ++ resolver, "packages:"]
+  ++ map ("- " ++) pkgs
 
 stackYamlResolver :: String
 stackYamlResolver =

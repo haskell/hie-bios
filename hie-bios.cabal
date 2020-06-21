@@ -71,6 +71,21 @@ Extra-Source-Files:     ChangeLog
                         tests/projects/failing-stack/hie.yaml
                         tests/projects/failing-stack/src/Lib.hs
                         tests/projects/failing-stack/Setup.hs
+                        tests/projects/nested-cabal/nested-cabal.cabal
+                        tests/projects/nested-cabal/cabal.project
+                        tests/projects/nested-cabal/hie.yaml
+                        tests/projects/nested-cabal/MyLib.hs
+                        tests/projects/nested-cabal/Setup.hs
+                        tests/projects/nested-cabal/sub-comp/sub-comp.cabal
+                        tests/projects/nested-cabal/sub-comp/Lib.hs
+                        tests/projects/nested-cabal/sub-comp/Setup.hs
+                        tests/projects/nested-stack/nested-stack.cabal
+                        tests/projects/nested-stack/hie.yaml
+                        tests/projects/nested-stack/MyLib.hs
+                        tests/projects/nested-stack/Setup.hs
+                        tests/projects/nested-stack/sub-comp/sub-comp.cabal
+                        tests/projects/nested-stack/sub-comp/Lib.hs
+                        tests/projects/nested-stack/sub-comp/Setup.hs
                         tests/projects/simple-bios/A.hs
                         tests/projects/simple-bios/B.hs
                         tests/projects/simple-bios/hie-bios.sh
