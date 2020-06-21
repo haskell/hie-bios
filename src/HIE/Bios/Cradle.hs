@@ -405,11 +405,25 @@ cabalCradle wdir mc =
         }
     }
 
-cabalCradleDependencies :: FilePath -> IO [FilePath]
-cabalCradleDependencies rootDir = do
-    cabalFiles <- findCabalFiles rootDir
-    return $ cabalFiles ++ ["cabal.project", "cabal.project.local"]
+-- | @'cabalCradleDependencies' rootDir componentDir@.
+-- Compute the dependencies of the cabal cradle based
+-- on the cradle root and the component directory.
+--
+-- Directory 'componentDir' is a sub-directory where we look for
+-- package specific cradle dependencies, such as a '.cabal' file.
+--
+-- Found dependencies are relative to 'rootDir'.
+cabalCradleDependencies :: FilePath -> FilePath -> IO [FilePath]
+cabalCradleDependencies rootDir componentDir = do
+    let relFp = makeRelative rootDir componentDir
+    cabalFiles' <- findCabalFiles componentDir
+    let cabalFiles = map (relFp </>) cabalFiles'
+    return $ map normalise $ cabalFiles ++ ["cabal.project", "cabal.project.local"]
 
+-- |Find .cabal files in the given directory.
+--
+-- Might return multiple results, as we can not know in advance
+-- which one is important to the user.
 findCabalFiles :: FilePath -> IO [FilePath]
 findCabalFiles wdir = do
   dirContent <- listDirectory wdir
@@ -472,14 +486,19 @@ cabalAction work_dir mc l fp = do
     let cab_args = ["v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
     (ex, output, stde, args) <-
       readProcessWithOutputFile l work_dir (proc "cabal" cab_args)
-    deps <- cabalCradleDependencies work_dir
     case processCabalWrapperArgs args of
-        Nothing -> pure $ CradleFail (CradleError deps ex
+        Nothing -> do
+          -- Best effort. Assume the working directory is the
+          -- the root of the component, so we are right in trivial cases at least.
+          deps <- cabalCradleDependencies work_dir work_dir
+          pure $ CradleFail (CradleError deps ex
                     ["Failed to parse result of calling cabal"
                      , unlines output
                      , unlines stde
                      , unlines args])
-        Just (componentDir, final_args) -> pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
+        Just (componentDir, final_args) -> do
+          deps <- cabalCradleDependencies work_dir componentDir
+          pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
   where
     -- Need to make relative on Windows, due to a Cabal bug with how it
     -- parses file targets with a C: drive in it
@@ -545,10 +564,21 @@ stackCradle wdir mc =
         }
     }
 
-stackCradleDependencies :: FilePath-> IO [FilePath]
-stackCradleDependencies wdir = do
-  cabalFiles <- findCabalFiles wdir
-  return $ cabalFiles ++ ["package.yaml", "stack.yaml"]
+-- | @'stackCradleDependencies' rootDir componentDir@.
+-- Compute the dependencies of the stack cradle based
+-- on the cradle root and the component directory.
+--
+-- Directory 'componentDir' is a sub-directory where we look for
+-- package specific cradle dependencies, such as 'package.yaml' and
+-- a '.cabal' file.
+--
+-- Found dependencies are relative to 'rootDir'.
+stackCradleDependencies :: FilePath -> FilePath -> IO [FilePath]
+stackCradleDependencies wdir componentDir = do
+  let relFp = makeRelative wdir componentDir
+  cabalFiles' <- findCabalFiles componentDir
+  let cabalFiles = map (relFp </>) cabalFiles'
+  return $ map normalise $ cabalFiles ++ [relFp </> "package.yaml", "stack.yaml"]
 
 stackAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
 stackAction work_dir mc l _fp = do
@@ -564,15 +594,26 @@ stackAction work_dir mc l _fp = do
         proc "stack" ["path", "--ghc-package-path"]
     let split_pkgs = concatMap splitSearchPath pkg_args
         pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
-    deps <- stackCradleDependencies work_dir
-    return $ case processCabalWrapperArgs args of
-        Nothing -> CradleFail (CradleError deps ex1 $
-                    ("Failed to parse result of calling stack":
-                      stde)
-                     ++ args)
+    case processCabalWrapperArgs args of
+        Nothing -> do
+          -- Best effort. Assume the working directory is the
+          -- the root of the component, so we are right in trivial cases at least.
+          deps <- stackCradleDependencies work_dir work_dir
+          pure $ CradleFail
+                    (CradleError deps ex1 $
+                      [ "Failed to parse result of calling stack" ]
+                      ++ stde
+                      ++ args
+                    )
 
-        Just (componentDir, ghc_args) ->
-          makeCradleResult (combineExitCodes [ex1, ex2], stde ++ stdr, componentDir, ghc_args ++ pkg_ghc_args) deps
+        Just (componentDir, ghc_args) -> do
+          deps <- stackCradleDependencies work_dir componentDir
+          pure $ makeCradleResult
+                    ( combineExitCodes [ex1, ex2]
+                    , stde ++ stdr, componentDir
+                    , ghc_args ++ pkg_ghc_args
+                    )
+                    deps
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess
