@@ -10,13 +10,12 @@ import DynFlags
 import qualified GHC.Paths as Paths
 
 import Control.Applicative
-import Control.Monad (msum, void)
+import Control.Monad (void)
 import Control.Monad.Trans.Maybe
 
 import System.Directory
 import System.FilePath
 import System.Environment (lookupEnv)
-import System.Process
 
 import qualified Crypto.Hash.SHA1 as H
 import qualified Data.ByteString.Char8 as B
@@ -78,7 +77,8 @@ getRuntimeGhcLibDir cradle avoidHardcoding =
   runMaybeT $ fromNix <|> fromCradle <|> fromGhcPaths
   where
     fromNix = MaybeT $ lookupEnv "NIX_GHC_LIBDIR"
-    fromCradle = MaybeT $ runGhcLibDir $ cradleOptsProg cradle
+    fromCradle = MaybeT $ fmap (fmap trim) $
+      runGhc (cradleOptsProg cradle) ["--print-libdir"]
     fromGhcPaths = MaybeT $ pure $
       if avoidHardcoding then Just Paths.libdir else Nothing
 
@@ -87,20 +87,9 @@ getRuntimeGhcLibDir cradle avoidHardcoding =
 -- fall back to the version of ghc used to compile hie-bios.
 getRuntimeGhcVersion :: Cradle a
                      -> IO String
-getRuntimeGhcVersion cradle = fmap (fromMaybe VERSION_ghc) $ runMaybeT $ do
-  libDir <- MaybeT $ getRuntimeGhcLibDir cradle True
-  let possibleExes = guessExecutablePathFromLibdir libDir
-  MaybeT $ msum (fmap getGhcVersion possibleExes)
-  where
-    getGhcVersion :: FilePath -> IO (Maybe String)
-    getGhcVersion ghc = (Just <$> readProcess ghc ["--numeric-version"] "")
-                    <|> (pure Nothing)
-    -- Taken from ghc-check GHC.Check.Executable
-    guessExecutablePathFromLibdir :: FilePath -> [FilePath]
-    guessExecutablePathFromLibdir fp =
-        [ fp </> "bin" </> "ghc"               -- Linux
-        , fp </> ".." </> "bin" </> "ghc.exe"  -- Windows
-        ]
+getRuntimeGhcVersion cradle =
+  fmap (fromMaybe VERSION_ghc) $ fmap (fmap trim) $
+    runGhc (cradleOptsProg cradle) ["--numeric-version"]
 
 ----------------------------------------------------------------
 
@@ -325,3 +314,7 @@ value = many1 (satisfy (not . isSpace))
 
 anyToken :: ReadP Char
 anyToken = satisfy $ const True
+
+-- Used for clipping the trailing newlines on GHC output
+trim :: String -> String
+trim = dropWhileEnd isSpace
