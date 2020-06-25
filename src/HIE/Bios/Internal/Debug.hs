@@ -33,6 +33,7 @@ debugInfo fp cradle = unlines <$> do
     conf <- findConfig canonFp
     crdl <- findCradle' canonFp
     ghcLibDir <- getRuntimeGhcLibDir cradle False
+    ghcVer <- getRuntimeGhcVersion cradle
     case res of
       CradleSuccess (ComponentOptions gopts croot deps) -> do
         return [
@@ -40,6 +41,7 @@ debugInfo fp cradle = unlines <$> do
           , "Component directory:   " ++ croot
           , "GHC options:           " ++ unwords (map quoteIfNeeded gopts)
           , "GHC library directory: " ++ show ghcLibDir
+          , "GHC version:           " ++ show ghcVer
           , "Config Location:       " ++ conf
           , "Cradle:                " ++ crdl
           , "Dependencies:          " ++ unwords deps

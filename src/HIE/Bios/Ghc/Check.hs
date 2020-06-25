@@ -19,7 +19,6 @@ import qualified HIE.Bios.Ghc.Gap as Gap
 
 import qualified DynFlags as G
 import qualified GHC as G
-import HIE.Bios.Environment
 
 ----------------------------------------------------------------
 

@@ -65,7 +65,8 @@ main = do
                          $  testDirectory isCabalCradle "./tests/projects/multi-cabal/app/Main.hs"
                          >> testDirectory isCabalCradle "./tests/projects/multi-cabal/src/Lib.hs"
            ]
--- TODO: Remove once there's a stackage snapshot for ghc 8.10
+-- TODO: Remove once stack and ghc-8.10.1 play well
+-- https://github.com/bubba/hie-bios/runs/811271872?check_suite_focus=true
 #if __GLASGOW_HASKELL__ < 810
        ++ [ expectFailBecause "stack repl does not fail on an invalid cabal file" $
               testCaseSteps "failing-stack" $ testDirectoryFail isStackCradle "./tests/projects/failing-stack/src/Lib.hs"
@@ -86,7 +87,7 @@ main = do
 #endif
       , testGroup "Implicit cradle tests" $
         [ testCaseSteps "implicit-cabal" $ testImplicitCradle "./tests/projects/implicit-cabal/Main.hs" Cabal
--- TODO: Remove once there's a stackage snapshot for ghc 8.10
+-- TODO: same here
 #if __GLASGOW_HASKELL__ < 810
         , testCaseSteps "implicit-stack" $ testImplicitCradle "./tests/projects/implicit-stack/Main.hs" Stack
         , testCaseSteps "implicit-stack-multi"
@@ -104,16 +105,26 @@ testDirectory :: (Cradle Void -> Bool) -> FilePath -> (String -> IO ()) -> IO ()
 testDirectory cradlePred fp step = do
   a_fp <- canonicalizePath fp
   crd <- initialiseCradle cradlePred a_fp step
-  step "Get GHC library directory"
+  step "Get runtime GHC library directory"
   testGetGhcLibDir crd
+  step "Get runtime GHC version"
+  testGetGhcVersion crd
   step "Initialise Flags"
   testLoadFile crd a_fp step
 
--- Here we are testing that the cradle's method of obtaining the ghcLibDir
+-- | Here we are testing that the cradle's method of obtaining the ghcLibDir
 -- always works.
 testGetGhcLibDir :: Cradle a -> IO ()
 testGetGhcLibDir crd =
-  runGhcLibDir (cradleOptsProg crd) `shouldNotReturn` Nothing
+  getRuntimeGhcLibDir crd True `shouldNotReturn` Nothing
+
+-- | Here we are testing that the cradle's method of getting the runtime ghc
+-- version is correct - which while testing, should be the version that we have
+-- built the tests with. This will fail if you compiled the tests with a ghc
+-- that doesn't equal the ghc on your path though :(
+testGetGhcVersion :: Cradle a -> IO ()
+testGetGhcVersion crd =
+  getRuntimeGhcVersion crd `shouldReturn` VERSION_ghc
 
 testDirectoryFail :: (Cradle Void -> Bool) -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
 testDirectoryFail cradlePred fp cradleFailPred step = do
@@ -203,7 +214,7 @@ stackYaml resolver = unlines ["resolver: " ++ resolver, "packages:", "- ."]
 stackYamlResolver :: String
 stackYamlResolver =
 #if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,10,1,0)))
-  "TODO"
+  "nightly-2020-06-25"
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)))
   "lts-15.10"
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,6,5,0)))

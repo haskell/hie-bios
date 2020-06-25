@@ -40,9 +40,7 @@ import System.Environment
 import Control.Applicative ((<|>), optional)
 import System.IO.Temp
 import System.IO.Error (isPermissionError)
-import Data.Char
 import Data.List
-import Data.Foldable
 import Data.Ord (Down(..))
 
 import System.PosixCompat.Files
@@ -217,7 +215,7 @@ defaultCradle cur_dir =
         { actionName = Types.Default
         , runCradle = \_ _ ->
             return (CradleSuccess (ComponentOptions [] cur_dir []))
-        , runGhcLibDir = getGhcOnPathLibDir cur_dir
+        , runGhc = runGhcOnPath cur_dir
         }
     }
 
@@ -231,7 +229,7 @@ noneCradle cur_dir =
     , cradleOptsProg = CradleAction
         { actionName = Types.None
         , runCradle = \_ _ -> return CradleNone
-        , runGhcLibDir = pure Nothing
+        , runGhc = const $ pure Nothing
         }
     }
 
@@ -245,13 +243,13 @@ multiCradle buildCustomCradle cur_dir cs =
     , cradleOptsProg = CradleAction
         { actionName = multiActionName
         , runCradle  = \l fp -> canonicalizePath fp >>= multiAction buildCustomCradle cur_dir cs l
-        , runGhcLibDir =
+        , runGhc = \args ->
             -- We're being lazy here and just returning the ghc path for the
             -- first non-none cradle. This shouldn't matter in practice: all
             -- sub cradles should be using the same ghc version!
             case filter (not . isNoneCradleConfig) $ map snd cs of
               [] -> return Nothing
-              (cfg:_) -> runGhcLibDir $ cradleOptsProg $
+              (cfg:_) -> flip runGhc args $ cradleOptsProg $
                 getCradle buildCustomCradle (cfg, cur_dir)
         }
     }
@@ -326,7 +324,7 @@ directCradle wdir args =
         { actionName = Types.Direct
         , runCradle = \_ _ ->
             return (CradleSuccess (ComponentOptions args wdir []))
-        , runGhcLibDir = getGhcOnPathLibDir wdir
+        , runGhc = runGhcOnPath wdir
         }
     }
 
@@ -342,7 +340,7 @@ biosCradle wdir biosCall biosDepsCall =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Bios
         , runCradle = biosAction wdir biosCall biosDepsCall
-        , runGhcLibDir = getGhcOnPathLibDir wdir
+        , runGhc = runGhcOnPath wdir
         }
     }
 
@@ -394,7 +392,7 @@ cabalCradle wdir mc =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Cabal
         , runCradle = cabalAction wdir mc
-        , runGhcLibDir = optional $ fmap trim $ do
+        , runGhc = \args -> optional $ do
             -- Workaround for a cabal-install bug on 3.0.0.0:
             -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
             -- (It's ok to pass 'dist-newstyle' here, as it can only be changed
@@ -402,7 +400,8 @@ cabalCradle wdir mc =
             -- using in our call to v2-exec)
             createDirectoryIfMissing True (wdir </> "dist-newstyle" </> "tmp")
             -- Need to pass -v0 otherwise we get "resolving dependencies..."
-            readProcessWithCwd wdir "cabal" ["v2-exec", "ghc", "-v0", "--", "--print-libdir"] ""
+            readProcessWithCwd
+              wdir "cabal" (["v2-exec", "ghc", "-v0", "--"] ++ args) ""
         }
     }
 
@@ -540,8 +539,9 @@ stackCradle wdir mc =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Stack
         , runCradle = stackAction wdir mc
-        , runGhcLibDir = optional $ fmap trim $
-            readProcessWithCwd wdir "stack" ["exec", "--silent", "ghc", "--", "--print-libdir"] ""
+        , runGhc = \args -> optional $
+            readProcessWithCwd
+              wdir "stack" (["exec", "--silent", "ghc", "--"] <> args) ""
         }
     }
 
@@ -728,8 +728,8 @@ readProcessWithOutputFile l work_dir cp = do
 
     where
       withHieBiosOutput :: [(String,String)] -> (FilePath -> IO a) -> IO a
-      withHieBiosOutput env action = do
-        let mbHieBiosOut = lookup hieBiosOutput env
+      withHieBiosOutput env' action = do
+        let mbHieBiosOut = lookup hieBiosOutput env'
         case mbHieBiosOut of
           Just file@(_:_) -> action file
           _ -> withSystemTempFile "hie-bios" $
@@ -745,14 +745,9 @@ makeCradleResult (ex, err, componentDir, gopts) deps =
         let compOpts = ComponentOptions gopts componentDir deps
         in CradleSuccess compOpts
 
--- Used for clipping the trailing newlines on some commands
-trim :: String -> String
-trim = dropWhileEnd isSpace
-
 -- | Calls @ghc --print-libdir@, with just whatever's on the PATH.
-getGhcOnPathLibDir :: FilePath -> IO (Maybe FilePath)
-getGhcOnPathLibDir wdir = optional $
-  fmap trim $ readProcessWithCwd wdir "ghc" ["--print-libdir"] ""
+runGhcOnPath :: FilePath -> [String] -> IO (Maybe String)
+runGhcOnPath wdir args = optional $ readProcessWithCwd wdir "ghc" args ""
 
 -- | Wrapper around 'readCreateProcess' that sets the working directory
 readProcessWithCwd :: FilePath -> FilePath -> [String] -> String -> IO String
