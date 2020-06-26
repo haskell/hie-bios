@@ -13,7 +13,7 @@ import HIE.Bios.Ghc.Load
 import HIE.Bios.Cradle
 import HIE.Bios.Types
 import Control.Monad.IO.Class
-import Control.Monad ( forM_ )
+import Control.Monad ( forM_, unless )
 import Data.Void
 import System.Directory
 import System.FilePath ( makeRelative, (</>) )
