@@ -7,7 +7,6 @@ import qualified GHC as G
 import qualified DriverPhases as G
 import qualified Util as G
 import DynFlags
-import qualified GHC.Paths as Paths
 
 import Control.Applicative
 import Control.Monad (void)
@@ -55,32 +54,21 @@ initSession  ComponentOptions {..} = do
 
 ----------------------------------------------------------------
 
--- | @getRuntimeGhcLibDir cradle avoidHardcoding@ will give you the ghc libDir:
+-- | @getRuntimeGhcLibDir cradle@ will give you the ghc libDir:
 -- __do not__ use 'runGhcLibDir' directly.
 -- This will also perform additional lookups and fallbacks to try and get a
 -- reliable library directory.
---
 -- It tries this specific order of paths:
 --
 -- 1. the @NIX_GHC_LIBDIR@ if it is set
 -- 2. calling 'runCradleGhc' on the provided cradle
--- 3. using @ghc-paths@
---
--- If @avoidHardcoding@ is 'True', then 'getRuntimeGhcLibDir' will __not__ fall
--- back on @ghc-paths@. Set this to 'False' whenever you are planning on
--- distributing the resulting binary you are compiling, otherwise paths from
--- the system you were compiling on will be baked in!
 getRuntimeGhcLibDir :: Cradle a
-                    -> Bool -- ^ If 'True', avoid hardcoding the paths.
                     -> IO (Maybe FilePath)
-getRuntimeGhcLibDir cradle avoidHardcoding =
-  runMaybeT $ fromNix <|> fromCradle <|> fromGhcPaths
+getRuntimeGhcLibDir cradle = runMaybeT $ fromNix <|> fromCradle
   where
     fromNix = MaybeT $ lookupEnv "NIX_GHC_LIBDIR"
     fromCradle = MaybeT $ fmap (fmap trim) $
       runGhc (cradleOptsProg cradle) ["--print-libdir"]
-    fromGhcPaths = MaybeT $ pure $
-      if avoidHardcoding then Just Paths.libdir else Nothing
 
 -- | Gets the version of ghc used when compiling the cradle. It is based off of
 -- 'getRuntimeGhcLibDir'. If it can't work out the verison reliably, it will

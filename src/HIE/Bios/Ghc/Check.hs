@@ -30,7 +30,7 @@ checkSyntax :: Show a
             -> IO String
 checkSyntax _      []    = return ""
 checkSyntax cradle files = do
-    libDir <- getRuntimeGhcLibDir cradle False
+    libDir <- getRuntimeGhcLibDir cradle
     G.runGhcT libDir $ do
       Log.debugm $ "Cradle: " ++ show cradle
       res <- initializeFlagsWithCradle (head files) cradle
