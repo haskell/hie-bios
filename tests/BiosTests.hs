@@ -116,7 +116,7 @@ testDirectory cradlePred fp step = do
 -- always works.
 testGetGhcLibDir :: Cradle a -> IO ()
 testGetGhcLibDir crd =
-  getRuntimeGhcLibDir crd True `shouldNotReturn` Nothing
+  getRuntimeGhcLibDir crd `shouldNotReturn` Nothing
 
 -- | Here we are testing that the cradle's method of getting the runtime ghc
 -- version is correct - which while testing, should be the version that we have
@@ -147,7 +147,7 @@ initialiseCradle cradlePred a_fp step = do
 testLoadFile :: Cradle a -> FilePath -> (String -> IO ()) -> IO ()
 testLoadFile crd fp step = do
   a_fp <- canonicalizePath fp
-  libDir <- getRuntimeGhcLibDir crd False
+  libDir <- getRuntimeGhcLibDir crd
   withCurrentDirectory (cradleRootDir crd) $
     G.runGhc libDir $ do
       let relFp = makeRelative (cradleRootDir crd) a_fp
@@ -166,7 +166,7 @@ testLoadFile crd fp step = do
 testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
 testLoadFileCradleFail crd fp cradleErrorExpectation step = do
   a_fp <- canonicalizePath fp
-  libDir <- getRuntimeGhcLibDir crd False
+  libDir <- getRuntimeGhcLibDir crd
   withCurrentDirectory (cradleRootDir crd) $
     G.runGhc libDir $ do
       let relFp = makeRelative (cradleRootDir crd) a_fp

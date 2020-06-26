@@ -58,6 +58,9 @@ data CradleAction a = CradleAction {
                       , runCradle     :: LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
                       , runGhc :: [String] -> IO (Maybe String)
+                      -- ^ Executes the @ghc@ binary that is usually used to
+                      -- build the cradle. E.g. for a cabal cradle this should be
+                      -- equivalent to @cabal exec ghc -- args@
                       }
   deriving (Functor)
 
