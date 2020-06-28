@@ -640,6 +640,7 @@ obeliskAction work_dir _fp = do
 
 -- | Searches upwards for the first directory containing a file to match
 -- the predicate.
+-- Stops searching upwards if there is a ".hie-bios.stop" file in the directory.
 findFileUpwards :: (FilePath -> Bool) -> FilePath -> MaybeT IO FilePath
 findFileUpwards p dir = do
   cnts <-
@@ -650,9 +651,10 @@ findFileUpwards p dir = do
         pure
         (findFile p dir)
 
+  stopFileExists <- liftIO $ doesFileExist (dir </> ".hie-bios.stop")
   case cnts of
-    [] | dir' == dir -> fail "No cabal files"
-            | otherwise   -> findFileUpwards p dir'
+    [] | dir' == dir || stopFileExists -> fail "No cabal files"
+       | otherwise                     -> findFileUpwards p dir'
     _ : _ -> return dir
   where dir' = takeDirectory dir
 

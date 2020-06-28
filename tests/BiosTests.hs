@@ -13,7 +13,7 @@ import HIE.Bios.Ghc.Load
 import HIE.Bios.Cradle
 import HIE.Bios.Types
 import Control.Monad.IO.Class
-import Control.Monad ( forM_ )
+import Control.Monad ( forM_, unless )
 import Data.Void
 import System.Directory
 import System.FilePath ( makeRelative, (</>) )
@@ -39,6 +39,15 @@ main = do
                   "./tests/projects/simple-cabal/Foo.hs"
                   (Just "./tests/projects/simple-cabal/hie.yaml")
                 )
+        ]
+      , testGroup "Stop files"
+        [ testCaseSteps "findCradle" $ \_ -> do
+            yamlFile <- findCradle "./tests/projects/stop-file/sub-package/Main.hs" 
+            unless (yamlFile == Nothing) (error "Didn't respect stop file")
+        , testCaseSteps "loadImplicitCradle" $ \_ -> do
+            crd <- loadImplicitCradle "./tests/projects/stop-file/sub-package/Main.hs"  :: IO (Cradle Void)
+            unless (actionName (cradleOptsProg crd) == Cabal) $
+              error $ "Didn't respect stop file: " <> show crd
         ]
       , testGroup "Loading tests"
         $ linuxExlusiveTestCases
