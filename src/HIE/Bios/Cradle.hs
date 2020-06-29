@@ -215,7 +215,7 @@ defaultCradle cur_dir =
         { actionName = Types.Default
         , runCradle = \_ _ ->
             return (CradleSuccess (ComponentOptions [] cur_dir []))
-        , runGhc = runGhcOnPath cur_dir
+        , runGhcCmd = runGhcCmdOnPath cur_dir
         }
     }
 
@@ -229,7 +229,7 @@ noneCradle cur_dir =
     , cradleOptsProg = CradleAction
         { actionName = Types.None
         , runCradle = \_ _ -> return CradleNone
-        , runGhc = const $ pure Nothing
+        , runGhcCmd = const $ pure Nothing
         }
     }
 
@@ -243,13 +243,13 @@ multiCradle buildCustomCradle cur_dir cs =
     , cradleOptsProg = CradleAction
         { actionName = multiActionName
         , runCradle  = \l fp -> canonicalizePath fp >>= multiAction buildCustomCradle cur_dir cs l
-        , runGhc = \args ->
+        , runGhcCmd = \args ->
             -- We're being lazy here and just returning the ghc path for the
             -- first non-none cradle. This shouldn't matter in practice: all
             -- sub cradles should be using the same ghc version!
             case filter (not . isNoneCradleConfig) $ map snd cs of
               [] -> return Nothing
-              (cfg:_) -> flip runGhc args $ cradleOptsProg $
+              (cfg:_) -> flip runGhcCmd args $ cradleOptsProg $
                 getCradle buildCustomCradle (cfg, cur_dir)
         }
     }
@@ -324,7 +324,7 @@ directCradle wdir args =
         { actionName = Types.Direct
         , runCradle = \_ _ ->
             return (CradleSuccess (ComponentOptions args wdir []))
-        , runGhc = runGhcOnPath wdir
+        , runGhcCmd = runGhcCmdOnPath wdir
         }
     }
 
@@ -340,7 +340,7 @@ biosCradle wdir biosCall biosDepsCall =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Bios
         , runCradle = biosAction wdir biosCall biosDepsCall
-        , runGhc = runGhcOnPath wdir
+        , runGhcCmd = runGhcCmdOnPath wdir
         }
     }
 
@@ -392,7 +392,7 @@ cabalCradle wdir mc =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Cabal
         , runCradle = cabalAction wdir mc
-        , runGhc = \args -> optional $ do
+        , runGhcCmd = \args -> optional $ do
             -- Workaround for a cabal-install bug on 3.0.0.0:
             -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
             -- (It's ok to pass 'dist-newstyle' here, as it can only be changed
@@ -539,7 +539,7 @@ stackCradle wdir mc =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Stack
         , runCradle = stackAction wdir mc
-        , runGhc = \args -> optional $
+        , runGhcCmd = \args -> optional $
             readProcessWithCwd
               wdir "stack" (["exec", "--silent", "ghc", "--"] <> args) ""
         }
@@ -748,8 +748,8 @@ makeCradleResult (ex, err, componentDir, gopts) deps =
         in CradleSuccess compOpts
 
 -- | Calls @ghc --print-libdir@, with just whatever's on the PATH.
-runGhcOnPath :: FilePath -> [String] -> IO (Maybe String)
-runGhcOnPath wdir args = optional $ readProcessWithCwd wdir "ghc" args ""
+runGhcCmdOnPath :: FilePath -> [String] -> IO (Maybe String)
+runGhcCmdOnPath wdir args = optional $ readProcessWithCwd wdir "ghc" args ""
 
 -- | Wrapper around 'readCreateProcess' that sets the working directory
 readProcessWithCwd :: FilePath -> FilePath -> [String] -> String -> IO String
