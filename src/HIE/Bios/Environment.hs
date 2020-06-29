@@ -55,7 +55,7 @@ initSession  ComponentOptions {..} = do
 ----------------------------------------------------------------
 
 -- | @getRuntimeGhcLibDir cradle@ will give you the ghc libDir:
--- __do not__ use 'runGhcLibDir' directly.
+-- __do not__ use 'runGhcCmd' directly.
 -- This will also perform additional lookups and fallbacks to try and get a
 -- reliable library directory.
 -- It tries this specific order of paths:
@@ -68,7 +68,7 @@ getRuntimeGhcLibDir cradle = runMaybeT $ fromNix <|> fromCradle
   where
     fromNix = MaybeT $ lookupEnv "NIX_GHC_LIBDIR"
     fromCradle = MaybeT $ fmap (fmap trim) $
-      runGhc (cradleOptsProg cradle) ["--print-libdir"]
+      runGhcCmd (cradleOptsProg cradle) ["--print-libdir"]
 
 -- | Gets the version of ghc used when compiling the cradle. It is based off of
 -- 'getRuntimeGhcLibDir'. If it can't work out the verison reliably, it will
@@ -77,7 +77,7 @@ getRuntimeGhcVersion :: Cradle a
                      -> IO String
 getRuntimeGhcVersion cradle =
   fmap (fromMaybe VERSION_ghc) $ fmap (fmap trim) $
-    runGhc (cradleOptsProg cradle) ["--numeric-version"]
+    runGhcCmd (cradleOptsProg cradle) ["--numeric-version"]
 
 ----------------------------------------------------------------
 
