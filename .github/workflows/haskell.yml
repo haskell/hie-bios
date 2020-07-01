@@ -18,7 +18,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - uses: actions/setup-haskell@v1.1.1
+    - uses: actions/setup-haskell@v1.1
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: '3.2'
@@ -35,17 +35,25 @@ jobs:
       run: cabal build
     - name: Test
       run: cabal test
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-haskell@v1.1
     - name: Check
       run: cabal check
     - name: Generate sdist
       run: cabal sdist
     - uses: actions/upload-artifact@v2
       with:
+        name: 'sdist'
         path: dist-newstyle/sdist/hie-bios*.tar.gz
 
   shellcheck:
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v2
     - uses: ludeeus/action-shellcheck@master
       with:
         ignore: tests
