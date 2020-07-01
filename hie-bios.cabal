@@ -46,6 +46,14 @@ Extra-Source-Files:     ChangeLog
                         tests/projects/multi-cabal/hie.yaml
                         tests/projects/multi-cabal/multi-cabal.cabal
                         tests/projects/multi-cabal/src/Lib.hs
+                        tests/projects/monorepo-cabal/cabal.project
+                        tests/projects/monorepo-cabal/hie.yaml
+                        tests/projects/monorepo-cabal/A/Main.hs
+                        tests/projects/monorepo-cabal/A/A.cabal
+                        tests/projects/monorepo-cabal/A/Setup.hs
+                        tests/projects/monorepo-cabal/B/MyLib.hs
+                        tests/projects/monorepo-cabal/B/B.cabal
+                        tests/projects/monorepo-cabal/B/Setup.hs
                         tests/projects/multi-stack/Setup.hs
                         tests/projects/multi-stack/app/Main.hs
                         tests/projects/multi-stack/cabal.project

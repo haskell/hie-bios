@@ -1,0 +1,8 @@
+cabal-version:       >=1.10
+name:                A
+version:             0.1.0.0
+build-type:          Simple
+executable A
+  main-is:             Main.hs
+  build-depends:       base >=4.8, B
+  default-language:    Haskell2010

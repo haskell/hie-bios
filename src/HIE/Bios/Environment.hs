@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, CPP #-}
-module HIE.Bios.Environment (initSession, getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, getCacheDir, addCmdOpts) where
+module HIE.Bios.Environment (initSession, getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, getCacheDir, addCmdOpts) where
 
 import CoreMonad (liftIO)
 import GHC (GhcMonad)
@@ -48,9 +48,20 @@ initSession  ComponentOptions {..} = do
         $ setVerbosity 0                       -- Set verbosity to zero just in case the user specified `-vx` in the options.
         $ setLinkerOptions df''                 -- Set `-fno-code` to avoid generating object files, unless we have to.
         )
+
+    let targets' = makeTargetsAbsolute componentRoot targets
     -- Unset the default log action to avoid output going to stdout.
     unsetLogAction
-    return targets
+    return targets'
+
+----------------------------------------------------------------
+
+makeTargetsAbsolute :: FilePath -> [G.Target] -> [G.Target]
+makeTargetsAbsolute wdir = map (\target -> target {G.targetId = makeTargetIdAbsolute wdir (G.targetId target)})
+
+makeTargetIdAbsolute :: FilePath -> G.TargetId -> G.TargetId
+makeTargetIdAbsolute wdir (G.TargetFile fp phase) = G.TargetFile (prependIfRelative wdir fp) phase
+makeTargetIdAbsolute _ tid = tid
 
 ----------------------------------------------------------------
 
@@ -200,10 +211,11 @@ makeDynFlagsAbsolute work_dir df =
             makePackageDbAbsolute db = db
         in map makePackageDbAbsolute (packageDBFlags df)
     }
-  where
-    prependIfRelative wdir f
-      | isAbsolute f = f
-      | otherwise = wdir </> f
+
+prependIfRelative :: FilePath -> FilePath -> FilePath
+prependIfRelative wdir f
+  | isAbsolute f = f
+  | otherwise = wdir </> f
 
 -- partition_args, along with some of the other code in this file,
 -- was copied from ghc/Main.hs

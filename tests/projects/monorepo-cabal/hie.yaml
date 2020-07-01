@@ -1,0 +1,6 @@
+cradle:
+  cabal:
+    - path: ./A
+      component: "exe:A"
+    - path: ./B
+      component: "lib:B"
