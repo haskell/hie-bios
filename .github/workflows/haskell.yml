@@ -35,6 +35,13 @@ jobs:
       run: cabal build
     - name: Test
       run: cabal test
+    - name: Check
+      run: cabal check
+    - name: Generate sdist
+      run: cabal sdist
+    - uses: actions/upload-artifact@v2
+      with:
+        path: dist-newstyle/sdist/hie-bios*.tar.gz
 
   shellcheck:
     runs-on: ubuntu-latest
