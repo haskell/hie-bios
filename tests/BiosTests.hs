@@ -59,8 +59,7 @@ main = do
                     componentOptions r `shouldMatchList` ["a"]
                   _ -> expectationFailure "Cradle could not be loaded"
 
-        , expectFailBecause "symlink is canonicalized" $
-          testCaseSteps "Can load symlinked module" $ \step -> do
+        , testCaseSteps "Can load symlinked module" $ \step -> do
             withTempCopy "./tests/projects/symlink-test" $ \tmpdir -> do
               crdl <- initialiseCradle isMultiCradle (addTrailingPathSeparator tmpdir) step
               step "Attemp to load symlinked module A"
@@ -75,8 +74,7 @@ main = do
                     componentOptions r `shouldMatchList` ["b"]
                   _ -> expectationFailure "Cradle could not be loaded"
 
-        , expectFailBecause "symlink is canonicalized" $
-          testCaseSteps "Can not load symlinked module that is ignored" $ \step -> do
+        , testCaseSteps "Can not load symlinked module that is ignored" $ \step -> do
             withTempCopy "./tests/projects/symlink-test" $ \tmpdir -> do
               crdl <- initialiseCradle isMultiCradle (addTrailingPathSeparator tmpdir) step
               step "Attemp to load symlinked module A"

@@ -242,7 +242,7 @@ multiCradle buildCustomCradle cur_dir cs =
     { cradleRootDir  = cur_dir
     , cradleOptsProg = CradleAction
         { actionName = multiActionName
-        , runCradle  = \l fp -> canonicalizePath fp >>= multiAction buildCustomCradle cur_dir cs l
+        , runCradle  = \l fp -> makeAbsolute fp >>= multiAction buildCustomCradle cur_dir cs l
         , runGhcCmd = \args ->
             -- We're being lazy here and just returning the ghc path for the
             -- first non-none cradle. This shouldn't matter in practice: all
@@ -301,7 +301,7 @@ multiAction buildCustomCradle cur_dir cs l cur_fp =
     canonicalizeCradles :: IO [(FilePath, CradleConfig b)]
     canonicalizeCradles =
       sortOn (Down . fst)
-        <$> mapM (\(p, c) -> (,c) <$> (canonicalizePath (cur_dir </> p))) cs
+        <$> mapM (\(p, c) -> (,c) <$> (makeAbsolute (cur_dir </> p))) cs
 
     selectCradle [] =
       return (CradleFail (CradleError [] ExitSuccess err_msg))
