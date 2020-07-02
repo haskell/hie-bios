@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
@@ -20,10 +21,11 @@ import Control.Monad.IO.Class
 import Control.Monad ( forM_, unless )
 import Data.Void
 import System.Directory
-import System.FilePath ( makeRelative, (</>) )
+import System.FilePath (addTrailingPathSeparator,  makeRelative, (</>) )
 import System.Info.Extra ( isWindows )
 import System.IO.Temp
 import System.Exit (ExitCode(ExitFailure))
+import Control.Monad.Extra (unlessM)
 
 main :: IO ()
 main = do
@@ -44,6 +46,49 @@ main = do
                   "./tests/projects/simple-cabal/Foo.hs"
                   (Just "./tests/projects/simple-cabal/hie.yaml")
                 )
+        ]
+      , testGroup "Symlink"
+        [ testCaseSteps "Can load base module" $ \step -> do
+            withTempCopy "./tests/projects/symlink-test" $ \tmpdir -> do
+              crdl <- initialiseCradle isMultiCradle (addTrailingPathSeparator tmpdir) step
+              step "Load module A"
+              withCurrentDirectory (cradleRootDir crdl) $ do
+                runCradle (cradleOptsProg crdl) (const (pure ())) "./a/A.hs"
+                >>= \case
+                  CradleSuccess r ->
+                    componentOptions r `shouldMatchList` ["a"]
+                  _ -> expectationFailure "Cradle could not be loaded"
+
+        , expectFailBecause "symlink is canonicalized" $
+          testCaseSteps "Can load symlinked module" $ \step -> do
+            withTempCopy "./tests/projects/symlink-test" $ \tmpdir -> do
+              crdl <- initialiseCradle isMultiCradle (addTrailingPathSeparator tmpdir) step
+              step "Attemp to load symlinked module A"
+              withCurrentDirectory (cradleRootDir crdl) $ do
+                createDirectoryLink "./a" "./b"
+                unlessM (doesFileExist "./b/A.hs")
+                  $ expectationFailure "Test invariant broken, this file must exist."
+
+                runCradle (cradleOptsProg crdl) (const (pure ())) "./b/A.hs"
+                >>= \case
+                  CradleSuccess r ->
+                    componentOptions r `shouldMatchList` ["b"]
+                  _ -> expectationFailure "Cradle could not be loaded"
+
+        , expectFailBecause "symlink is canonicalized" $
+          testCaseSteps "Can not load symlinked module that is ignored" $ \step -> do
+            withTempCopy "./tests/projects/symlink-test" $ \tmpdir -> do
+              crdl <- initialiseCradle isMultiCradle (addTrailingPathSeparator tmpdir) step
+              step "Attemp to load symlinked module A"
+              withCurrentDirectory (cradleRootDir crdl) $ do
+                createDirectoryLink "./a" "./c"
+                unlessM (doesFileExist "./c/A.hs")
+                  $ expectationFailure "Test invariant broken, this file must exist."
+
+                runCradle (cradleOptsProg crdl) (const (pure ())) "./c/A.hs"
+                  >>= \case
+                    CradleNone -> pure ()
+                    _ -> expectationFailure "Cradle loaded symlink"
         ]
       , testGroup "Loading tests"
         $ linuxExlusiveTestCases
@@ -266,7 +311,7 @@ copyDir src dst = do
         then createDirectory dstFp >> copyDir srcFp dstFp
         else copyFile srcFp dstFp
   where ignored = ["dist", "dist-newstyle", ".stack-work"]
-      
+
 
 writeStackYamlFiles :: IO ()
 writeStackYamlFiles =
