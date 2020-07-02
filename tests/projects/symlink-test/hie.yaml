@@ -1,0 +1,16 @@
+cradle:
+  multi:
+    - path: ./a
+      config:
+        cradle:
+          direct:
+            arguments: ["a"]
+    - path: ./b
+      config:
+        cradle:
+          direct:
+            arguments: ["b"]
+    - path: ./c
+      config:
+        cradle:
+          none:
