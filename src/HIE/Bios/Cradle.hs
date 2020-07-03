@@ -544,9 +544,9 @@ removeVerbosityOpts = filter ((&&) <$> (/= "-v0") <*> (/= "-w"))
 
 
 cabalWorkDir :: FilePath -> MaybeT IO FilePath
-cabalWorkDir = findFileUpwards isCabal
-  where
-    isCabal name = name == "cabal.project"
+cabalWorkDir wdir =
+      findFileUpwards (== "cabal.project") wdir
+  <|> findFileUpwards (\fp -> takeExtension fp == ".cabal") wdir
 
 ------------------------------------------------------------------------
 -- | Stack Cradle

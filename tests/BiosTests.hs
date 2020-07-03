@@ -22,6 +22,7 @@ import Data.Void
 import System.Directory
 import System.FilePath ( makeRelative, (</>) )
 import System.Info.Extra ( isWindows )
+import System.IO.Temp
 import System.Exit (ExitCode(ExitFailure))
 
 main :: IO ()
@@ -112,13 +113,23 @@ main = do
           ]
 #endif
       , testGroup "Implicit cradle tests" $
-        [ testCaseSteps "implicit-cabal" $ testImplicitCradle "./tests/projects/implicit-cabal/Main.hs" Cabal
+        [ testCaseSteps "implicit-cabal" $
+            testImplicitCradle "./tests/projects/implicit-cabal/Main.hs" Cabal "./tests/projects/implicit-cabal"
+        , testCaseSteps "implicit-cabal-no-project" $ \step ->
+            -- Here we NEED to copy this project to a temporary directory
+            -- because when getting the flags, `cabal repl` will always use the cabal.project of
+            -- hie-bios in this source tree, and then complain that Main.hs doesn't exist
+            copyToTmp "./tests/projects/implicit-cabal-no-project" $ \copy ->
+              testImplicitCradle (copy </> "Main.hs") Cabal copy step
+        , testCaseSteps "implicit-cabal-deep-project" $
+            testImplicitCradle "./tests/projects/implicit-cabal-deep-project/foo/Main.hs" Cabal "./tests/projects/implicit-cabal-deep-project"
 -- TODO: same here
 #if __GLASGOW_HASKELL__ < 810
-        , testCaseSteps "implicit-stack" $ testImplicitCradle "./tests/projects/implicit-stack/Main.hs" Stack
+        , testCaseSteps "implicit-stack" $
+            testImplicitCradle "./tests/projects/implicit-stack/Main.hs" Stack "./tests/projects/implicit-stack"
         , testCaseSteps "implicit-stack-multi"
-            $ testImplicitCradle "./tests/projects/implicit-stack-multi/Main.hs" Stack
-            >> testImplicitCradle "./tests/projects/implicit-stack-multi/other-package/Main.hs" Stack
+            $ testImplicitCradle "./tests/projects/implicit-stack-multi/Main.hs" Stack "./tests/projects/implicit-stack-multi"
+            >> testImplicitCradle "./tests/projects/implicit-stack-multi/other-package/Main.hs" Stack "./tests/projects/implicit-stack-multi"
 #endif
         ]
       ]
@@ -222,14 +233,37 @@ findCradleForModule fp expected' step = do
   step "Finding cradle"
   findCradle a_fp `shouldReturn` expected
 
-testImplicitCradle :: FilePath -> ActionName Void -> (String -> IO ()) -> IO ()
-testImplicitCradle fp' expectedActionName step = do
-  fp <- canonicalizePath fp'
+testImplicitCradle :: FilePath -> ActionName Void -> FilePath -> (String -> IO ()) -> IO ()
+testImplicitCradle fp' expectedActionName expectedCradleRootDir step = do
+  fp <- makeAbsolute fp'
   step "Inferring implicit cradle"
   crd <- loadImplicitCradle fp :: IO (Cradle Void)
+
   actionName (cradleOptsProg crd) `shouldBe` expectedActionName
+
+  absExpectedCradleRootDir <- makeAbsolute expectedCradleRootDir
+  cradleRootDir crd `shouldBe` absExpectedCradleRootDir
+
   step "Initialize flags"
   testLoadFile crd fp step
+
+copyToTmp :: FilePath -> (FilePath -> IO a) -> IO a
+copyToTmp srcDir f =
+  withSystemTempDirectory "hie-bios-test" $ \newDir -> do
+    copyDir srcDir newDir
+    f newDir
+
+copyDir :: FilePath -> FilePath -> IO ()
+copyDir src dst = do
+  contents <- listDirectory src
+  forM_ contents $ \file -> do
+    let srcFp = src </> file
+        dstFp = dst </> file
+    isDir <- doesDirectoryExist srcFp
+    if isDir
+      then createDirectory dstFp >> copyDir srcFp dstFp
+      else copyFile srcFp dstFp
+      
 
 writeStackYamlFiles :: IO ()
 writeStackYamlFiles =
