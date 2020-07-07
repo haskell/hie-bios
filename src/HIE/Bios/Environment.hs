@@ -10,7 +10,6 @@ import DynFlags
 
 import Control.Applicative
 import Control.Monad (void)
-import Control.Monad.Trans.Maybe
 
 import System.Directory
 import System.FilePath
@@ -21,7 +20,6 @@ import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Base16
 import Data.List
 import Data.Char (isSpace)
-import Data.Maybe
 import Text.ParserCombinators.ReadP hiding (optional)
 import HIE.Bios.Types
 import HIE.Bios.Ghc.Gap
@@ -74,21 +72,21 @@ makeTargetIdAbsolute _ tid = tid
 -- 1. the @NIX_GHC_LIBDIR@ if it is set
 -- 2. calling 'runCradleGhc' on the provided cradle
 getRuntimeGhcLibDir :: Cradle a
-                    -> IO (Maybe FilePath)
-getRuntimeGhcLibDir cradle = runMaybeT $ fromNix <|> fromCradle
-  where
-    fromNix = MaybeT $ lookupEnv "NIX_GHC_LIBDIR"
-    fromCradle = MaybeT $ fmap (fmap trim) $
+                    -> IO (CradleLoadResult FilePath)
+getRuntimeGhcLibDir cradle = do
+  maybeNixLibDir <- lookupEnv "NIX_GHC_LIBDIR"
+  case maybeNixLibDir of 
+    Just ld -> pure (CradleSuccess ld)
+    Nothing -> fmap (fmap trim) $
       runGhcCmd (cradleOptsProg cradle) ["--print-libdir"]
 
 -- | Gets the version of ghc used when compiling the cradle. It is based off of
 -- 'getRuntimeGhcLibDir'. If it can't work out the verison reliably, it will
--- fall back to the version of ghc used to compile hie-bios.
+-- return a 'CradleError'
 getRuntimeGhcVersion :: Cradle a
-                     -> IO String
+                     -> IO (CradleLoadResult String)
 getRuntimeGhcVersion cradle =
-  fmap (fromMaybe VERSION_ghc) $ fmap (fmap trim) $
-    runGhcCmd (cradleOptsProg cradle) ["--numeric-version"]
+  fmap (fmap trim) $ runGhcCmd (cradleOptsProg cradle) ["--numeric-version"]
 
 ----------------------------------------------------------------
 
