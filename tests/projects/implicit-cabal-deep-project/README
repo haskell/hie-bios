@@ -1,0 +1,3 @@
+Here we are testing that if we have a nested cabal package but a cabal.project
+a directory above it, hie-bios will implicitly pick up the cabal.project and
+NOT the nested cabal package

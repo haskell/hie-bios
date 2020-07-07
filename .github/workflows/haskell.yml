@@ -32,7 +32,7 @@ jobs:
         key: ${{ runner.OS }}-${{ matrix.ghc }}-cabal-0
 
     - name: Run ShellCheck
-      uses: ludeeus/action-shellcheck@master
+      uses: ludeeus/action-shellcheck@2f2aa0d
       if: matrix.os == 'ubuntu-latest'
       with:
         ignore: tests

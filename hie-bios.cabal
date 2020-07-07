@@ -119,6 +119,14 @@ Extra-Source-Files:     ChangeLog
                         tests/projects/implicit-cabal/cabal.project
                         tests/projects/implicit-cabal/implicit-cabal.cabal
                         tests/projects/implicit-cabal/Main.hs
+                        tests/projects/implicit-cabal-no-project/implicit-cabal-no-project.cabal
+                        tests/projects/implicit-cabal-no-project/Main.hs
+                        tests/projects/implicit-cabal-deep-project/README
+                        tests/projects/implicit-cabal-deep-project/implicit-cabal-deep-project.cabal
+                        tests/projects/implicit-cabal-deep-project/Main.hs
+                        tests/projects/implicit-cabal-deep-project/cabal.project
+                        tests/projects/implicit-cabal-deep-project/foo/foo.cabal
+                        tests/projects/implicit-cabal-deep-project/foo/Main.hs
                         tests/projects/implicit-stack/Setup.hs
                         tests/projects/implicit-stack/implicit-stack.cabal
                         tests/projects/implicit-stack/Main.hs
@@ -229,6 +237,7 @@ test-suite bios-tests
       hie-bios,
       filepath,
       directory,
+      temporary,
       ghc
 
   hs-source-dirs: tests/
