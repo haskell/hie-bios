@@ -57,7 +57,7 @@ data CradleAction a = CradleAction {
                       -- ^ Name of the action.
                       , runCradle     :: LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
-                      , runGhcCmd :: [String] -> IO (Maybe String)
+                      , runGhcCmd :: [String] -> IO (CradleLoadResult String)
                       -- ^ Executes the @ghc@ binary that is usually used to
                       -- build the cradle. E.g. for a cabal cradle this should be
                       -- equivalent to @cabal exec ghc -- args@
@@ -74,7 +74,7 @@ data CradleLoadResult r
   = CradleSuccess r -- ^ The cradle succeeded and returned these options.
   | CradleFail CradleError -- ^ We tried to load the cradle and it failed.
   | CradleNone -- ^ No attempt was made to load the cradle.
-  deriving (Functor, Show)
+  deriving (Functor, Show, Eq)
 
 
 data CradleError = CradleError

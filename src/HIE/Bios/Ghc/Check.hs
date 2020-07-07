@@ -30,24 +30,18 @@ checkSyntax :: Show a
             -> IO String
 checkSyntax _      []    = return ""
 checkSyntax cradle files = do
-    libDir <- getRuntimeGhcLibDir cradle
-    G.runGhcT libDir $ do
-      Log.debugm $ "Cradle: " ++ show cradle
-      res <- initializeFlagsWithCradle (head files) cradle
-      case res of
-        CradleSuccess (ini, _) -> do
+    libDirRes <- getRuntimeGhcLibDir cradle
+    handleRes libDirRes $ \libDir ->
+      G.runGhcT (Just libDir) $ do
+        Log.debugm $ "Cradle: " ++ show cradle
+        res <- initializeFlagsWithCradle (head files) cradle
+        handleRes res $ \(ini, _) -> do
           _sf <- ini
           either id id <$> check files
-        CradleFail ce -> liftIO $ throwIO ce
-        CradleNone -> return "No cradle"
-
-
   where
-    {-
-    sessionName = case files of
-      [file] -> file
-      _      -> "MultipleFiles"
-      -}
+    handleRes (CradleSuccess x) f = f x
+    handleRes (CradleFail ce) _f = liftIO $ throwIO ce 
+    handleRes CradleNone _f = return "No cradle"
 
 ----------------------------------------------------------------
 

@@ -229,7 +229,7 @@ noneCradle cur_dir =
     , cradleOptsProg = CradleAction
         { actionName = Types.None
         , runCradle = \_ _ -> return CradleNone
-        , runGhcCmd = const $ pure Nothing
+        , runGhcCmd = \_   -> return CradleNone
         }
     }
 
@@ -248,7 +248,7 @@ multiCradle buildCustomCradle cur_dir cs =
             -- first non-none cradle. This shouldn't matter in practice: all
             -- sub cradles should be using the same ghc version!
             case filter (not . isNoneCradleConfig) $ map snd cs of
-              [] -> return Nothing
+              [] -> return CradleNone
               (cfg:_) -> flip runGhcCmd args $ cradleOptsProg $
                 getCradle buildCustomCradle (cfg, cur_dir)
         }
@@ -392,7 +392,7 @@ cabalCradle wdir mc =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Cabal
         , runCradle = cabalAction wdir mc
-        , runGhcCmd = \args -> optional $ do
+        , runGhcCmd = \args -> do
             -- Workaround for a cabal-install bug on 3.0.0.0:
             -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
             -- (It's ok to pass 'dist-newstyle' here, as it can only be changed
@@ -558,7 +558,7 @@ stackCradle wdir mc =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Stack
         , runCradle = stackAction wdir mc
-        , runGhcCmd = \args -> optional $
+        , runGhcCmd = \args ->
             readProcessWithCwd
               wdir "stack" (["exec", "--silent", "ghc", "--"] <> args) ""
         }
@@ -787,9 +787,19 @@ makeCradleResult (ex, err, componentDir, gopts) deps =
         in CradleSuccess compOpts
 
 -- | Calls @ghc --print-libdir@, with just whatever's on the PATH.
-runGhcCmdOnPath :: FilePath -> [String] -> IO (Maybe String)
-runGhcCmdOnPath wdir args = optional $ readProcessWithCwd wdir "ghc" args ""
+runGhcCmdOnPath :: FilePath -> [String] -> IO (CradleLoadResult String)
+runGhcCmdOnPath wdir args = readProcessWithCwd wdir "ghc" args ""
+  -- case mResult of
+  --   Nothing
 
 -- | Wrapper around 'readCreateProcess' that sets the working directory
-readProcessWithCwd :: FilePath -> FilePath -> [String] -> String -> IO String
-readProcessWithCwd dir cmd args = readCreateProcess (proc cmd args) { cwd = Just dir }
+readProcessWithCwd :: FilePath -> FilePath -> [String] -> String -> IO (CradleLoadResult String)
+readProcessWithCwd dir cmd args stdi = do
+  let createProc = (proc cmd args) { cwd = Just dir }
+  mResult <- optional $ readCreateProcessWithExitCode createProc stdi
+  case mResult of
+    Just (ExitSuccess, stdo, _) -> pure $ CradleSuccess stdo
+    Just (exitCode, stdo, stde) -> pure $ CradleFail $
+      CradleError [] exitCode ["Error when calling " <> cmd <> " " <> unwords args, stdo, stde]
+    Nothing -> pure $ CradleFail $
+      CradleError [] ExitSuccess ["Couldn't execute " <> cmd <> " " <> unwords args]

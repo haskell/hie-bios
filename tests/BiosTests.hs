@@ -143,8 +143,11 @@ testDirectory cradlePred rootDir file step =
 -- | Here we are testing that the cradle's method of obtaining the ghcLibDir
 -- always works.
 testGetGhcLibDir :: Cradle a -> IO ()
-testGetGhcLibDir crd =
-  getRuntimeGhcLibDir crd `shouldNotReturn` Nothing
+testGetGhcLibDir crd = do
+  libDirRes <- getRuntimeGhcLibDir crd
+  libDirRes `shouldSatisfy` isSuccess
+  where isSuccess (CradleSuccess _) = True
+        isSuccess _ = False
 
 -- | Here we are testing that the cradle's method of getting the runtime ghc
 -- version is correct - which while testing, should be the version that we have
@@ -152,7 +155,7 @@ testGetGhcLibDir crd =
 -- that doesn't equal the ghc on your path though :(
 testGetGhcVersion :: Cradle a -> IO ()
 testGetGhcVersion crd =
-  getRuntimeGhcVersion crd `shouldReturn` VERSION_ghc
+  getRuntimeGhcVersion crd `shouldReturn` CradleSuccess VERSION_ghc
 
 testDirectoryFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
 testDirectoryFail cradlePred rootDir file cradleFailPred step = do
@@ -175,21 +178,19 @@ initialiseCradle cradlePred a_fp step = do
 
 testLoadFile :: Cradle a -> FilePath -> (String -> IO ()) -> IO ()
 testLoadFile crd a_fp step = do
-  libDir <- getRuntimeGhcLibDir crd
-  withCurrentDirectory (cradleRootDir crd) $
-    G.runGhc libDir $ do
-      let relFp = makeRelative (cradleRootDir crd) a_fp
-      res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
-      case res of
-        CradleSuccess (ini, _) -> do
+  libDirRes <- getRuntimeGhcLibDir crd
+  handleCradleResult libDirRes $ \libDir ->
+    withCurrentDirectory (cradleRootDir crd) $
+      G.runGhc (Just libDir) $ do
+        let relFp = makeRelative (cradleRootDir crd) a_fp
+        res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
+        handleCradleResult res $ \(ini, _) -> do
           liftIO (step "Initial module load")
           sf <- ini
           case sf of
             -- Test resetting the targets
             Succeeded -> setTargetFilesWithMessage (Just (\_ n _ _ -> step (show n))) [(a_fp, a_fp)]
             Failed -> liftIO $ expectationFailure "Module loading failed"
-        CradleNone -> liftIO $ expectationFailure "None"
-        CradleFail (CradleError _deps _ex stde) -> liftIO $ expectationFailure (unlines stde)
 
 testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
 testLoadFileCradleFail crd a_fp cradleErrorExpectation step = do
@@ -209,16 +210,21 @@ testLoadCradleDependencies cradlePred rootDir file dependencyPred step =
   withTempCopy rootDir $ \rootDir' -> do
     a_fp <- canonicalizePath (rootDir' </> file)
     crd <- initialiseCradle cradlePred a_fp step
-    libDir <- getRuntimeGhcLibDir crd
-    step "Initialise Flags"
-    withCurrentDirectory (cradleRootDir crd) $
-      G.runGhc libDir $ do
-        let relFp = makeRelative (cradleRootDir crd) a_fp
-        res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
-        case res of
-          CradleSuccess (_, options) -> liftIO $ dependencyPred (componentDependencies options)
-          CradleNone -> liftIO $ expectationFailure "Unexpected none-Cradle"
-          CradleFail (CradleError _deps _ex stde) -> liftIO $ expectationFailure ("Unexpected cradle fail" ++ unlines stde)
+    libDirRes <- getRuntimeGhcLibDir crd
+    handleCradleResult libDirRes $ \libDir -> do
+      step "Initialise Flags"
+      withCurrentDirectory (cradleRootDir crd) $
+        G.runGhc (Just libDir) $ do
+          let relFp = makeRelative (cradleRootDir crd) a_fp
+          res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
+          handleCradleResult res $ \(_, options) ->
+            liftIO $ dependencyPred (componentDependencies options)
+
+handleCradleResult :: MonadIO m => CradleLoadResult a -> (a -> m ()) -> m ()
+handleCradleResult (CradleSuccess x) f = f x
+handleCradleResult CradleNone _ = liftIO $ expectationFailure "Unexpected none-Cradle"
+handleCradleResult (CradleFail (CradleError _deps _ex stde)) _ =
+  liftIO $ expectationFailure ("Unexpected cradle fail" ++ unlines stde)
 
 findCradleForModule :: FilePath -> Maybe FilePath -> (String -> IO ()) -> IO ()
 findCradleForModule fp expected' step = do
