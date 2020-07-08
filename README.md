@@ -1,12 +1,40 @@
 # hie-bios
 
+- [hie-bios](#hie-bios)
+  - [Explicit Configuration](#explicit-configuration)
+    - [Stack](#stack)
+      - [Debugging a `stack` cradle](#debugging-a-stack-cradle)
+      - [Ignoring directories](#ignoring-directories)
+      - [Internal Libraries](#internal-libraries)
+    - [Cabal](#cabal)
+      - [Debugging a `cabal` cradle](#debugging-a-cabal-cradle)
+      - [Ignoring directories](#ignoring-directories-1)
+    - [Bios](#bios)
+      - [Debugging a `bios` cradle](#debugging-a-bios-cradle)
+    - [Direct](#direct)
+      - [Debugging a `direct` cradle](#debugging-a-direct-cradle)
+    - [None](#none)
+  - [Multi-Cradle](#multi-cradle)
+  - [Cradle Dependencies](#cradle-dependencies)
+  - [Configuration specification](#configuration-specification)
+  - [Testing your configuration](#testing-your-configuration)
+  - [Implicit Configuration](#implicit-configuration)
+    - [Priority](#priority)
+    - [`cabal-install`](#cabal-install)
+    - [`stack`](#stack-1)
+    - [`bios`](#bios-1)
+  - [Supporting Bazel and Obelisk](#supporting-bazel-and-obelisk)
+
 `hie-bios` is the way to specify how
-[`hie`](https://github.com/haskell/haskell-ide-engine) and
-[`ghcide`](https://github.com/digital-asset/ghcide) sets up a GHC API session.
+[`haskell-language-server`](https://github.com/haskell/haskell-language-server)
+and [`ghcide`](https://github.com/digital-asset/ghcide) set up a GHC API session.
 
 Given a Haskell project that is managed by Stack, Cabal, or other package tools,
-`hie` needs to know the full set of flags to pass to GHC in order to build the
-project. `hie-bios` satisfies this need.
+`haskell-language-server` needs to know the full set of flags to pass to GHC in
+order to build the project. These flags might contain some compilations options
+like `-O2`, but a lot of the time they are package dependencies such as
+`-package-id directory-1.3.6.0`, which also need to be built beforehand.
+`hie-bios` satisfies both these needs.
 
 Its design is motivated by the guiding principle:
 
@@ -32,57 +60,331 @@ want the tool to work correctly.
 ## Explicit Configuration
 
 The user can place a `hie.yaml` file in the root of the workspace which
-describes how to setup the environment. For example, to explicitly state
-that you want to use `stack` then the configuration file would look like:
+describes how to setup the environment. There are several supported ways to setup the environment.
+
+### Stack
+
+To explicitly state that you want to use `stack` then the basic configuration `hie.yaml` would look like:
 
 ```yaml
-cradle: {stack: {component: "haskell-ide-engine:lib" }}
+cradle:
+  stack:
 ```
 
-While the component is optional, this is recommended to make sure the correct
-component is loaded.
+This configuration suffices if your whole project can be loaded by the command `stack repl`. As a rule of thumb, this works if the project consists of only one executable, one library and one test-suite.
 
-To use `cabal`, the explicit configuration looks similar.
+If your project is more complicated, you need to specify which [component](https://docs.haskellstack.org/en/stable/build_command/#components) you want to load. A component is roughly speaking a library/executable/test-suite or benchmark in `stack`. You can view the components/targets of a stack project by executing the command:
+``` sh
+$ stack ide targets
+```
+
+For `hie-bios`, this would output the following:
+
+``` sh
+$ stack ide targets
+hie-bios:lib
+hie-bios:exe:hie-bios
+hie-bios:test:bios-tests
+hie-bios:test:parser-tests
+```
+
+Since we have two test-suites, one executable and a library. For an explanation of the target syntax, we refer to the documentation of the [target syntax](https://docs.haskellstack.org/en/stable/build_command/#target-syntax).
+
+To tell `hie-bios` which component it should load, the following `hie.yaml` can be used:
+
+```yaml
+cradle:
+  stack:
+    component: "<component name>"
+```
+
+where `<component name>` is the name of component/target you want to be able to load.
+While the component is optional, this is recommended to make sure the correct component is loaded.
+
+Why is this not enough? Usually, you have multiple components with different dependencies. Your library won't depend on `tasty` or `hspec`, but your test-suite might. With this setup, you would only be able to load files from the given component.
+
+Since you rarely only want to load a single component in a `stack` project, we have special syntax to be able to conveniently specify which directory belongs to which component. It is basically a [multi-cradle](#multi-cradle).
+
+```yaml
+cradle:
+  stack:
+    - path: "./src"
+      component: "hie-bios:lib"
+    - path: "./exe"
+      component: "hie-bios:exe:hie-bios"
+    - path: "./tests/BiosTests.hs"
+      component: "hie-bios:test:hie-bios"
+    - path: "./tests/ParserTests.hs"
+      component: "hie-bios:test:parser-tests"
+```
+
+Here you can see two important features:
+  * We provide a mapping from a filepath to component.
+    * That way, we specify that a file such as `./src/HIE/Bios.hs` belongs to the component `hie-bios:lib`.
+  * The filepath can be a file.
+    * This is convenient if components are overlapping.
+
+This way we specified for our whole project, which component needs to be compiled given a source file.
+
+#### Debugging a `stack` cradle
+
+If you find that `hie-bios` can't load a certain component or file, you may run `stack repl` and `stack repl <component name>` to see if `stack` succeeds building your project. Chances are that there is a problem in your project and if you fix that, `hie-bios` will succeed to load it.
+
+Also, see notes for [testing your configuration](#testing-your-configuration).
+
+Otherwise, please open an [issue](https://github.com/mpickering/hie-bios/issues/new).
+
+#### Ignoring directories
+
+You can combine the [multi-cradle](#multi-cradle) with a [none-cradle](#none-cradle) to ignore all source files in a certain directory. The syntax is a bit verbose:
+
+```yaml
+cradle:
+  multi:
+    - path: "./tests/projects"
+      config:
+        cradle:
+          none:
+    - path: "./"
+      config:
+        cradle:
+          stack:
+            - path: "./src"
+              component: "hie-bios:lib"
+            - path: "./exe"
+              component: "hie-bios:exe:hie-bios"
+            - path: "./tests/BiosTests.hs"
+              component: "hie-bios:test:hie-bios"
+            - path: "./tests/ParserTests.hs"
+              component: "hie-bios:test:parser-tests"
+```
+
+This way, we specify that we do not want to load any files in our test project directories.
+
+#### Internal Libraries
+
+Internal libraries are not well supported in `stack`. Since the syntax `stack repl <internal library name>` [doesn't work](https://github.com/commercialhaskell/stack/issues/4564), `hie-bios` will generally not work with internal libraries using `stack`.
+
+### Cabal
+
+To use `cabal`, the basic explicit configuration looks similar to `stack`'s configuration.
+
+```yaml
+cradle:
+  cabal:
+```
+
+The implication of this configuration is a bit different, though. Given a source file to load, we will use `cabal repl <filename>` to find the component of the given filepath.
+
+This configuration should work in (almost) every standard project setup, since `cabal` finds the component associated to a given source file.
+However, due to an unfortunate [bug](https://github.com/haskell/cabal/issues/6622), this fails on some files with `cabal` versions older than `3.4`.
+So, to make your project loadable by older `cabal` versions, you can specify a component to load.
+A [component](https://cabal.readthedocs.io/en/stable/nix-local-build.html?highlight=component#cabal-v2-build) is roughly speaking a library, executable, test-suite or benchmark in `cabal`.
+The `hie.yaml` file looks like this:
+
+```yaml
+cradle:
+  cabal:
+    component: <component name>
+```
+
+This tells `hie-bios` that whichever source file it tries to load, it should handle it as if it belongs to `<component name>`.
+
+As an example, to load the library of `hie-bios`, the following `hie.yaml` can be used:
+
+```yaml
+cradle:
+  cabal:
+    component: "lib:hie-bios"
+```
+
+The component syntax `"lib:hie-bios"` refers to the library of the package `hie-bios`. For a complete reference of the component syntax, we refer to the [documentation](https://cabal.readthedocs.io/en/stable/nix-local-build.html?highlight=component#cabal-v2-build).
+
 Note that `cabal` and `stack` have different way of specifying their
 components.
 
-```yaml
-cradle: {cabal: {component: "lib:haskell-ide-engine"}}
+
+If we only specify a single component, then we can only load source files from this component. This is unsatisfactory, we want to be able to navigate our project freely, and work on multiple components (test-suite, library, executable, etc...) in parallel.
+
+In a project such as `hie-bios`, we have more than one component, in particular we have four:
+
+ * An executable
+ * A library
+ * Two test-suites
+
+The component syntax can easily be extracted from the `hie-bios.cabal` file. Relevant sections are:
+
+```cabal
+...
+Name:                   hie-bios
+...
+
+Library
+  ...
+  HS-Source-Dirs:       src
+
+Executable hie-bios
+  ...
+  Main-Is:              Main.hs
+  HS-Source-Dirs:       exe
+
+test-suite parser-tests
+  ...
+  hs-source-dirs: tests/
+  main-is: ParserTests.hs
+
+test-suite bios-tests
+  ...
+  hs-source-dirs: tests/
+  main-is: BiosTests.hs
 ```
 
-Alternatively you can explicitly state a program or shell command which should
-be used to collect the options.
+Using the documentation of cabal, we extract the four component names of the `hie-bios` project:
+
+* `lib:hie-bios`
+* `exe:hie-bios`
+* `test:bios-tests`
+* `test:parser-tests`
+
+Since you rarely only want to load a single component in a `cabal` project, we have special syntax to be able to conveniently specify which directory belongs to which component. It is basically a [multi-cradle](#multi-cradle).
+
+```yaml
+cradle:
+  cabal:
+    - path: "./src"
+      component: "lib:hie-bios"
+    - path: "./exe"
+      component: "exe:hie-bios"
+    - path: "./tests/BiosTests.hs"
+      component: "test:hie-bios"
+    - path: "./tests/ParserTests.hs"
+      component: "test:parser-tests"
+```
+
+Here you can see two important features:
+  * We provide a mapping from a filepath to component.
+    * That way, we specify that a file such as `./src/HIE/Bios.hs` belongs to the component `lib:hie-bios`.
+  * The filepath can be a file.
+    * This is convenient if components are overlapping.
+
+This way we specified for our whole project, which component needs to be compiled given a source file.
+
+#### Debugging a `cabal` cradle
+
+If you find that `hie-bios` can't load a certain component or file, you may run `cabal repl <filename>` and `cabal repl <component name>` to see if `cabal` succeeds building the components. Chances are that there is a problem and if you fix that, `hie-bios` will succeed to load the project.
+
+Also, see notes for [testing your configuration](#testing-your-configuration).
+
+Otherwise, please open an [issue](https://github.com/mpickering/hie-bios/issues/new).
+
+#### Ignoring directories
+
+You can combine the [multi-cradle](#multi-cradle) with a [none-cradle](#none-cradle) to ignore all source files in a certain directory. The syntax is a bit verbose:
+
+```yaml
+cradle:
+  multi:
+    - path: "./tests/projects"
+      config:
+        cradle:
+          none:
+    - path: "./"
+      config:
+        cradle:
+          cabal:
+            - path: "./src"
+              component: "lib:hie-bios"
+            - path: "./exe"
+              component: "exe:hie-bios"
+            - path: "./tests/BiosTests.hs"
+              component: "test:hie-bios"
+            - path: "./tests/ParserTests.hs"
+              component: "test:parser-tests"
+```
+
+This way, we specify that we do not want to load any files in our test project directories.
+
+### Bios
+
+Alternatively you can explicitly state a `program` or shell command which should
+be used to collect the options. This is the most general approach and can be extended to handle arbitrary build systems.
 
 The path of the `program` attribute is interpreted relative to the current
 working directory if it isn't absolute. A program is passed the file to
 return options for as its first argument, and a shell command will have it
 available in the `HIE_BIOS_ARG` environment variable.
 
-The process must consult the `HIE_BIOS_OUTPUT` environment variable and write a
+There are two important environment variables:
+
+* `HIE_BIOS_OUTPUT`: describes the filepath the options should be written to. If this file does not exist, the `program` should create it.
+* `HIE_BIOS_ARG`: the source file that we want to load. Options returned by the `program` should be able to compile the given source file.
+  * This environment variable is *only* available if a shell program is given.
+
+The program flow is roughly as follows:
+the process must consult the `HIE_BIOS_OUTPUT` environment variable and write a
 list of options to this file separated by newlines. Once the process finishes
 running, `hie-bios` reads this file and uses the arguments to set up the GHC
 session. This is how GHC's build system is able to support `hie-bios`.
+Note, the `program` is intended to produce the build flags to compile the *whole* component the given source file belongs to. This entails that the `program` lists all module- and file targets of the component.
+
+A good guiding specification for this file is that the following commands
+should work for any file in your project.
+
+``` sh
+$ export HIE_BIOS_OUTPUT=./options.txt # this is usually some temporary file
+$ ./<program> /path/to/foo.hs
+$ ghci $(cat $HIE_BIOS_OUTPUT | tr '\n' ' ')
+```
+
+where `HIE_BIOS_OUTPUT` is some chosen output file and `HIE_BIOS_ARG` contains the file parameter.
+
+The `hie.yaml` configuration looks like:
 
 ```yaml
-cradle: {bios: {program: ".hie-bios"}}
+cradle:
+  bios:
+    program: "<program>"
 ```
+
+Alternatively, you may specify shell code directly.
+This is helpful, if your `program` executable consists of only a single call to another executable.
+
 ```yaml
-cradle: {bios: {shell: "build-tool flags $HIE_BIOS_ARG"}}
+cradle:
+  bios:
+    shell: "<build-tool flags $HIE_BIOS_ARG>"
 ```
+
+#### Debugging a `bios` cradle
+
+The most common error in creating `bios` cradle is to not list all targets of the component. Please make sure, that you always list all targets of the component the filepath you want to load belongs to.
+
+Also, see notes for [testing your configuration](#testing-your-configuration).
+
+### Direct
 
 The `direct` cradle allows you to specify exactly the GHC options that should be used to load
 a project. This is good for debugging but not a very good approach in general as the set of options
 will quickly get out of sync with a cabal file.
 
 ```yaml
-cradle: {direct: { arguments: [arg1, arg2]} }
+cradle:
+  direct:
+    arguments: [arg1, arg2]
 ```
 
+#### Debugging a `direct` cradle
+
+The arguments of a `direct` cradle will be passed almost directly to `ghc`. If the command `ghc <cradle arguments>` succeeds, then `hie-bios` can load the project.
+
+### None
+
 The `none` cradle says that the IDE shouldn't even try to load the project. It
-is most useful when combined with the multi-cradle which is specified in the next section.
+is most useful when combined with the [multi-cradle](#multi-cradle) which is specified in the next section.
 
 ```yaml
-cradle: {none: }
+cradle:
+  none:
 ```
 
 ## Multi-Cradle
@@ -94,15 +396,21 @@ The multi-cradle is a list of relative paths and cradle configurations.
 The path is relative to the configuration file and specifies the scope of
 the cradle. For example, this configuration specificies that files in the
 `src` subdirectory should be handled with the `lib:hie-bios` component and
-files in the `test` directory using the `test` component.
+files in the `test` directory using the `test:bios-tests` component.
 
 ```yaml
 cradle:
   multi:
     - path: "./src"
-      config: { cradle: {cabal: {component: "lib:hie-bios"}} }
+      config:
+        cradle:
+          cabal:
+            component: "lib:hie-bios"
     - path: "./test"
-      config: { cradle: {cabal: {component: "test"}} }
+      config:
+        cradle:
+          cabal:
+            component: "test:bios-tests"
 ```
 
 If a file matches multiple prefixes, the most specific one is chosen.
@@ -124,7 +432,7 @@ cradle:
     - path: "./src"
       config: { cradle: {cabal: {component: "lib:hie-bios"}} }
     - path: "./test"
-      config: { cradle: {cabal: {component: "test"}} }
+      config: { cradle: {cabal: {component: "test:bios-tests"}} }
     - path: "./test/test-files"
       config: { cradle: { none: } }
 ```
@@ -163,7 +471,7 @@ cradle:
                             , { path: "./tests", component: "parser-tests" } ] } }
 ```
 
-### Cradle Dependencies
+## Cradle Dependencies
 
 Sometimes it is necessary to reload a component, for example when a package
 dependency is added to the project. Each type of cradle defines a list of
@@ -230,6 +538,8 @@ cradle:
   bios:
     program: "program to run"
     dependency-program: "optional program to run"
+    shell: build-tool flags $HIE_BIOS_ARG
+    dependency-shell: build-tool dependencies
   direct:
     arguments: ["list","of","ghc","arguments"]
   none:
@@ -246,14 +556,20 @@ The provided `hie-bios` executable is provided to test your configuration.
 
 The `flags` command will print out the options that `hie-bios` thinks you will need to load a file.
 
-```
-hie-bios flags exe/Main.hs
+``` sh
+$ hie-bios flags exe/Main.hs
 ```
 
 The `check` command will try to use these flags to load the module into the GHC API.
 
+``` sh
+$ hie-bios check exe/Main.hs
 ```
-hie-bios check exe/Main.hs
+
+The `debug` command prints verbose information about the cradle, where the `hie.yaml` file was found, which file is loaded and the options that will be eventually used for loading a session.
+
+``` sh
+$ hie-bios debug exe/Main.hs
 ```
 
 ## Implicit Configuration
@@ -267,7 +583,7 @@ configure your project.
 
 The targets are searched for in following order.
 
-1. A specific `hie-bios` file.
+1. A specific `.hie-bios` file.
 2. A `stack` project
 3. A `cabal` project
 4. The direct cradle which has no specific options.
@@ -276,32 +592,38 @@ The targets are searched for in following order.
 
 The workspace root is the first folder containing a `cabal.project` file.
 
-The arguments are collected by running `cabal v2-repl`.
+The arguments are collected by running `cabal v2-repl <filename>`.
 
-If `cabal v2-repl` fails, then the user needs to configure the correct
+If `cabal v2-repl <filename>` fails, then the user needs to configure the correct
 target to use by writing a `hie.yaml` file.
 
 ### `stack`
 
 The workspace root is the first folder containing a `stack.yaml` file.
 
-The arguments are collected by executing `stack repl`.
+The arguments are collected by executing `stack repl`. If it fails, then the user needs to configure the correct
+target to use by writing a `hie.yaml` file.
 
 ### `bios`
 
 The most general form is the `bios` mode which allows a user to specify themselves
 which flags to provide.
 
-In this mode, an executable file called `.hie-bios` is placed in the root
-of the workspace directory. The script takes one argument, the filepath
-to the current file we want to load into the session. The script returns
-a list of GHC arguments separated by newlines which will setup the correct session.
+The program will receive the file to return options for as its first argument.
 
-A good guiding specification for this file is that the following command
+The program flow is roughly as follows:
+the process must consult the `HIE_BIOS_OUTPUT` environment variable and write a
+list of options to the file pointed to by `HIE_BIOS_OUTPUT` separated by newlines. Once the process finishes
+running, `hie-bios` reads this file and uses the arguments to set up the GHC
+session. This is how GHC's build system is able to support `hie-bios`.
+Note, the `program` is intended to produce the build flags to compile the *whole* component the given source file belongs to. This entails that the `program` lists all module- and file targets of the component.
+
+A good guiding specification for this file is that the following commands
 should work for any file in your project.
-
-```
-ghci $(./.hie-bios /path/to/foo.hs | tr '\n' ' ') /path/to/foo.hs
+``` sh
+$ export HIE_BIOS_OUTPUT=./options.txt # this is usually some temporary file
+$ ./.hie-bios /path/to/foo.hs
+$ ghci $(cat $HIE_BIOS_OUTPUT | tr '\n' ' ')
 ```
 
 This is useful if you are designing a new build system or the other modes
