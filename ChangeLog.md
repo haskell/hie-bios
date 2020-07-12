@@ -4,8 +4,7 @@
 
 ### New Features:
 
-* Add getRuntimeGhcLibDir and getRuntimeGhcVersion, via runGhc [#207](https://github.com/mpickering/hie-bios/pull/207)
-	* Make runGhcCmd return CradleLoadResult [#224](https://github.com/mpickering/hie-bios/pull/224)
+* Add getRuntimeGhcLibDir and getRuntimeGhcVersion functions through a new runGhcCmd API [#207](https://github.com/mpickering/hie-bios/pull/207) [#224](https://github.com/mpickering/hie-bios/pull/224)
 
 ### Bug Fixes:
 
