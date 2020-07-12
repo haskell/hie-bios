@@ -1,6 +1,6 @@
 Cabal-Version:          2.2
 Name:                   hie-bios
-Version:                0.5.1
+Version:                0.6.0
 Author:                 Matthew Pickering <matthewtpickering@gmail.com>
 Maintainer:             Matthew Pickering <matthewtpickering@gmail.com>
 License:                BSD-3-Clause
@@ -12,7 +12,7 @@ Description:            Set up a GHC API session and obtain flags required to co
 Category:               Development
 Build-Type:             Simple
 -- No glob syntax until GHC 8.6 because of stack
-Extra-Source-Files:     ChangeLog
+Extra-Source-Files:     ChangeLog.md
                         README.md
                         wrappers/cabal
                         wrappers/cabal.hs
