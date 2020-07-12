@@ -9,7 +9,6 @@
 ### Bug Fixes:
 
 * Improve the README [#225](https://github.com/mpickering/hie-bios/pull/225)
-* Major additions to the README
 * Detect implicit cabal cradle in the absence of cabal.project [#221](https://github.com/mpickering/hie-bios/pull/221)
 * Dont resolve symlinks in cradle discovery [#219](https://github.com/mpickering/hie-bios/pull/219)
 * Make Cradle dependencies for stack and cabal more reasonable [#209](https://github.com/mpickering/hie-bios/pull/209)
