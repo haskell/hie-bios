@@ -5,6 +5,8 @@
 ### New Features:
 
 * Add getRuntimeGhcLibDir and getRuntimeGhcVersion functions through a new runGhcCmd API [#207](https://github.com/mpickering/hie-bios/pull/207) [#224](https://github.com/mpickering/hie-bios/pull/224)
+* Add shell and dependency-shell attributes to bios cradle type [#188](https://github.com/mpickering/hie-bios/pull/188)
+* Store dependencies in CradleError [#186](https://github.com/mpickering/hie-bios/pull/186)
 
 ### Bug Fixes:
 
@@ -12,13 +14,11 @@
 * Detect implicit cabal cradle in the absence of cabal.project [#221](https://github.com/mpickering/hie-bios/pull/221)
 * Dont resolve symlinks in cradle discovery [#219](https://github.com/mpickering/hie-bios/pull/219)
 * Make Cradle dependencies for stack and cabal more reasonable [#209](https://github.com/mpickering/hie-bios/pull/209)
-* This ships with a known bug: `stack` lists cradle dependencies from
+  * This ships with a known bug: `stack` lists cradle dependencies from
 	sub-directories incorrectly.
 * Fix absolute mains [#205](https://github.com/mpickering/hie-bios/pull/205)
 * Improve filtering of rts arguments from stack and cabal cradles [#197](https://github.com/mpickering/hie-bios/pull/197)
 * Make package db paths absolute [#193](https://github.com/mpickering/hie-bios/pull/193)
-* Add shell and dependency-shell attributes to bios cradle type [#188](https://github.com/mpickering/hie-bios/pull/188)
-* Store dependencies in CradleError [#186](https://github.com/mpickering/hie-bios/pull/186)
 * Add cabal.project.local to cabal cradle dependencies [#184](https://github.com/mpickering/hie-bios/pull/184)
 * Remove outdated reference to $HIE_BIOS_GHC[_ARGS]
 
