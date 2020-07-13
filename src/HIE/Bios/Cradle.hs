@@ -18,6 +18,7 @@ module HIE.Bios.Cradle (
     , isOtherCradle
     , getCradle
     , readProcessWithOutputFile
+    , readProcessWithCwd
     , makeCradleResult
   ) where
 
