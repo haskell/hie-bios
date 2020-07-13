@@ -1,14 +1,21 @@
 # ChangeLog hie-bios
 
+## 2020-07-12 - 0.6.1
+
+### Bug Fixes
+
+* Expose 'readProcessWithCwd' [#227](https://github.com/mpickering/hie-bios/pull/227)
+* Fix mistakes in the ChangeLog [#228](https://github.com/mpickering/hie-bios/pull/228)
+
 ## 2020-07-12 - 0.6.0
 
-### New Features:
+### New Features
 
 * Add getRuntimeGhcLibDir and getRuntimeGhcVersion functions through a new runGhcCmd API [#207](https://github.com/mpickering/hie-bios/pull/207) [#224](https://github.com/mpickering/hie-bios/pull/224)
 * Add shell and dependency-shell attributes to bios cradle type [#188](https://github.com/mpickering/hie-bios/pull/188)
 * Store dependencies in CradleError [#186](https://github.com/mpickering/hie-bios/pull/186)
 
-### Bug Fixes:
+### Bug Fixes
 
 * Improve the README [#225](https://github.com/mpickering/hie-bios/pull/225)
 * Detect implicit cabal cradle in the absence of cabal.project [#221](https://github.com/mpickering/hie-bios/pull/221)
