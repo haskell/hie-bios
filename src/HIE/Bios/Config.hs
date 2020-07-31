@@ -2,12 +2,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE LambdaCase #-}
 -- | Logic and datatypes for parsing @hie.yaml@ files.
 module HIE.Bios.Config(
     readConfig,
     Config(..),
     CradleConfig(..),
+    CabalType(..),
+    StackType(..),
     CradleType(..),
+    pattern Cabal,
+    pattern Stack,
     Callable(..)
     ) where
 
@@ -43,11 +49,25 @@ data CradleConfig a =
 data Callable = Program FilePath | Command String
     deriving (Show, Eq)
 
+data CabalType
+    = CabalType { cabalComponent :: Maybe String }
+    deriving (Eq)
+
+instance Show CabalType where
+  show = show . Cabal_
+
+data StackType
+    = StackType { stackComponent :: Maybe String , stackYaml :: Maybe String }
+    deriving (Eq)
+
+instance Show StackType where
+  show = show . Stack_
+
 data CradleType a
-    = Cabal { component :: Maybe String }
-    | CabalMulti [ (FilePath, String) ]
-    | Stack { component :: Maybe String }
-    | StackMulti [ (FilePath, String) ]
+    = Cabal_ { cabalType :: !CabalType }
+    | CabalMulti [ (FilePath, CabalType) ]
+    | Stack_ { stackType :: !StackType }
+    | StackMulti [ (FilePath, StackType) ]
 --  Bazel and Obelisk used to be supported but bit-rotted and no users have complained.
 --  They can be added back if a user
 --    | Bazel
@@ -66,6 +86,14 @@ data CradleType a
     | Other { otherConfig :: a, originalYamlValue :: Value }
     deriving (Eq, Functor)
 
+pattern Cabal :: Maybe String -> CradleType a
+pattern Cabal cm = Cabal_ (CabalType cm)
+
+pattern Stack :: Maybe String -> Maybe String -> CradleType a
+pattern Stack cm yml = Stack_ (StackType cm yml)
+
+{-# COMPLETE Cabal, CabalMulti, Stack, StackMulti, Bios, Direct, None, Multi, Other :: CradleType #-}
+
 instance FromJSON a => FromJSON (CradleType a) where
     parseJSON (Object o) = parseCradleType o
     parseJSON _ = fail "Not a known cradle type. Possible are: cabal, stack, bios, direct, default, none, multi"
@@ -73,7 +101,7 @@ instance FromJSON a => FromJSON (CradleType a) where
 instance Show (CradleType a) where
     show (Cabal comp) = "Cabal {component = " ++ show comp ++ "}"
     show (CabalMulti a) = "CabalMulti " ++ show a
-    show (Stack comp) = "Stack {component = " ++ show comp ++ "}"
+    show (Stack comp yaml) = "Stack {component = " ++ show comp ++ ", stackYaml = " ++ show yaml ++ "}"
     show (StackMulti a) = "StackMulti " ++ show a
     show Bios { call, depsCall } = "Bios {call = " ++ show call ++ ", depsCall = " ++ show depsCall ++ "}"
     show (Direct args) = "Direct {arguments = " ++ show args ++ "}"
@@ -94,38 +122,48 @@ parseCradleType o
     | Just val  <- Map.lookup "other" o = Other <$> parseJSON val <*> pure val
 parseCradleType o = fail $ "Unknown cradle type: " ++ show o
 
-parseStackOrCabal
-  :: (Maybe String -> CradleType a)
-  -> ([(FilePath, String)] -> CradleType a)
+parseSingleOrMultiple
+  :: (x -> CradleType a)
+  -> ([(FilePath, x)] -> CradleType a)
+  -> (Map.HashMap T.Text Value -> Parser x)
   -> Value
   -> Parser (CradleType a)
-parseStackOrCabal singleConstructor _ (Object x)
-  | Map.size x == 1, Just (String stackComponent) <- Map.lookup "component" x
-  = return $ singleConstructor $ Just $ T.unpack stackComponent
-  | Map.null x
-  = return $ singleConstructor Nothing
-  | otherwise
-  = fail "Not a valid Configuration type, following keys are allowed: component"
-parseStackOrCabal _ multiConstructor (Array x) = do
+parseSingleOrMultiple single _ parse (Object v) = single <$> parse v
+parseSingleOrMultiple _ multiple parse (Array x) = do
   let parseOne e
         | Object v <- e
         , Just (String prefix) <- Map.lookup "path" v
-        , Just (String comp) <- Map.lookup "component" v
-        , Map.size v == 2
-        = return (T.unpack prefix, T.unpack comp)
+        = (T.unpack prefix,) <$> parse (Map.delete "path" v)
         | otherwise
-        = fail "Expected an object with path and component keys"
-
+        = fail "Expected an object with a path key"
   xs <- foldrM (\v cs -> (: cs) <$> parseOne v) [] x
-  return $ multiConstructor xs
-parseStackOrCabal singleConstructor _ Null = return $ singleConstructor Nothing
-parseStackOrCabal _ _ _ = fail "Configuration is expected to be an object."
+  return $ multiple xs
+parseSingleOrMultiple single _ parse Null = single <$> parse Map.empty
+parseSingleOrMultiple _ _ _ _ = fail "Configuration is expected to be an object or an array of objects."
 
 parseStack :: Value -> Parser (CradleType a)
-parseStack = parseStackOrCabal Stack StackMulti
+parseStack = parseSingleOrMultiple Stack_ StackMulti $
+  \case x | Map.size x == 2
+          , Just (String component) <- Map.lookup "component" x
+          , Just (String stackYaml) <- Map.lookup "stackYaml" x
+          -> return $ StackType (Just $ T.unpack component) (Just $ T.unpack stackYaml)
+          | Map.size x == 1, Just (String component) <- Map.lookup "component" x
+          -> return $ StackType (Just $ T.unpack component) Nothing
+          | Map.size x == 1, Just (String stackYaml) <- Map.lookup "stackYaml" x
+          -> return $ StackType Nothing (Just $ T.unpack stackYaml)
+          | Map.null x
+          -> return $ StackType Nothing Nothing
+          | otherwise
+          -> fail "Not a valid Stack configuration, following keys are allowed: component, stackYaml"
 
 parseCabal :: Value -> Parser (CradleType a)
-parseCabal = parseStackOrCabal Cabal CabalMulti
+parseCabal = parseSingleOrMultiple Cabal_ CabalMulti $
+  \case x | Map.size x == 1, Just (String component) <- Map.lookup "component" x
+          -> return $ CabalType (Just $ T.unpack component)
+          | Map.null x
+          -> return $ CabalType Nothing
+          | otherwise
+          -> fail "Not a valid Cabal configuration, following keys are allowed: component"
 
 parseBios :: Value -> Parser (CradleType a)
 parseBios (Object x)

@@ -96,13 +96,13 @@ getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleT
     CabalMulti ms ->
       getCradle buildCustomCradle $
         (CradleConfig cradleDeps
-          (Multi [(p, CradleConfig [] (Cabal (Just c))) | (p, c) <- ms])
+          (Multi [(p, CradleConfig [] (Cabal_ c)) | (p, c) <- ms])
         , wdir)
-    Stack mc -> stackCradle wdir mc
+    Stack mc syaml -> stackCradle wdir mc (maybe "stack.yaml" id syaml)
     StackMulti ms ->
       getCradle buildCustomCradle $
         (CradleConfig cradleDeps
-          (Multi [(p, CradleConfig [] (Stack (Just c))) | (p, c) <- ms])
+          (Multi [(p, CradleConfig [] (Stack_ c)) | (p, c) <- ms])
         , wdir)
  --   Bazel -> rulesHaskellCradle wdir
  --   Obelisk -> obeliskCradle wdir
@@ -142,7 +142,7 @@ implicitConfig' fp = (\wdir ->
          (Bios (Program $ wdir </> ".hie-bios") Nothing, wdir)) <$> biosWorkDir fp
   --   <|> (Obelisk,) <$> obeliskWorkDir fp
   --   <|> (Bazel,) <$> rulesHaskellWorkDir fp
-     <|> (stackExecutable >> (Stack Nothing,) <$> stackWorkDir fp)
+     <|> (stackExecutable >> (Stack Nothing Nothing,) <$> stackWorkDir fp)
      <|> ((Cabal Nothing,) <$> cabalWorkDir fp)
 
 
@@ -552,16 +552,16 @@ cabalWorkDir wdir =
 ------------------------------------------------------------------------
 -- | Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
-stackCradle :: FilePath -> Maybe String -> Cradle a
-stackCradle wdir mc =
+stackCradle :: FilePath -> Maybe String -> FilePath -> Cradle a
+stackCradle wdir mc syaml =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = Types.Stack
-        , runCradle = stackAction wdir mc
+        , runCradle = stackAction wdir mc syaml
         , runGhcCmd = \args ->
             readProcessWithCwd
-              wdir "stack" (["exec", "--silent", "ghc", "--"] <> args) ""
+              wdir "stack" (["--stack-yaml", syaml, "exec", "--silent", "ghc", "--"] <> args) ""
         }
     }
 
@@ -574,32 +574,32 @@ stackCradle wdir mc =
 -- a '.cabal' file.
 --
 -- Found dependencies are relative to 'rootDir'.
-stackCradleDependencies :: FilePath -> FilePath -> IO [FilePath]
-stackCradleDependencies wdir componentDir = do
+stackCradleDependencies :: FilePath -> FilePath -> FilePath -> IO [FilePath]
+stackCradleDependencies wdir componentDir syaml = do
   let relFp = makeRelative wdir componentDir
   cabalFiles' <- findCabalFiles componentDir
   let cabalFiles = map (relFp </>) cabalFiles'
-  return $ map normalise $ cabalFiles ++ [relFp </> "package.yaml", "stack.yaml"]
+  return $ map normalise $ cabalFiles ++ [relFp </> "package.yaml", syaml]
 
-stackAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
-stackAction work_dir mc l _fp = do
-  let ghcProcArgs = ("stack", ["exec", "ghc", "--"])
+stackAction :: FilePath -> Maybe String -> FilePath -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
+stackAction work_dir mc syaml l _fp = do
+  let ghcProcArgs = ("stack", ["--stack-yaml", syaml, "exec", "ghc", "--"])
   -- Same wrapper works as with cabal
   withCabalWrapperTool ghcProcArgs work_dir $ \wrapper_fp -> do
     (ex1, _stdo, stde, args) <-
       readProcessWithOutputFile l work_dir $
-        proc "stack" $ ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
+        proc "stack" $ ["--stack-yaml", syaml, "repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
                        ++ [ comp | Just comp <- [mc] ]
     (ex2, pkg_args, stdr, _) <-
       readProcessWithOutputFile l work_dir $
-        proc "stack" ["path", "--ghc-package-path"]
+        proc "stack" ["--stack-yaml", syaml, "path", "--ghc-package-path"]
     let split_pkgs = concatMap splitSearchPath pkg_args
         pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
     case processCabalWrapperArgs args of
         Nothing -> do
           -- Best effort. Assume the working directory is the
           -- the root of the component, so we are right in trivial cases at least.
-          deps <- stackCradleDependencies work_dir work_dir
+          deps <- stackCradleDependencies work_dir work_dir syaml
           pure $ CradleFail
                     (CradleError deps ex1 $
                       [ "Failed to parse result of calling stack" ]
@@ -608,7 +608,7 @@ stackAction work_dir mc l _fp = do
                     )
 
         Just (componentDir, ghc_args) -> do
-          deps <- stackCradleDependencies work_dir componentDir
+          deps <- stackCradleDependencies work_dir componentDir syaml
           pure $ makeCradleResult
                     ( combineExitCodes [ex1, ex2]
                     , stde ++ stdr, componentDir
