@@ -1,0 +1,16 @@
+cradle:
+  multi:
+    - path: "appA"
+      config:
+        cradle:
+          stack:
+            - path: appA/src
+              component: appA:lib
+              stackYaml: stack-8.8.3.yaml
+    - path: "appB"
+      config:
+        cradle:
+          stack:
+            - path: appB/src
+              component: appB:lib
+              stackYaml: stack-8.8.3.yaml

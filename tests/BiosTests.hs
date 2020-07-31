@@ -114,6 +114,12 @@ main = do
            , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
                          $  testDirectory isCabalCradle "./tests/projects/multi-cabal" "app/Main.hs"
                          >> testDirectory isCabalCradle "./tests/projects/multi-cabal" "src/Lib.hs"
+           , testCaseSteps "stack-with-yaml" {- tests if both components can be loaded -}
+                         $  testDirectory isStackCradle "./tests/projects/stack-with-yaml" "app/Main.hs"
+                         >> testDirectory isStackCradle "./tests/projects/stack-with-yaml" "src/Lib.hs"
+           , testCaseSteps "multi-stack-with-yaml" {- tests if both components can be loaded -}
+                         $  testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appA/src/Lib.hs"
+                         >> testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appB/src/Lib.hs"
            , testCaseSteps "monorepo-cabal" {- issue https://github.com/mpickering/hie-bios/issues/200 -}
                          $  testDirectory isCabalCradle "./tests/projects/monorepo-cabal" "A/Main.hs"
                          >> testDirectory isCabalCradle "./tests/projects/monorepo-cabal" "B/MyLib.hs"
@@ -313,18 +319,21 @@ copyDir src dst = do
 
 writeStackYamlFiles :: IO ()
 writeStackYamlFiles =
-  forM_ stackProjects $ \(proj, pkgs) ->
-    writeFile (proj </> "stack.yaml") (stackYaml stackYamlResolver pkgs)
+  forM_ stackProjects $ \(proj, syaml, pkgs) ->
+    writeFile (proj </> syaml) (stackYaml stackYamlResolver pkgs)
 
-stackProjects :: [(FilePath, [FilePath])]
+stackProjects :: [(FilePath, FilePath, [FilePath])]
 stackProjects =
-  [ ("tests" </> "projects" </> "multi-stack", ["."])
-  , ("tests" </> "projects" </> "failing-stack", ["."])
-  , ("tests" </> "projects" </> "simple-stack", ["."])
-  , ("tests" </> "projects" </> "nested-stack", [".", "./sub-comp"])
-  , ("tests" </> "projects" </> "space stack", ["."])
-  , ("tests" </> "projects" </> "implicit-stack", ["."])
-  , ("tests" </> "projects" </> "implicit-stack-multi", ["."])
+  [ ("tests" </> "projects" </> "multi-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "failing-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "simple-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "nested-stack", "stack.yaml", [".", "./sub-comp"])
+  , ("tests" </> "projects" </> "space stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "implicit-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "implicit-stack-multi", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "implicit-stack-multi", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "multi-stack-with-yaml", "stack-8.8.3.yaml", ["appA", "appB"])
+  , ("tests" </> "projects" </> "stack-with-yaml", "stack-8.8.3.yaml", ["."])
   ]
 
 stackYaml :: String -> [FilePath] -> String
