@@ -1,0 +1,6 @@
+cradle:
+  stack:
+    - path: "./src"
+      stackYaml: "stack-8.8.3.yaml"
+    - path: "./vendor"
+      stackYaml: "./vendor/stack-8.8.3.yaml"

@@ -1,7 +1,7 @@
 dist/
 dist-newstyle/
 .stack-work/
-stack*.yaml
-stack*.yaml.lock
+tests/projects/**/stack*.yaml
+tests/projects/**/stack*.yaml.lock
 cabal.project.local*
 .vscode/

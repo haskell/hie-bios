@@ -47,6 +47,13 @@ main = defaultMain $
                                                           ,("./", CradleConfig [] (
                                                                     StackMulti [("./src", StackType (Just "lib:hie-bios") Nothing)
                                                                               ,("./tests", StackType (Just "parser-tests") Nothing)]))]))
+    assertParser "stack-with-yaml.yaml"
+      (noDeps (Stack Nothing (Just "stack-8.8.3.yaml")))
+    assertParser "stack-with-both.yaml"
+      (noDeps (Stack (Just "hie-bios:hie") (Just "stack-8.8.3.yaml")))
+    assertParser "multi-stack-with-yaml.yaml"
+      (noDeps (StackMulti [("./src", StackType Nothing $ Just "stack-8.8.3.yaml")
+                          ,("./vendor", StackType Nothing $ Just "./vendor/stack-8.8.3.yaml")]))
 
     assertCustomParser "ch-cabal.yaml"
       (noDeps (Other CabalHelperCabal $ simpleCabalHelperYaml "cabal"))
