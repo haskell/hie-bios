@@ -332,8 +332,8 @@ stackProjects =
   , ("tests" </> "projects" </> "implicit-stack", "stack.yaml", ["."])
   , ("tests" </> "projects" </> "implicit-stack-multi", "stack.yaml", ["."])
   , ("tests" </> "projects" </> "implicit-stack-multi", "stack.yaml", ["."])
-  , ("tests" </> "projects" </> "multi-stack-with-yaml", "stack-8.8.3.yaml", ["appA", "appB"])
-  , ("tests" </> "projects" </> "stack-with-yaml", "stack-8.8.3.yaml", ["."])
+  , ("tests" </> "projects" </> "multi-stack-with-yaml", "stack-alt.yaml", ["appA", "appB"])
+  , ("tests" </> "projects" </> "stack-with-yaml", "stack-alt.yaml", ["."])
   ]
 
 stackYaml :: String -> [FilePath] -> String
