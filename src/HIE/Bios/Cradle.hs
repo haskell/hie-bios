@@ -54,6 +54,7 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.Text as T
+import qualified Data.HashMap.Strict as Map
 import           Data.Maybe (fromMaybe, maybeToList)
 import           GHC.Fingerprint (fingerprintString)
 
@@ -735,6 +736,14 @@ findFile p dir = do
     getFiles = filter p <$> getDirectoryContents dir
     doesPredFileExist file = doesFileExist $ dir </> file
 
+-- Some environments (e.g. stack exec) include GHC_PACKAGE_PATH.
+-- Cabal v2 *will* complain, even though or precisely because it ignores them
+-- Unset them from the environment to sidestep this
+getCleanEnvironment :: IO [(String, String)]
+getCleanEnvironment = do
+  e <- getEnvironment
+  return $ Map.toList $ Map.delete "GHC_PACKAGE_PATH" $ Map.fromList e
+
 -- | Call a given process.
 -- * A special file is created for the process to write to, the process can discover the name of
 -- the file by reading the @HIE_BIOS_OUTPUT@ environment variable. The contents of this file is
@@ -748,7 +757,7 @@ readProcessWithOutputFile
   -> CreateProcess -- ^ Parameters for the process to be executed.
   -> IO (ExitCode, [String], [String], [String])
 readProcessWithOutputFile l work_dir cp = do
-  old_env <- getEnvironment
+  old_env <- getCleanEnvironment
 
   withHieBiosOutput old_env $ \output_file -> do
     -- Pipe stdout directly into the logger
@@ -796,7 +805,8 @@ runGhcCmdOnPath wdir args = readProcessWithCwd wdir "ghc" args ""
 -- | Wrapper around 'readCreateProcess' that sets the working directory
 readProcessWithCwd :: FilePath -> FilePath -> [String] -> String -> IO (CradleLoadResult String)
 readProcessWithCwd dir cmd args stdi = do
-  let createProc = (proc cmd args) { cwd = Just dir }
+  cleanEnv <- getCleanEnvironment
+  let createProc = (proc cmd args) { cwd = Just dir, env = Just cleanEnv }
   mResult <- optional $ readCreateProcessWithExitCode createProc stdi
   case mResult of
     Just (ExitSuccess, stdo, _) -> pure $ CradleSuccess stdo

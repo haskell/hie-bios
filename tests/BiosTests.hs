@@ -114,12 +114,6 @@ main = do
            , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
                          $  testDirectory isCabalCradle "./tests/projects/multi-cabal" "app/Main.hs"
                          >> testDirectory isCabalCradle "./tests/projects/multi-cabal" "src/Lib.hs"
-           , testCaseSteps "stack-with-yaml" {- tests if both components can be loaded -}
-                         $  testDirectory isStackCradle "./tests/projects/stack-with-yaml" "app/Main.hs"
-                         >> testDirectory isStackCradle "./tests/projects/stack-with-yaml" "src/Lib.hs"
-           , testCaseSteps "multi-stack-with-yaml" {- tests if both components can be loaded -}
-                         $  testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appA/src/Lib.hs"
-                         >> testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appB/src/Lib.hs"
            , testCaseSteps "monorepo-cabal" {- issue https://github.com/mpickering/hie-bios/issues/200 -}
                          $  testDirectory isCabalCradle "./tests/projects/monorepo-cabal" "A/Main.hs"
                          >> testDirectory isCabalCradle "./tests/projects/monorepo-cabal" "B/MyLib.hs"
@@ -144,6 +138,12 @@ main = do
           , testCaseSteps "nested-stack2" $ testLoadCradleDependencies isStackCradle "./tests/projects/nested-stack" "MyLib.hs"
               (\deps -> deps `shouldMatchList` ["nested-stack.cabal", "package.yaml", "stack.yaml"]
               )
+          , testCaseSteps "stack-with-yaml" {- tests if both components can be loaded -}
+                        $  testDirectory isStackCradle "./tests/projects/stack-with-yaml" "app/Main.hs"
+                        >> testDirectory isStackCradle "./tests/projects/stack-with-yaml" "src/Lib.hs"
+          , testCaseSteps "multi-stack-with-yaml" {- tests if both components can be loaded -}
+                        $  testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appA/src/Lib.hs"
+                        >> testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appB/src/Lib.hs"
           ,
           -- Test for special characters in the path for parsing of the ghci-scripts.
           -- Issue https://github.com/mpickering/hie-bios/issues/162
