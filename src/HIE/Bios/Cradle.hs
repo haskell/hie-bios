@@ -93,17 +93,17 @@ loadCradleWithOpts _copts buildCustomCradle wfile = do
 
 getCradle :: (b -> Cradle a) -> (CradleConfig b, FilePath) -> Cradle a
 getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
-    Cabal mc -> cabalCradle wdir mc
-    CabalMulti ms ->
+    Cabal CabalType{ cabalComponent = mc } -> cabalCradle wdir mc
+    CabalMulti dc ms ->
       getCradle buildCustomCradle $
         (CradleConfig cradleDeps
-          (Multi [(p, CradleConfig [] (Cabal_ c)) | (p, c) <- ms])
+          (Multi [(p, CradleConfig [] (Cabal $ dc <> c)) | (p, c) <- ms])
         , wdir)
-    Stack mc syaml -> stackCradle wdir mc (maybe "stack.yaml" id syaml)
-    StackMulti ms ->
+    Stack StackType{ stackComponent = mc, stackYaml = syaml} -> stackCradle wdir mc (maybe "stack.yaml" id syaml)
+    StackMulti ds ms ->
       getCradle buildCustomCradle $
         (CradleConfig cradleDeps
-          (Multi [(p, CradleConfig [] (Stack_ c)) | (p, c) <- ms])
+          (Multi [(p, CradleConfig [] (Stack $ ds <> c)) | (p, c) <- ms])
         , wdir)
  --   Bazel -> rulesHaskellCradle wdir
  --   Obelisk -> obeliskCradle wdir
@@ -143,8 +143,8 @@ implicitConfig' fp = (\wdir ->
          (Bios (Program $ wdir </> ".hie-bios") Nothing, wdir)) <$> biosWorkDir fp
   --   <|> (Obelisk,) <$> obeliskWorkDir fp
   --   <|> (Bazel,) <$> rulesHaskellWorkDir fp
-     <|> (stackExecutable >> (Stack Nothing Nothing,) <$> stackWorkDir fp)
-     <|> ((Cabal Nothing,) <$> cabalWorkDir fp)
+     <|> (stackExecutable >> (Stack $ StackType Nothing Nothing,) <$> stackWorkDir fp)
+     <|> ((Cabal $ CabalType Nothing,) <$> cabalWorkDir fp)
 
 
 yamlConfig :: FilePath ->  MaybeT IO FilePath

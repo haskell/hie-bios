@@ -73,6 +73,16 @@ cradle:
 
 This configuration suffices if your whole project can be loaded by the command `stack repl`. As a rule of thumb, this works if the project consists of only one executable, one library and one test-suite.
 
+Some projects have multiple `stack-*.yaml` files for multiple versions of ghc/resolvers. In this case you
+can specify an alternate relative file to use by using the `stackYaml` option. The path is relative to the
+configuration file.
+
+```yaml
+cradle:
+  stack:
+    stackYaml: "./stack-8.8.3.yaml"
+```
+
 If your project is more complicated, you need to specify which [components](https://docs.haskellstack.org/en/stable/build_command/#components) you want to load. A component is, roughly speaking, a library/executable/test-suite or benchmark in `stack`. You can view the components/targets of a stack project by executing the command:
 ``` sh
 $ stack ide targets
@@ -125,6 +135,24 @@ Here you can see two important features:
     * This is convenient if components are overlapping.
 
 This way we specified which component needs to be compiled given a source file for our whole project.
+
+If you use both, multiple components and an alternate `stack.yaml` file, there is a way to specify defaults
+for the path-specific configurations.
+
+```yaml
+cradle:
+  stack:
+    stackYaml: "stack-8.3.3.yaml"
+    components:
+    - path: "./src"
+      component: "hie-bios:lib"
+    - path: "./exe"
+      component: "hie-bios:exe:hie-bios"
+    - path: "./tests/BiosTests.hs"
+      component: "hie-bios:test:hie-bios"
+    - path: "./tests/ParserTests.hs"
+      component: "hie-bios:test:parser-tests"
+```
 
 #### Debugging a `stack` cradle
 
