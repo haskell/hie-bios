@@ -1,9 +1,9 @@
 cradle:
   stack:
       - path: ./src
-        component: "multi-stack:lib"
+        component: "stack-with-yaml:lib"
         stackYaml: "stack-alt.yaml"
 
       - path: ./app
-        component: "multi-stack:exe:multi-stack"
+        component: "stack-with-yaml:exe:stack-with-yaml"
         stackYaml: "stack-alt.yaml"

@@ -1,5 +1,5 @@
 cabal-version:       >=2.0
-name:                multi-stack
+name:                stack-with-yaml
 version:             0.1.0.0
 build-type:          Simple
 
@@ -13,7 +13,7 @@ library
 
 
 
-executable multi-stack
+executable stack-with-yaml
   main-is:              app/Main.hs
   -- other-modules:
   -- other-extensions:

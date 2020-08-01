@@ -151,7 +151,7 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/stack-with-yaml/Setup.hs
                         tests/projects/stack-with-yaml/app/Main.hs
                         tests/projects/stack-with-yaml/hie.yaml
-                        tests/projects/stack-with-yaml/multi-stack.cabal
+                        tests/projects/stack-with-yaml/stack-with-yaml.cabal
                         tests/projects/stack-with-yaml/src/Lib.hs
 
 tested-with: GHC==8.10.1, GHC==8.8.3, GHC==8.6.5, GHC==8.4.4
