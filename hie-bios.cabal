@@ -31,12 +31,15 @@ Extra-Source-Files:     ChangeLog.md
                         tests/configs/direct.yaml
                         tests/configs/multi.yaml
                         tests/configs/multi-ch.yaml
+                        tests/configs/multi-stack-with-yaml.yaml
                         tests/configs/nested-cabal-multi.yaml
                         tests/configs/nested-stack-multi.yaml
                         tests/configs/none.yaml
                         tests/configs/obelisk.yaml
                         tests/configs/stack-config.yaml
                         tests/configs/stack-multi.yaml
+                        tests/configs/stack-with-both.yaml
+                        tests/configs/stack-with-yaml.yaml
                         tests/projects/symlink-test/a/A.hs
                         tests/projects/symlink-test/hie.yaml
                         tests/projects/multi-direct/A.hs
@@ -138,7 +141,18 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/implicit-stack-multi/other-package/Setup.hs
                         tests/projects/implicit-stack-multi/other-package/other-package.cabal
                         tests/projects/implicit-stack-multi/other-package/Main.hs
-
+                        tests/projects/multi-stack-with-yaml/appA/Setup.hs
+                        tests/projects/multi-stack-with-yaml/appA/appA.cabal
+                        tests/projects/multi-stack-with-yaml/appA/src/Lib.hs
+                        tests/projects/multi-stack-with-yaml/appB/Setup.hs
+                        tests/projects/multi-stack-with-yaml/appB/appB.cabal
+                        tests/projects/multi-stack-with-yaml/appB/src/Lib.hs
+                        tests/projects/multi-stack-with-yaml/hie.yaml
+                        tests/projects/stack-with-yaml/Setup.hs
+                        tests/projects/stack-with-yaml/app/Main.hs
+                        tests/projects/stack-with-yaml/hie.yaml
+                        tests/projects/stack-with-yaml/multi-stack.cabal
+                        tests/projects/stack-with-yaml/src/Lib.hs
 
 tested-with: GHC==8.10.1, GHC==8.8.3, GHC==8.6.5, GHC==8.4.4
 
