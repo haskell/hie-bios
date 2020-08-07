@@ -24,7 +24,7 @@ import System.Directory
 import System.FilePath (addTrailingPathSeparator,  makeRelative, (</>) )
 import System.Info.Extra ( isWindows )
 import System.IO.Temp
-import System.Exit (ExitCode(ExitFailure))
+import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import Control.Monad.Extra (unlessM)
 
 main :: IO ()
@@ -99,10 +99,12 @@ main = do
               (\CradleError {..} -> do
                   cradleErrorExitCode `shouldBe` ExitFailure 1
                   cradleErrorDependencies `shouldMatchList` ["hie.yaml"])
-           , testCaseSteps "failing-bios-ghc" $ testDirectoryFail isBiosCradle "./tests/projects/failing-bios-ghc" "B.hs"
+           , testCaseSteps "failing-bios-ghc" $ testGetGhcVersionFail isBiosCradle "./tests/projects/failing-bios-ghc" "B.hs"
               (\CradleError {..} -> do
-                  cradleErrorExitCode `shouldBe` ExitFailure 1
-                  cradleErrorDependencies `shouldMatchList` ["hie.yaml"])
+                  cradleErrorExitCode `shouldBe` ExitSuccess
+                  cradleErrorDependencies `shouldMatchList` []
+                  length cradleErrorStderr `shouldBe` 1
+                  head cradleErrorStderr `shouldStartWith` "Couldn't execute myGhc")
            , testCaseSteps "simple-bios-ghc" $ testDirectory isBiosCradle "./tests/projects/simple-bios-ghc" "B.hs"
            , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell" "B.hs"
            , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal" "B.hs"
@@ -205,13 +207,27 @@ testGetGhcVersion :: Cradle a -> IO ()
 testGetGhcVersion crd =
   getRuntimeGhcVersion crd `shouldReturn` CradleSuccess VERSION_ghc
 
+testGetGhcVersionFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
+testGetGhcVersionFail cradlePred rootDir file cradleFailPred step =
+  testCradle cradlePred rootDir file step $ \crd _ -> do
+    res <- getRuntimeGhcVersion crd
+
+    case res of
+      CradleSuccess _ -> liftIO $ expectationFailure "Cradle loaded successfully"
+      CradleNone -> liftIO $ expectationFailure "Unexpected none-Cradle"
+      CradleFail crdlFail -> liftIO $ cradleFailPred crdlFail
+
 testDirectoryFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
-testDirectoryFail cradlePred rootDir file cradleFailPred step = do
-  withTempCopy rootDir $ \rootDir' -> do
+testDirectoryFail cradlePred rootDir file cradleFailPred step =
+  testCradle cradlePred rootDir file step $ \crd fp ->
+    testLoadFileCradleFail crd fp cradleFailPred step
+
+testCradle :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (String -> IO ()) -> (Cradle Void -> FilePath -> IO a) -> IO a
+testCradle cradlePred rootDir file step cont = withTempCopy rootDir $ \rootDir' -> do
     fp <- canonicalizePath (rootDir' </> file)
     crd <- initialiseCradle cradlePred fp step
     step "Initialise Flags"
-    testLoadFileCradleFail crd fp cradleFailPred step
+    cont crd fp
 
 initialiseCradle :: (Cradle Void -> Bool) -> FilePath -> (String -> IO ()) -> IO (Cradle Void)
 initialiseCradle cradlePred a_fp step = do
