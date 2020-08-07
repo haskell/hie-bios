@@ -361,7 +361,7 @@ Additionally, you may specify the path to ghc. Otherwise, the one in the PATH wi
 cradle:
   bios:
     program: "<program>"
-    with-ghc: :<ghc>"
+    with-ghc: "<ghc>"
 ```
 #### Debugging a `bios` cradle
 
