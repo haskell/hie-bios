@@ -99,6 +99,11 @@ main = do
               (\CradleError {..} -> do
                   cradleErrorExitCode `shouldBe` ExitFailure 1
                   cradleErrorDependencies `shouldMatchList` ["hie.yaml"])
+           , testCaseSteps "failing-bios-ghc" $ testDirectoryFail isBiosCradle "./tests/projects/failing-bios-ghc" "B.hs"
+              (\CradleError {..} -> do
+                  cradleErrorExitCode `shouldBe` ExitFailure 1
+                  cradleErrorDependencies `shouldMatchList` ["hie.yaml"])
+           , testCaseSteps "simple-bios-ghc" $ testDirectory isBiosCradle "./tests/projects/simple-bios-ghc" "B.hs"
            , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell" "B.hs"
            , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal" "B.hs"
            , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct" "B.hs"
