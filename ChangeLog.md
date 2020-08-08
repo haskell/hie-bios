@@ -1,5 +1,11 @@
 # ChangeLog hie-bios
 
+## 2020-08-08 - 0.6.2
+
+### New Features
+
+* Add optional ghc-path field in bios cradles [#231](https://github.com/mpickering/hie-bios/pull/231)
+
 ## 2020-07-12 - 0.6.1
 
 ### Bug Fixes
