@@ -105,7 +105,6 @@ main = do
                   cradleErrorDependencies `shouldMatchList` []
                   length cradleErrorStderr `shouldBe` 1
                   head cradleErrorStderr `shouldStartWith` "Couldn't execute myGhc")
-           , testCaseSteps "simple-bios-ghc" $ testDirectory isBiosCradle "./tests/projects/simple-bios-ghc" "B.hs"
            , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell" "B.hs"
            , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal" "B.hs"
            , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct" "B.hs"
@@ -172,8 +171,13 @@ main = do
       ]
 
 linuxExlusiveTestCases :: [TestTree]
-linuxExlusiveTestCases =
-  [ testCaseSteps "simple-bios" $ testDirectory isBiosCradle "./tests/projects/simple-bios" "B.hs" | not isWindows ]
+linuxExlusiveTestCases
+  | not isWindows
+  = [ testCaseSteps "simple-bios" $ testDirectory isBiosCradle "./tests/projects/simple-bios" "B.hs"
+    , testCaseSteps "simple-bios-ghc" $ testDirectory isBiosCradle "./tests/projects/simple-bios-ghc" "B.hs"
+    ]
+  | otherwise
+  = []
 
 testDirectory :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (String -> IO ()) -> IO ()
 testDirectory cradlePred rootDir file step =
