@@ -106,7 +106,7 @@ getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleT
         , wdir)
  --   Bazel -> rulesHaskellCradle wdir
  --   Obelisk -> obeliskCradle wdir
-    Bios bios deps  -> biosCradle wdir bios deps
+    Bios bios deps mbGhc -> biosCradle wdir bios deps mbGhc
     Direct xs -> directCradle wdir xs
     None      -> noneCradle wdir
     Multi ms  -> multiCradle buildCustomCradle wdir ms
@@ -139,7 +139,7 @@ implicitConfig fp = do
 
 implicitConfig' :: FilePath -> MaybeT IO (CradleType a, FilePath)
 implicitConfig' fp = (\wdir ->
-         (Bios (Program $ wdir </> ".hie-bios") Nothing, wdir)) <$> biosWorkDir fp
+         (Bios (Program $ wdir </> ".hie-bios") Nothing Nothing, wdir)) <$> biosWorkDir fp
   --   <|> (Obelisk,) <$> obeliskWorkDir fp
   --   <|> (Bazel,) <$> rulesHaskellWorkDir fp
      <|> (stackExecutable >> (Stack Nothing,) <$> stackWorkDir fp)
@@ -334,14 +334,14 @@ directCradle wdir args =
 
 -- | Find a cradle by finding an executable `hie-bios` file which will
 -- be executed to find the correct GHC options to use.
-biosCradle :: FilePath -> Callable -> Maybe Callable -> Cradle a
-biosCradle wdir biosCall biosDepsCall =
+biosCradle :: FilePath -> Callable -> Maybe Callable -> Maybe FilePath -> Cradle a
+biosCradle wdir biosCall biosDepsCall mbGhc =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = Types.Bios
         , runCradle = biosAction wdir biosCall biosDepsCall
-        , runGhcCmd = runGhcCmdOnPath wdir
+        , runGhcCmd = \args -> readProcessWithCwd wdir (fromMaybe "ghc" mbGhc) args ""
         }
     }
 
@@ -452,7 +452,7 @@ type GhcProc = (FilePath, [String])
 -- when run with --interactive, it will print out its
 -- command-line arguments and exit
 withCabalWrapperTool :: GhcProc -> FilePath -> (FilePath -> IO a) -> IO a
-withCabalWrapperTool (ghcPath, ghcArgs) wdir k = do
+withCabalWrapperTool (mbGhc, ghcArgs) wdir k = do
   if isWindows
     then do
       cacheDir <- getCacheDir ""
@@ -464,7 +464,7 @@ withCabalWrapperTool (ghcPath, ghcArgs) wdir k = do
           createDirectoryIfMissing True cacheDir
           let wrapper_hs = cacheDir </> wrapper_name <.> "hs"
           writeFile wrapper_hs cabalWrapperHs
-          let ghc = (proc ghcPath $
+          let ghc = (proc mbGhc $
                       ghcArgs ++ ["-rtsopts=ignore", "-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs])
                       { cwd = Just wdir }
           readCreateProcess ghc "" >>= putStr

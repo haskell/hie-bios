@@ -65,6 +65,9 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/failing-bios/A.hs
                         tests/projects/failing-bios/B.hs
                         tests/projects/failing-bios/hie.yaml
+                        tests/projects/failing-bios-ghc/A.hs
+                        tests/projects/failing-bios-ghc/B.hs
+                        tests/projects/failing-bios-ghc/hie.yaml
                         tests/projects/failing-cabal/failing-cabal.cabal
                         tests/projects/failing-cabal/hie.yaml
                         tests/projects/failing-cabal/MyLib.hs
@@ -92,6 +95,10 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/simple-bios/B.hs
                         tests/projects/simple-bios/hie-bios.sh
                         tests/projects/simple-bios/hie.yaml
+                        tests/projects/simple-bios-ghc/A.hs
+                        tests/projects/simple-bios-ghc/B.hs
+                        tests/projects/simple-bios-ghc/hie-bios.sh
+                        tests/projects/simple-bios-ghc/hie.yaml
                         tests/projects/simple-bios-shell/A.hs
                         tests/projects/simple-bios-shell/B.hs
                         tests/projects/simple-bios-shell/hie.yaml
