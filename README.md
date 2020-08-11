@@ -385,6 +385,14 @@ cradle:
     shell: "<build-tool flags $HIE_BIOS_ARG>"
 ```
 
+Additionally, you may specify the path to ghc. Otherwise, the one in the PATH will be used:
+
+```yaml
+cradle:
+  bios:
+    program: "<program>"
+    with-ghc: "<ghc>"
+```
 #### Debugging a `bios` cradle
 
 The most common error in creating `bios` cradle is to not list all targets of the component. Please make sure, that you always list all targets of the component, associated with the filepath you want to load.
@@ -570,6 +578,7 @@ cradle:
     dependency-program: "optional program to run"
     shell: build-tool flags $HIE_BIOS_ARG
     dependency-shell: build-tool dependencies
+    with-ghc: "optional path to ghc"
   direct:
     arguments: ["list","of","ghc","arguments"]
   none:

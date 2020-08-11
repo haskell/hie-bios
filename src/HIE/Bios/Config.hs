@@ -115,6 +115,8 @@ data CradleType a
         -- ^ Optional path to program or shell command to obtain cradle dependencies.
         -- Each cradle dependency is to be expected to be on a separate line
         -- and relative to the root dir of the cradle.
+        , ghcPath :: Maybe FilePath
+        -- ^ Optional path to the ghc binary
         }
     | Direct { arguments :: [String] }
     | None
@@ -207,20 +209,23 @@ parseCabal = parseSingleOrMultiple Cabal CabalMulti $
           -> fail "Not a valid Cabal configuration, following keys are allowed: component"
 
 parseBios :: Value -> Parser (CradleType a)
-parseBios (Object x)
-    | 2 == Map.size x
-    , Just biosCallable <- exclusive (stringTypeFromMap Program "program") (stringTypeFromMap Command "shell")
-    , Just biosDepsCallable <- exclusive (stringTypeFromMap Program "dependency-program") (stringTypeFromMap Command "dependency-shell")
-    = return $ Bios biosCallable (Just biosDepsCallable)
-
-    | 1 == Map.size x
-    , Just biosCallable <- exclusive (stringTypeFromMap Program "program") (stringTypeFromMap Command "shell")
-    = return $ Bios biosCallable Nothing
-
-    | otherwise
-    = fail "Not a valid Bios Configuration type, following keys are allowed: program or shell, dependency-program or dependency-shell"
-
+parseBios (Object x) =
+    case biosCallable of
+        Just bc -> return $ Bios bc biosDepsCallable ghcPath
+        _ -> fail $ "Not a valid Bios Configuration type, following keys are allowed:" ++
+                    "program or shell, dependency-program or dependency-shell, with-ghc"
     where
+        biosCallable =
+            exclusive
+                (stringTypeFromMap Program "program")
+                (stringTypeFromMap Command "shell")
+        biosDepsCallable =
+            exclusive
+                (stringTypeFromMap Program "dependency-program")
+                (stringTypeFromMap Command "dependency-shell")
+        ghcPath =
+            stringTypeFromMap id "with-ghc"
+
         exclusive :: Maybe a -> Maybe a -> Maybe a
         exclusive (Just _) (Just _) = Nothing
         exclusive l Nothing = l
