@@ -154,6 +154,8 @@ cradle:
       component: "hie-bios:test:parser-tests"
 ```
 
+A word of warning: Due to current restrictions in the language server, as mentioned in [this bug report](https://github.com/haskell/haskell-language-server/issues/268#issuecomment-667640809) all referenced stack.yaml files must specify the same version of GHC, as only one version of ghcide is loaded at a time. This restriction might be lifted in the future.
+
 #### Debugging a `stack` cradle
 
 If you find that `hie-bios` can't load a certain component or file, run `stack repl` and `stack repl <component name>` to see if `stack` succeeds in building your project. Chances are that there is a problem in your project and if you fix that, `hie-bios` will succeed to load it.
