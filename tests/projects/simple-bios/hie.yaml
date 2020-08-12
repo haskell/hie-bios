@@ -1,2 +1,6 @@
 cradle:
-  bios: {program: ./hie-bios.sh }
+  bios:
+    program: ./hie-bios.sh
+    dependency-program: ./hie-bios-deps.sh
+
+  dependencies: hie.yaml
