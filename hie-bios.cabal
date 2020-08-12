@@ -94,6 +94,7 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/simple-bios/A.hs
                         tests/projects/simple-bios/B.hs
                         tests/projects/simple-bios/hie-bios.sh
+                        tests/projects/simple-bios/hie-bios-deps.sh
                         tests/projects/simple-bios/hie.yaml
                         tests/projects/simple-bios-ghc/A.hs
                         tests/projects/simple-bios-ghc/B.hs
