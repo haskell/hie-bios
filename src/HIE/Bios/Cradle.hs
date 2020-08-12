@@ -348,14 +348,14 @@ biosCradle wdir biosCall biosDepsCall mbGhc =
 biosWorkDir :: FilePath -> MaybeT IO FilePath
 biosWorkDir = findFileUpwards (".hie-bios" ==)
 
-biosDepsAction :: LoggingFunction -> FilePath -> Maybe Callable -> IO [FilePath]
-biosDepsAction l wdir (Just biosDepsCall) = do
-  biosDeps' <- callableToProcess biosDepsCall Nothing
+biosDepsAction :: LoggingFunction -> FilePath -> Maybe Callable -> FilePath -> IO [FilePath]
+biosDepsAction l wdir (Just biosDepsCall) fp = do
+  biosDeps' <- callableToProcess biosDepsCall (Just fp)
   (ex, sout, serr, args) <- readProcessWithOutputFile l wdir biosDeps'
   case ex of
     ExitFailure _ ->  error $ show (ex, sout, serr)
     ExitSuccess -> return args
-biosDepsAction _ _ Nothing = return []
+biosDepsAction _ _ Nothing _ = return []
 
 biosAction :: FilePath
            -> Callable
@@ -366,7 +366,7 @@ biosAction :: FilePath
 biosAction wdir bios bios_deps l fp = do
   bios' <- callableToProcess bios (Just fp)
   (ex, _stdo, std, res) <- readProcessWithOutputFile l wdir bios'
-  deps <- biosDepsAction l wdir bios_deps
+  deps <- biosDepsAction l wdir bios_deps fp
         -- Output from the program should be written to the output file and
         -- delimited by newlines.
         -- Execute the bios action and add dependencies of the cradle.
