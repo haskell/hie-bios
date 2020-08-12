@@ -3,4 +3,5 @@ cradle:
     program: ./hie-bios.sh
     dependency-program: ./hie-bios-deps.sh
 
-  dependencies: hie.yaml
+dependencies:
+    - hie.yaml
