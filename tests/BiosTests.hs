@@ -254,8 +254,9 @@ testLoadFile crd a_fp step = do
       G.runGhc (Just libDir) $ do
         let relFp = makeRelative (cradleRootDir crd) a_fp
         res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
-        handleCradleResult res $ \(ini, _) -> do
+        handleCradleResult res $ \(ini, opts) -> do
           liftIO (step "Initial module load")
+          liftIO (step $ "comp opts: " ++ show opts)
           sf <- ini
           case sf of
             -- Test resetting the targets
