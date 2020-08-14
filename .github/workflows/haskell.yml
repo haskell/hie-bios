@@ -51,6 +51,10 @@ jobs:
 
     - name: Build
       run: cabal build
-    - name: Test
+
+    - name: Display the path
+      run: echo %PATH%
       shell: cmd
+
+    - name: Test
       run: cabal test
