@@ -31,14 +31,26 @@ jobs:
         path: ~/.cabal
         key: ${{ runner.OS }}-${{ matrix.ghc }}-cabal-0
 
+    - name: Cache Stack
+      uses: actions/cache@v1.2.0
+      with:
+        path: ~/.stack
+        key: ${{ runner.OS }}-${{ matrix.ghc }}-stack-0
+
+    - name: Setup stack
+      run: stack setup
+
+    - name: Update cabal
+      run: cabal update
+
     - name: Run ShellCheck
       uses: ludeeus/action-shellcheck@2f2aa0d
       if: matrix.os == 'ubuntu-latest'
       with:
         ignore: tests
 
-    - run: cabal update
     - name: Build
       run: cabal build
     - name: Test
+      shell: cmd
       run: cabal test
