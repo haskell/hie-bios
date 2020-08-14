@@ -54,8 +54,8 @@ jobs:
 
     - name: Display the path
       run: echo %PATH%
-      shell: powershell
+      shell: cmd
 
     - name: Test
       run: cabal test
-      shell: powershell
+      shell: cmd
