@@ -7,6 +7,7 @@ module HIE.Bios.Cradle (
     , loadCradle
     , loadCustomCradle
     , loadImplicitCradle
+    , yamlConfig
     , defaultCradle
     , isCabalCradle
     , isStackCradle
