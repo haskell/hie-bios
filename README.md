@@ -297,6 +297,25 @@ Here you can see two important features:
   * The filepath can be a file.
     * This is convenient if components are overlapping.
 
+Similarly to `multi-stack` configurations, you can also specify multiple components using a `components` subkey.
+While this is currently not used for anything, this syntax gives you a place to put defaults, directly under
+the `cabal` entry.
+
+```yaml
+cradle:
+  cabal:
+    # Reserved for future default options
+    components:
+    - path: "./src"
+      component: "lib:hie-bios"
+    - path: "./exe"
+      component: "exe:hie-bios"
+    - path: "./tests/BiosTests.hs"
+      component: "test:hie-bios"
+    - path: "./tests/ParserTests.hs"
+      component: "test:parser-tests"
+```
+
 This way we specified which component needs to be compiled given a certain source file for our whole project.
 
 #### Debugging a `cabal` cradle
