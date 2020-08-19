@@ -21,12 +21,16 @@ module HIE.Bios.Config(
     Callable(..)
     ) where
 
+import Control.Exception
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as Map
+import           Data.Maybe (mapMaybe)
 import           Data.Semigroup
 import           Data.Foldable (foldrM)
+import           Data.Aeson (JSONPath)
 import           Data.Yaml
+import           Data.Yaml.Internal (Warning(..))
 
 type MLast a = Maybe (Last a)
 
@@ -285,4 +289,17 @@ instance FromJSON a => FromJSON (Config a) where
 -- If the contents of the file is not a valid 'Config a',
 -- an 'Control.Exception.IOException' is thrown.
 readConfig :: FromJSON a => FilePath -> IO (Config a)
-readConfig = decodeFileThrow
+readConfig fp = do
+    result <- decodeFileWithWarnings fp
+    either throwIO failOnAnyDuplicate result
+    where
+        failOnAnyDuplicate :: ([Warning], Config a) -> IO (Config a)
+        failOnAnyDuplicate (warnings, config) = do
+            _ <- case mapMaybe failOnDuplicate warnings of
+                    dups@(_:_) -> throwIO $ InvalidYaml $ Just $ YamlException
+                                          $ "Duplicate keys are not allowed, found: " ++ show dups
+                    _ -> return ()
+            return config
+        -- future proofing in case more warnings are added
+        failOnDuplicate :: Warning -> Maybe JSONPath
+        failOnDuplicate (DuplicateKey a) = Just a

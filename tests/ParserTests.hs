@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+import Test.Hspec.Expectations
 import Test.Tasty
 import Test.Tasty.HUnit
 import HIE.Bios.Config
@@ -10,6 +11,7 @@ import Data.Yaml
 import qualified Data.Text as T
 import System.FilePath
 import Control.Applicative ( (<|>) )
+import Control.Exception
 
 configDir :: FilePath
 configDir = "tests/configs"
@@ -71,6 +73,7 @@ main = defaultMain $
         , ("./test", CradleConfig [] (Cabal $ CabalType (Just "test")))
         , (".", CradleConfig [] None)
         ]))
+    assertParserFails "keys-not-unique-fails.yaml" invalidYamlException
 
 assertParser :: FilePath -> Config Void -> Assertion
 assertParser fp cc = do
@@ -78,6 +81,13 @@ assertParser fp cc = do
   (conf == cc) @? (unlines [("Parser Failed: " ++ fp)
                            , "Expected: " ++ show cc
                            , "Actual: " ++ show conf ])
+
+invalidYamlException :: Selector ParseException
+invalidYamlException (InvalidYaml (Just _)) = True
+invalidYamlException _ = False
+
+assertParserFails :: Exception e => FilePath -> Selector e -> Assertion
+assertParserFails fp es = (readConfig (configDir </> fp) :: IO (Config Void)) `shouldThrow` es
 
 assertCustomParser :: FilePath -> Config CabalHelper -> Assertion
 assertCustomParser fp cc = do

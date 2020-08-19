@@ -154,7 +154,7 @@ cradle:
       component: "hie-bios:test:parser-tests"
 ```
 
-A word of warning: Due to current restrictions in the language server, as mentioned in [this bug report](https://github.com/haskell/haskell-language-server/issues/268#issuecomment-667640809) all referenced stack.yaml files must specify the same version of GHC, as only one version of ghcide is loaded at a time. This restriction might be lifted in the future.
+A word of warning: Due to current restrictions in the language server, as mentioned in [this bug report](https://github.com/haskell/haskell-language-server/issues/268#issuecomment-667640809) all referenced stack.yaml files must specify the same version of GHC, as only one version of ghcide is loaded at a time per workspace root. This restriction might be lifted in the future.
 
 #### Debugging a `stack` cradle
 
