@@ -24,12 +24,71 @@ import System.Directory
 import System.FilePath (addTrailingPathSeparator,  makeRelative, (</>) )
 import System.Info.Extra ( isWindows )
 import System.IO.Temp
+import System.IO
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import Control.Monad.Extra (unlessM)
+
+import System.Process
+import System.Environment
+
+polyGlot :: String
+polyGlot = unlines
+  [ onlyBash
+  , pureCmd
+  ]
+
+polyGlot' :: String
+polyGlot' = unlines
+  [ onlyBash'
+  , pureCmd'
+  ]
+
+onlyBash :: String
+onlyBash = unlines
+  [ ":; echo \"-Wall\" >> $HIE_BIOS_OUTPUT"
+  , ":; echo \"A\" >> $HIE_BIOS_OUTPUT"
+  , ":; echo \"B\" >> $HIE_BIOS_OUTPUT"
+  , ":; exit 0"
+  ]
+
+pureCmd :: String
+pureCmd = unlines
+  [ "ECHO \"-Wall\" >> %HIE_BIOS_OUTPUT%"
+  , "ECHO \"A\" >> %HIE_BIOS_OUTPUT%"
+  , "ECHO \"B\" >> %HIE_BIOS_OUTPUT%"
+  ]
+onlyBash' :: String
+onlyBash' = unlines
+  [ ":; echo \"-Wall\""
+  , ":; echo \"A\""
+  , ":; echo \"B\""
+  , ":; exit 0"
+  ]
+
+pureCmd' :: String
+pureCmd' = unlines
+  [ "ECHO \"-Wall\""
+  , "ECHO \"A\""
+  , "ECHO \"B\""
+  ]
+
+windowsCommand :: [Char] -> IO (ExitCode, String, String)
+windowsCommand cmd = do
+  hPutStrLn stderr $ "the command: " ++ cmd
+  sysEnv <- getEnvironment
+  readCreateProcessWithExitCode (shell cmd) {env = Just (("HIE_BIOS_OUTPUT", "log.txt") : sysEnv) } ""
 
 main :: IO ()
 main = do
   writeStackYamlFiles
+  res <- windowsCommand pureCmd'
+  hPutStrLn stderr $ (show res)
+  res1 <- windowsCommand polyGlot'
+  hPutStrLn stderr $ (show res1)
+  res <- windowsCommand pureCmd
+  hPutStrLn stderr $ (show res)
+  res1 <- windowsCommand polyGlot
+  hPutStrLn stderr $ (show res1)
   defaultMain $
     testGroup "Bios-tests"
       [ testGroup "Find cradle"
