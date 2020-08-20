@@ -66,10 +66,10 @@ onlyBash' = unlines
   ]
 
 pureCmd' :: String
-pureCmd' = unlines
-  [ "ECHO \"-Wall\""
-  , "ECHO \"A\""
-  , "ECHO \"B\""
+pureCmd' = concat
+  [ "ECHO \"-Wall\"\r\n"
+  , "ECHO \"A\"\r\n"
+  , "ECHO \"B\"\r\n"
   ]
 
 windowsCommand :: [Char] -> IO (ExitCode, String, String)
