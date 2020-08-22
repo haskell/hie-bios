@@ -99,7 +99,7 @@ getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleT
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Cabal $ dc <> c)) | (p, c) <- ms])
         , wdir)
-    Stack StackType{ stackComponent = mc, stackYaml = syaml} -> stackCradle wdir mc (maybe "stack.yaml" id syaml)
+    Stack StackType{ stackComponent = mc, stackYaml = syaml} -> stackCradle wdir mc (fromMaybe "stack.yaml" syaml)
     StackMulti ds ms ->
       getCradle buildCustomCradle $
         (CradleConfig cradleDeps
