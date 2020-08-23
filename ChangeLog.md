@@ -1,5 +1,11 @@
 # ChangeLog hie-bios
 
+## 2020-08-08 - 0.6.3
+
+### API Addition
+
+* Expose yamlConfig [#237](https://github.com/mpickering/hie-bios/pull/237)
+
 ## 2020-08-08 - 0.6.2
 
 ### New Features
