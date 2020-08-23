@@ -73,6 +73,16 @@ cradle:
 
 This configuration suffices if your whole project can be loaded by the command `stack repl`. As a rule of thumb, this works if the project consists of only one executable, one library and one test-suite.
 
+Some projects have multiple `stack-*.yaml` files for multiple versions of ghc/resolvers. In this case you
+can specify an alternate relative file to use by using the `stackYaml` option. The path is relative to the
+configuration file.
+
+```yaml
+cradle:
+  stack:
+    stackYaml: "./stack-8.8.3.yaml"
+```
+
 If your project is more complicated, you need to specify which [components](https://docs.haskellstack.org/en/stable/build_command/#components) you want to load. A component is, roughly speaking, a library/executable/test-suite or benchmark in `stack`. You can view the components/targets of a stack project by executing the command:
 ``` sh
 $ stack ide targets
@@ -125,6 +135,26 @@ Here you can see two important features:
     * This is convenient if components are overlapping.
 
 This way we specified which component needs to be compiled given a source file for our whole project.
+
+If you use both, multiple components and an alternate `stack.yaml` file, there is a way to specify defaults
+for the path-specific configurations.
+
+```yaml
+cradle:
+  stack:
+    stackYaml: "stack-8.3.3.yaml"
+    components:
+    - path: "./src"
+      component: "hie-bios:lib"
+    - path: "./exe"
+      component: "hie-bios:exe:hie-bios"
+    - path: "./tests/BiosTests.hs"
+      component: "hie-bios:test:hie-bios"
+    - path: "./tests/ParserTests.hs"
+      component: "hie-bios:test:parser-tests"
+```
+
+A word of warning: Due to current restrictions in the language server, as mentioned in [this bug report](https://github.com/haskell/haskell-language-server/issues/268#issuecomment-667640809) all referenced stack.yaml files must specify the same version of GHC, as only one version of ghcide is loaded at a time per workspace root. This restriction might be lifted in the future.
 
 #### Debugging a `stack` cradle
 
@@ -266,6 +296,25 @@ Here you can see two important features:
     * That way, we specify that a file such as `./src/HIE/Bios.hs` belongs to the component `lib:hie-bios`.
   * The filepath can be a file.
     * This is convenient if components are overlapping.
+
+Similarly to `multi-stack` configurations, you can also specify multiple components using a `components` subkey.
+While this is currently not used for anything, this syntax gives you a place to put defaults, directly under
+the `cabal` entry.
+
+```yaml
+cradle:
+  cabal:
+    # Reserved for future default options
+    components:
+    - path: "./src"
+      component: "lib:hie-bios"
+    - path: "./exe"
+      component: "exe:hie-bios"
+    - path: "./tests/BiosTests.hs"
+      component: "test:hie-bios"
+    - path: "./tests/ParserTests.hs"
+      component: "test:parser-tests"
+```
 
 This way we specified which component needs to be compiled given a certain source file for our whole project.
 

@@ -144,6 +144,12 @@ main = do
           , testCaseSteps "nested-stack2" $ testLoadCradleDependencies isStackCradle "./tests/projects/nested-stack" "MyLib.hs"
               (\deps -> deps `shouldMatchList` ["nested-stack.cabal", "package.yaml", "stack.yaml"]
               )
+          , testCaseSteps "stack-with-yaml" {- tests if both components can be loaded -}
+                        $  testDirectory isStackCradle "./tests/projects/stack-with-yaml" "app/Main.hs"
+                        >> testDirectory isStackCradle "./tests/projects/stack-with-yaml" "src/Lib.hs"
+          , testCaseSteps "multi-stack-with-yaml" {- tests if both components can be loaded -}
+                        $  testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appA/src/Lib.hs"
+                        >> testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appB/src/Lib.hs"
           ,
           -- Test for special characters in the path for parsing of the ghci-scripts.
           -- Issue https://github.com/mpickering/hie-bios/issues/162
@@ -338,18 +344,21 @@ copyDir src dst = do
 
 writeStackYamlFiles :: IO ()
 writeStackYamlFiles =
-  forM_ stackProjects $ \(proj, pkgs) ->
-    writeFile (proj </> "stack.yaml") (stackYaml stackYamlResolver pkgs)
+  forM_ stackProjects $ \(proj, syaml, pkgs) ->
+    writeFile (proj </> syaml) (stackYaml stackYamlResolver pkgs)
 
-stackProjects :: [(FilePath, [FilePath])]
+stackProjects :: [(FilePath, FilePath, [FilePath])]
 stackProjects =
-  [ ("tests" </> "projects" </> "multi-stack", ["."])
-  , ("tests" </> "projects" </> "failing-stack", ["."])
-  , ("tests" </> "projects" </> "simple-stack", ["."])
-  , ("tests" </> "projects" </> "nested-stack", [".", "./sub-comp"])
-  , ("tests" </> "projects" </> "space stack", ["."])
-  , ("tests" </> "projects" </> "implicit-stack", ["."])
-  , ("tests" </> "projects" </> "implicit-stack-multi", ["."])
+  [ ("tests" </> "projects" </> "multi-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "failing-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "simple-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "nested-stack", "stack.yaml", [".", "./sub-comp"])
+  , ("tests" </> "projects" </> "space stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "implicit-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "implicit-stack-multi", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "implicit-stack-multi", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "multi-stack-with-yaml", "stack-alt.yaml", ["appA", "appB"])
+  , ("tests" </> "projects" </> "stack-with-yaml", "stack-alt.yaml", ["."])
   ]
 
 stackYaml :: String -> [FilePath] -> String
