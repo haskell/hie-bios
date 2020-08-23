@@ -5,3 +5,4 @@ tests/projects/**/stack*.yaml
 tests/projects/**/stack*.yaml.lock
 cabal.project.local*
 .vscode/
+tests/**/Setup.hs
