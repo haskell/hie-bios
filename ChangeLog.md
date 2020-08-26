@@ -1,5 +1,16 @@
 # ChangeLog hie-bios
 
+## 2020-08-27 - 0.7.0
+
+### New Features
+
+* Allow specifying a stack.yaml for stack configurations [#230](https://github.com/mpickering/hie-bios/pull/230)
+* Pass HIE_BIOS_ARG to the dependencies program [#235](https://github.com/mpickering/hie-bios/pull/235)
+
+### API Changes
+
+* Change Config CradleType
+
 ## 2020-08-08 - 0.6.3
 
 ### API Addition
