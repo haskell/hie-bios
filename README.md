@@ -572,8 +572,8 @@ cradle:
 ```yaml
 cradle:
   bios:
-    shell: build-tool flags $HIE_BIOS_ARG $HIE_BIOS_OUTPUT
-    dependency-shell: build-tool dependencies $HIE_BIOS_ARG $HIE_BIOS_OUTPUT
+    shell: build-tool flags $HIE_BIOS_ARG > $HIE_BIOS_OUTPUT
+    dependency-shell: build-tool dependencies $HIE_BIOS_ARG > $HIE_BIOS_OUTPUT
 ```
 
 The dependency program or command is executed in a similar fashion to the bios
