@@ -572,13 +572,15 @@ cradle:
 ```yaml
 cradle:
   bios:
-    shell: build-tool flags $HIE_BIOS_ARG $HIE_BIOS_OUTPUT
-    dependency-shell: build-tool dependencies $HIE_BIOS_OUTPUT
+    shell: build-tool flags $HIE_BIOS_ARG > $HIE_BIOS_OUTPUT
+    dependency-shell: build-tool dependencies $HIE_BIOS_ARG > $HIE_BIOS_OUTPUT
 ```
 
-The dependency program or command is executed with no parameters and it is
-expected to output on HIE_BIOS_OUTPUT on each line exactly one filepath relative
-to the root of the cradle, not relative to the location of the program.
+The dependency program or command is executed in a similar fashion to the bios
+program, using the environment variables HIE_BIOS_ARG and HIE_BIOS_OUTPUT to
+communicate respectively the path of the source file being loaded, and the path
+where the set of dependency paths should be written, one per line,
+and relative to the root of the cradle, not to the location of the program.
 
 Programs and shell commands for flags and dependencies can be mixed and matched.
 
@@ -596,7 +598,7 @@ cradle:
     program: "program to run"
     dependency-program: "optional program to run"
     shell: build-tool flags $HIE_BIOS_ARG
-    dependency-shell: build-tool dependencies
+    dependency-shell: build-tool dependencies $HIE_BIOS_ARG
     with-ghc: "optional path to ghc"
   direct:
     arguments: ["list","of","ghc","arguments"]
