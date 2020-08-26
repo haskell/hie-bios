@@ -8,3 +8,7 @@ cradle:
       ECHO "-Wall" >> %HIE_BIOS_OUTPUT%
       ECHO "A" >> %HIE_BIOS_OUTPUT%
       ECHO "B" >> %HIE_BIOS_OUTPUT%
+    dependency-shell: |
+      echo -n # > nul && ECHO hie.yaml>> %HIE_BIOS_OUTPUT%
+      :; echo "hie.yaml" >> $HIE_BIOS_OUTPUT
+      :; exit 0

@@ -106,6 +106,7 @@ main = do
                   length cradleErrorStderr `shouldBe` 1
                   head cradleErrorStderr `shouldStartWith` "Couldn't execute myGhc")
            , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell" "B.hs"
+           , testCaseSteps "simple-bios-shell-deps" $ testLoadCradleDependencies isBiosCradle "./tests/projects/simple-bios-shell" "B.hs" (assertEqual "dependencies" ["hie.yaml"])
            , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal" "B.hs"
            , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct" "B.hs"
            , testCaseSteps "nested-cabal" $ testLoadCradleDependencies isCabalCradle "./tests/projects/nested-cabal" "sub-comp/Lib.hs"
@@ -181,6 +182,7 @@ linuxExlusiveTestCases
   | not isWindows
   = [ testCaseSteps "simple-bios" $ testDirectory isBiosCradle "./tests/projects/simple-bios" "B.hs"
     , testCaseSteps "simple-bios-ghc" $ testDirectory isBiosCradle "./tests/projects/simple-bios-ghc" "B.hs"
+    , testCaseSteps "simple-bios-deps" $ testLoadCradleDependencies isBiosCradle "./tests/projects/simple-bios" "B.hs" (assertEqual "dependencies" ["hie-bios.sh", "hie.yaml"])
     ]
   | otherwise
   = []

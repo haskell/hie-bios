@@ -572,12 +572,12 @@ cradle:
 ```yaml
 cradle:
   bios:
-    shell: build-tool flags $HIE_BIOS_ARG
-    dependency-shell: build-tool dependencies
+    shell: build-tool flags $HIE_BIOS_ARG $HIE_BIOS_OUTPUT
+    dependency-shell: build-tool dependencies $HIE_BIOS_OUTPUT
 ```
 
 The dependency program or command is executed with no parameters and it is
-expected to output on stdout on each line exactly one filepath relative
+expected to output on HIE_BIOS_OUTPUT on each line exactly one filepath relative
 to the root of the cradle, not relative to the location of the program.
 
 Programs and shell commands for flags and dependencies can be mixed and matched.
