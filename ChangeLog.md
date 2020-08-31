@@ -1,5 +1,11 @@
 # ChangeLog hie-bios
 
+## 2020-09-01 - 0.7.1
+
+* Add explicit type for stack.yaml location [#243](https://github.com/mpickering/hie-bios/pull/243)
+  * In particular, fixes a regression with `hie.yaml` and standalone-files for stack
+* Reduce noise in Extra-Source-File field [#239](https://github.com/mpickering/hie-bios/pull/239)
+
 ## 2020-08-27 - 0.7.0
 
 ### New Features
