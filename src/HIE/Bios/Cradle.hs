@@ -31,7 +31,7 @@ import System.Exit
 import HIE.Bios.Types hiding (ActionName(..))
 import qualified HIE.Bios.Types as Types
 import HIE.Bios.Config
-import HIE.Bios.Environment (getCacheDir)
+import HIE.Bios.Environment (getCacheDir, prependIfRelative)
 import System.Directory hiding (findFile)
 import Control.Monad.Trans.Maybe
 import System.FilePath
@@ -100,7 +100,11 @@ getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleT
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Cabal $ dc <> c)) | (p, c) <- ms])
         , wdir)
-    Stack StackType{ stackComponent = mc, stackYaml = syaml} -> stackCradle wdir mc (fromMaybe "stack.yaml" syaml)
+    Stack StackType{ stackComponent = mc, stackYaml = syaml} ->
+      let
+        stackYamlConfig = stackYamlFromMaybe wdir syaml
+      in
+        stackCradle wdir mc stackYamlConfig
     StackMulti ds ms ->
       getCradle buildCustomCradle $
         (CradleConfig cradleDeps
@@ -552,9 +556,30 @@ cabalWorkDir wdir =
   <|> findFileUpwards (\fp -> takeExtension fp == ".cabal") wdir
 
 ------------------------------------------------------------------------
+
+-- | Explicit data-type for stack.yaml configuration location.
+-- It is basically a 'Maybe' type, but helps to document the API
+-- and helps to avoid incorrect usage.
+data StackYaml
+  = NoExplicitYaml
+  | ExplicitYaml FilePath
+
+-- | Create an explicit StackYaml configuration from the
+stackYamlFromMaybe :: FilePath -> Maybe FilePath -> StackYaml
+stackYamlFromMaybe _wdir Nothing = NoExplicitYaml
+stackYamlFromMaybe wdir (Just fp) = ExplicitYaml (prependIfRelative wdir fp)
+
+stackYamlProcessArgs :: StackYaml -> [String]
+stackYamlProcessArgs (ExplicitYaml yaml) = ["--stack-yaml", yaml]
+stackYamlProcessArgs NoExplicitYaml = []
+
+stackYamlLocationOrDefault :: StackYaml -> FilePath
+stackYamlLocationOrDefault NoExplicitYaml = "stack.yaml"
+stackYamlLocationOrDefault (ExplicitYaml yaml) = yaml
+
 -- | Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
-stackCradle :: FilePath -> Maybe String -> FilePath -> Cradle a
+stackCradle :: FilePath -> Maybe String -> StackYaml -> Cradle a
 stackCradle wdir mc syaml =
   Cradle
     { cradleRootDir    = wdir
@@ -562,8 +587,9 @@ stackCradle wdir mc syaml =
         { actionName = Types.Stack
         , runCradle = stackAction wdir mc syaml
         , runGhcCmd = \args ->
-            readProcessWithCwd
-              wdir "stack" (["--stack-yaml", syaml, "exec", "--silent", "ghc", "--"] <> args) ""
+            readProcessWithCwd wdir "stack"
+              (stackYamlProcessArgs syaml <> ["exec", "--silent", "ghc", "--"] <> args)
+              ""
         }
     }
 
@@ -576,25 +602,27 @@ stackCradle wdir mc syaml =
 -- a '.cabal' file.
 --
 -- Found dependencies are relative to 'rootDir'.
-stackCradleDependencies :: FilePath -> FilePath -> FilePath -> IO [FilePath]
+stackCradleDependencies :: FilePath -> FilePath -> StackYaml -> IO [FilePath]
 stackCradleDependencies wdir componentDir syaml = do
   let relFp = makeRelative wdir componentDir
   cabalFiles' <- findCabalFiles componentDir
   let cabalFiles = map (relFp </>) cabalFiles'
-  return $ map normalise $ cabalFiles ++ [relFp </> "package.yaml", syaml]
+  return $ map normalise $
+    cabalFiles ++ [relFp </> "package.yaml", stackYamlLocationOrDefault syaml]
 
-stackAction :: FilePath -> Maybe String -> FilePath -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
+stackAction :: FilePath -> Maybe String -> StackYaml -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
 stackAction work_dir mc syaml l _fp = do
-  let ghcProcArgs = ("stack", ["--stack-yaml", syaml, "exec", "ghc", "--"])
+  let ghcProcArgs = ("stack", stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
   withCabalWrapperTool ghcProcArgs work_dir $ \wrapper_fp -> do
     (ex1, _stdo, stde, args) <-
       readProcessWithOutputFile l work_dir $
-        proc "stack" $ ["--stack-yaml", syaml, "repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
-                       ++ [ comp | Just comp <- [mc] ]
+        stackProcess syaml
+                      $  ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
+                      <> [ comp | Just comp <- [mc] ]
     (ex2, pkg_args, stdr, _) <-
       readProcessWithOutputFile l work_dir $
-        proc "stack" ["--stack-yaml", syaml, "path", "--ghc-package-path"]
+        stackProcess syaml ["path", "--ghc-package-path"]
     let split_pkgs = concatMap splitSearchPath pkg_args
         pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
     case processCabalWrapperArgs args of
@@ -617,6 +645,9 @@ stackAction work_dir mc syaml l _fp = do
                     , ghc_args ++ pkg_ghc_args
                     )
                     deps
+
+stackProcess :: StackYaml -> [String] -> CreateProcess
+stackProcess syaml args = proc "stack" $ stackYamlProcessArgs syaml <> args
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess
