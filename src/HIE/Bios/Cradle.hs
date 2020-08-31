@@ -31,7 +31,7 @@ import System.Exit
 import HIE.Bios.Types hiding (ActionName(..))
 import qualified HIE.Bios.Types as Types
 import HIE.Bios.Config
-import HIE.Bios.Environment (getCacheDir, prependIfRelative)
+import HIE.Bios.Environment (getCacheDir)
 import System.Directory hiding (findFile)
 import Control.Monad.Trans.Maybe
 import System.FilePath
@@ -567,7 +567,7 @@ data StackYaml
 -- | Create an explicit StackYaml configuration from the
 stackYamlFromMaybe :: FilePath -> Maybe FilePath -> StackYaml
 stackYamlFromMaybe _wdir Nothing = NoExplicitYaml
-stackYamlFromMaybe wdir (Just fp) = ExplicitYaml (prependIfRelative wdir fp)
+stackYamlFromMaybe wdir (Just fp) = ExplicitYaml (wdir </> fp)
 
 stackYamlProcessArgs :: StackYaml -> [String]
 stackYamlProcessArgs (ExplicitYaml yaml) = ["--stack-yaml", yaml]
