@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, CPP #-}
-module HIE.Bios.Environment (initSession, getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, prependIfRelative, getCacheDir, addCmdOpts) where
+module HIE.Bios.Environment (initSession, getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, getCacheDir, addCmdOpts) where
 
 import CoreMonad (liftIO)
 import GHC (GhcMonad)
@@ -58,7 +58,7 @@ makeTargetsAbsolute :: FilePath -> [G.Target] -> [G.Target]
 makeTargetsAbsolute wdir = map (\target -> target {G.targetId = makeTargetIdAbsolute wdir (G.targetId target)})
 
 makeTargetIdAbsolute :: FilePath -> G.TargetId -> G.TargetId
-makeTargetIdAbsolute wdir (G.TargetFile fp phase) = G.TargetFile (prependIfRelative wdir fp) phase
+makeTargetIdAbsolute wdir (G.TargetFile fp phase) = G.TargetFile (wdir </> fp) phase
 makeTargetIdAbsolute _ tid = tid
 
 ----------------------------------------------------------------
@@ -198,22 +198,17 @@ addCmdOpts cmdOpts df1 = do
 -- This makes the 'DynFlags' independent of the current working directory.
 makeDynFlagsAbsolute :: FilePath -> DynFlags -> DynFlags
 makeDynFlagsAbsolute work_dir df =
-  mapOverIncludePaths (prependIfRelative work_dir)
+  mapOverIncludePaths (work_dir </>)
   $ df
-    { importPaths = map (prependIfRelative work_dir) (importPaths df)
+    { importPaths = map (work_dir </>) (importPaths df)
     , packageDBFlags =
         let makePackageDbAbsolute (PackageDB pkgConfRef) = PackageDB
               $ case pkgConfRef of
-                PkgConfFile fp -> PkgConfFile (prependIfRelative work_dir fp)
+                PkgConfFile fp -> PkgConfFile (work_dir </> fp)
                 conf -> conf
             makePackageDbAbsolute db = db
         in map makePackageDbAbsolute (packageDBFlags df)
     }
-
-prependIfRelative :: FilePath -> FilePath -> FilePath
-prependIfRelative wdir f
-  | isAbsolute f = f
-  | otherwise = wdir </> f
 
 -- partition_args, along with some of the other code in this file,
 -- was copied from ghc/Main.hs
