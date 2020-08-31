@@ -16,37 +16,12 @@ Extra-Source-Files:     ChangeLog.md
                         README.md
                         wrappers/cabal
                         wrappers/cabal.hs
-                        tests/configs/bazel.yaml
-                        tests/configs/bios-1.yaml
-                        tests/configs/bios-2.yaml
-                        tests/configs/bios-3.yaml
-                        tests/configs/bios-4.yaml
-                        tests/configs/bios-5.yaml
-                        tests/configs/cabal-1.yaml
-                        tests/configs/cabal-multi.yaml
-                        tests/configs/ch-cabal.yaml
-                        tests/configs/ch-stack.yaml
-                        tests/configs/default.yaml
-                        tests/configs/dependencies.yaml
-                        tests/configs/direct.yaml
-                        tests/configs/multi.yaml
-                        tests/configs/multi-ch.yaml
-                        tests/configs/multi-stack-with-yaml.yaml
-                        tests/configs/keys-not-unique-fails.yaml
-                        tests/configs/nested-cabal-multi.yaml
-                        tests/configs/nested-stack-multi.yaml
-                        tests/configs/none.yaml
-                        tests/configs/obelisk.yaml
-                        tests/configs/stack-config.yaml
-                        tests/configs/stack-multi.yaml
-                        tests/configs/stack-with-both.yaml
-                        tests/configs/stack-with-yaml.yaml
+                        tests/configs/*.yaml
                         tests/projects/symlink-test/a/A.hs
                         tests/projects/symlink-test/hie.yaml
                         tests/projects/multi-direct/A.hs
                         tests/projects/multi-direct/B.hs
                         tests/projects/multi-direct/hie.yaml
-                        tests/projects/multi-cabal/Setup.hs
                         tests/projects/multi-cabal/app/Main.hs
                         tests/projects/multi-cabal/cabal.project
                         tests/projects/multi-cabal/hie.yaml
@@ -56,11 +31,8 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/monorepo-cabal/hie.yaml
                         tests/projects/monorepo-cabal/A/Main.hs
                         tests/projects/monorepo-cabal/A/A.cabal
-                        tests/projects/monorepo-cabal/A/Setup.hs
                         tests/projects/monorepo-cabal/B/MyLib.hs
                         tests/projects/monorepo-cabal/B/B.cabal
-                        tests/projects/monorepo-cabal/B/Setup.hs
-                        tests/projects/multi-stack/Setup.hs
                         tests/projects/multi-stack/app/Main.hs
                         tests/projects/multi-stack/cabal.project
                         tests/projects/multi-stack/hie.yaml
@@ -75,26 +47,20 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/failing-cabal/failing-cabal.cabal
                         tests/projects/failing-cabal/hie.yaml
                         tests/projects/failing-cabal/MyLib.hs
-                        tests/projects/failing-cabal/Setup.hs
                         tests/projects/failing-stack/failing-stack.cabal
                         tests/projects/failing-stack/hie.yaml
                         tests/projects/failing-stack/src/Lib.hs
-                        tests/projects/failing-stack/Setup.hs
                         tests/projects/nested-cabal/nested-cabal.cabal
                         tests/projects/nested-cabal/cabal.project
                         tests/projects/nested-cabal/hie.yaml
                         tests/projects/nested-cabal/MyLib.hs
-                        tests/projects/nested-cabal/Setup.hs
                         tests/projects/nested-cabal/sub-comp/sub-comp.cabal
                         tests/projects/nested-cabal/sub-comp/Lib.hs
-                        tests/projects/nested-cabal/sub-comp/Setup.hs
                         tests/projects/nested-stack/nested-stack.cabal
                         tests/projects/nested-stack/hie.yaml
                         tests/projects/nested-stack/MyLib.hs
-                        tests/projects/nested-stack/Setup.hs
                         tests/projects/nested-stack/sub-comp/sub-comp.cabal
                         tests/projects/nested-stack/sub-comp/Lib.hs
-                        tests/projects/nested-stack/sub-comp/Setup.hs
                         tests/projects/simple-bios/A.hs
                         tests/projects/simple-bios/B.hs
                         tests/projects/simple-bios/hie-bios.sh
@@ -109,8 +75,6 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/simple-bios-shell/hie.yaml
                         tests/projects/simple-cabal/A.hs
                         tests/projects/simple-cabal/B.hs
-                        tests/projects/simple-cabal/CHANGELOG.md
-                        tests/projects/simple-cabal/Setup.hs
                         tests/projects/simple-cabal/cabal.project
                         tests/projects/simple-cabal/hie.yaml
                         tests/projects/simple-cabal/simple-cabal.cabal
@@ -119,17 +83,13 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/simple-direct/hie.yaml
                         tests/projects/simple-stack/A.hs
                         tests/projects/simple-stack/B.hs
-                        tests/projects/simple-stack/CHANGELOG.md
-                        tests/projects/simple-stack/Setup.hs
                         tests/projects/simple-stack/cabal.project
                         tests/projects/simple-stack/hie.yaml
                         tests/projects/simple-stack/simple-stack.cabal
                         "tests/projects/space stack/A.hs"
                         "tests/projects/space stack/B.hs"
-                        "tests/projects/space stack/Setup.hs"
                         "tests/projects/space stack/hie.yaml"
                         "tests/projects/space stack/stackproj.cabal"
-                        tests/projects/implicit-cabal/Setup.hs
                         tests/projects/implicit-cabal/cabal.project
                         tests/projects/implicit-cabal/implicit-cabal.cabal
                         tests/projects/implicit-cabal/Main.hs
@@ -141,23 +101,17 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/implicit-cabal-deep-project/cabal.project
                         tests/projects/implicit-cabal-deep-project/foo/foo.cabal
                         tests/projects/implicit-cabal-deep-project/foo/Main.hs
-                        tests/projects/implicit-stack/Setup.hs
                         tests/projects/implicit-stack/implicit-stack.cabal
                         tests/projects/implicit-stack/Main.hs
-                        tests/projects/implicit-stack-multi/Setup.hs
                         tests/projects/implicit-stack-multi/implicit-stack-multi.cabal
                         tests/projects/implicit-stack-multi/Main.hs
-                        tests/projects/implicit-stack-multi/other-package/Setup.hs
                         tests/projects/implicit-stack-multi/other-package/other-package.cabal
                         tests/projects/implicit-stack-multi/other-package/Main.hs
-                        tests/projects/multi-stack-with-yaml/appA/Setup.hs
                         tests/projects/multi-stack-with-yaml/appA/appA.cabal
                         tests/projects/multi-stack-with-yaml/appA/src/Lib.hs
-                        tests/projects/multi-stack-with-yaml/appB/Setup.hs
                         tests/projects/multi-stack-with-yaml/appB/appB.cabal
                         tests/projects/multi-stack-with-yaml/appB/src/Lib.hs
                         tests/projects/multi-stack-with-yaml/hie.yaml
-                        tests/projects/stack-with-yaml/Setup.hs
                         tests/projects/stack-with-yaml/app/Main.hs
                         tests/projects/stack-with-yaml/hie.yaml
                         tests/projects/stack-with-yaml/stack-with-yaml.cabal
