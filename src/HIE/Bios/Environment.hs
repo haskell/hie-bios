@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, CPP #-}
-module HIE.Bios.Environment (initSession, getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, getCacheDir, addCmdOpts) where
+module HIE.Bios.Environment (initSession, getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, prependIfRelative, getCacheDir, addCmdOpts) where
 
 import CoreMonad (liftIO)
 import GHC (GhcMonad)
@@ -75,7 +75,7 @@ getRuntimeGhcLibDir :: Cradle a
                     -> IO (CradleLoadResult FilePath)
 getRuntimeGhcLibDir cradle = do
   maybeNixLibDir <- lookupEnv "NIX_GHC_LIBDIR"
-  case maybeNixLibDir of 
+  case maybeNixLibDir of
     Just ld -> pure (CradleSuccess ld)
     Nothing -> fmap (fmap trim) $
       runGhcCmd (cradleOptsProg cradle) ["--print-libdir"]
