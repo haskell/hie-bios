@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, CPP #-}
 
 module HIE.Bios.Ghc.Logger (
     withLogger
@@ -8,7 +8,6 @@ import Bag (Bag, bagToList)
 import CoreMonad (liftIO)
 import DynFlags (LogAction, dopt, DumpFlag(Opt_D_dump_splices))
 import ErrUtils
-import Exception (ghandle)
 import FastString (unpackFS)
 import GHC (DynFlags(..), SrcSpan(..), GhcMonad)
 import qualified GHC as G
@@ -21,6 +20,7 @@ import System.FilePath (normalise)
 
 import HIE.Bios.Ghc.Doc (showPage, getStyle)
 import HIE.Bios.Ghc.Api (withDynFlags)
+import qualified HIE.Bios.Ghc.Gap as Gap
 
 ----------------------------------------------------------------
 
@@ -37,8 +37,12 @@ readAndClearLogRef (LogRef ref) = do
     writeIORef ref id
     return $! unlines (b [])
 
-appendLogRef :: DynFlags -> LogRef -> LogAction
-appendLogRef df (LogRef ref) _ _ sev src style msg = do
+appendLogRef :: DynFlags -> PprStyle -> LogRef -> LogAction
+appendLogRef df style (LogRef ref) _ _ sev src
+#if __GLASGOW_HASKELL__ < 811
+  _style
+#endif
+  msg = do
         let !l = ppMsg src sev df style msg
         modifyIORef ref (\b -> b . (l:))
 
@@ -50,13 +54,14 @@ appendLogRef df (LogRef ref) _ _ sev src style msg = do
 withLogger ::
   (GhcMonad m)
   => (DynFlags -> DynFlags) -> m () -> m (Either String String)
-withLogger setDF body = ghandle sourceError $ do
+withLogger setDF body = Gap.handle sourceError $ do
     logref <- liftIO newLogRef
+    dflags <- G.getSessionDynFlags
+    style <- getStyle dflags
+    let setLogger logref df = df { log_action =  appendLogRef df style logref }
     withDynFlags (setLogger logref . setDF) $ do
       body
       liftIO $ Right <$> readAndClearLogRef logref
-  where
-    setLogger logref df = df { log_action =  appendLogRef df logref }
 
 ----------------------------------------------------------------
 
@@ -104,14 +109,14 @@ showSeverityCaption SevWarning = "Warning: "
 showSeverityCaption _          = ""
 
 getSrcFile :: SrcSpan -> Maybe String
-getSrcFile (G.RealSrcSpan spn) = Just . unpackFS . G.srcSpanFile $ spn
+getSrcFile (Gap.RealSrcSpan spn) = Just . unpackFS . G.srcSpanFile $ spn
 getSrcFile _                   = Nothing
 
 isDumpSplices :: DynFlags -> Bool
 isDumpSplices dflag = dopt Opt_D_dump_splices dflag
 
 getSrcSpan :: SrcSpan -> Maybe (Int,Int,Int,Int)
-getSrcSpan (RealSrcSpan spn) = Just ( G.srcSpanStartLine spn
+getSrcSpan (Gap.RealSrcSpan spn) = Just ( G.srcSpanStartLine spn
                                     , G.srcSpanStartCol spn
                                     , G.srcSpanEndLine spn
                                     , G.srcSpanEndCol spn)
