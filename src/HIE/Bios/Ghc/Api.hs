@@ -14,6 +14,7 @@ import DynFlags
 import qualified GHC as G
 import qualified HscMain as G
 import qualified GhcMake as G
+import qualified HIE.Bios.Ghc.Gap as Gap
 
 import Control.Monad (void)
 import HIE.Bios.Types
@@ -61,7 +62,7 @@ initSessionWithMessage msg compOpts = (do
 withDynFlags ::
   (GhcMonad m)
   => (DynFlags -> DynFlags) -> m a -> m a
-withDynFlags setFlag body = G.gbracket setup teardown (\_ -> body)
+withDynFlags setFlag body = Gap.bracket setup teardown (\_ -> body)
   where
     setup = do
         dflag <- G.getSessionDynFlags

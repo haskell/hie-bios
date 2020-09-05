@@ -119,7 +119,7 @@ collectASTs action = do
                           { hscFrontendHook = Just (astHook ref1) }
                         }
   -- Modify session is much faster than `setSessionDynFlags`.
-  modifySession $ \h -> h{ hsc_dflags = dflags1 }
+  modifySession $ Gap.set_hsc_dflags dflags1
   res <- action
   tcs <- liftIO $ readIORef ref1
   -- Unset the hook so that we don't retain the reference ot the IORef so it can be gced.
@@ -129,7 +129,7 @@ collectASTs action = do
   let dflags2 = dflags1 { hooks = (hooks dflags_old)
                           { hscFrontendHook = Nothing }
                         }
-  modifySession $ \h -> h{ hsc_dflags = dflags2 }
+  modifySession $ Gap.set_hsc_dflags dflags2
 
   return (res, tcs)
 
@@ -161,7 +161,7 @@ ghcInHsc gm = do
 -- target file to be a temporary file.
 guessTargetMapped :: (GhcMonad m) => (FilePath, FilePath) -> m Target
 guessTargetMapped (orig_file_name, mapped_file_name) = do
-  t <- G.guessTarget orig_file_name Nothing
+  t <- Gap.guessTarget orig_file_name Nothing
   return (setTargetFilename mapped_file_name t)
 
 setTargetFilename :: FilePath -> Target -> Target

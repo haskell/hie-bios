@@ -7,6 +7,7 @@ import qualified GHC as G
 import qualified DriverPhases as G
 import qualified Util as G
 import DynFlags
+import qualified HIE.Bios.Ghc.Gap as Gap
 
 import Control.Applicative
 import Control.Monad (void)
@@ -117,9 +118,8 @@ getCacheDir fp = do
 -- (HscInterpreted) which implies LinkInMemory
 -- HscInterpreted
 setLinkerOptions :: DynFlags -> DynFlags
-setLinkerOptions df = df {
+setLinkerOptions df = setNoCode $ df {
     ghcLink   = LinkInMemory
-  , hscTarget = HscNothing
   , ghcMode = CompManager
   }
 
@@ -173,7 +173,7 @@ addCmdOpts cmdOpts df1 = do
   let
    (srcs, objs) = partition_args normal_fileish_paths [] []
    df3 = df2 { ldInputs = map (FileOption "") objs ++ ldInputs df2 }
-  ts <- mapM (uncurry G.guessTarget) srcs
+  ts <- mapM (uncurry Gap.guessTarget) srcs
   return (df3, ts)
     -- TODO: Need to handle these as well
     -- Ideally it requires refactoring to work in GHCi monad rather than
@@ -192,17 +192,14 @@ addCmdOpts cmdOpts df1 = do
 -- This makes the 'DynFlags' independent of the current working directory.
 makeDynFlagsAbsolute :: FilePath -> DynFlags -> DynFlags
 makeDynFlagsAbsolute work_dir df =
-  mapOverIncludePaths (work_dir </>)
+  mapOverIncludePaths makeAbs
   $ df
-    { importPaths = map (work_dir </>) (importPaths df)
+    { importPaths = map makeAbs (importPaths df)
     , packageDBFlags =
-        let makePackageDbAbsolute (PackageDB pkgConfRef) = PackageDB
-              $ case pkgConfRef of
-                PkgConfFile fp -> PkgConfFile (work_dir </> fp)
-                conf -> conf
-            makePackageDbAbsolute db = db
-        in map makePackageDbAbsolute (packageDBFlags df)
+        map (Gap.overPkgDbRef makeAbs) (packageDBFlags df)
     }
+  where
+    makeAbs = (work_dir </>)
 
 -- partition_args, along with some of the other code in this file,
 -- was copied from ghc/Main.hs

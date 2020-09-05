@@ -4,7 +4,7 @@ module HIE.Bios.Ghc.Check (
   ) where
 
 import GHC (DynFlags(..), GhcMonad)
-import Exception
+import Control.Exception
 
 import HIE.Bios.Environment
 import HIE.Bios.Ghc.Api

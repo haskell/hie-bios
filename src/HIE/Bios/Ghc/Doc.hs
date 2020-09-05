@@ -2,16 +2,20 @@
 module HIE.Bios.Ghc.Doc where
 
 import GHC (DynFlags, getPrintUnqual, pprCols, GhcMonad)
-import Outputable (PprStyle, SDoc, withPprStyleDoc, neverQualify)
+import Outputable (PprStyle, SDoc, runSDoc, neverQualify, initSDocContext)
 import Pretty (Mode(..), Doc, Style(..), renderStyle, style)
 
 import HIE.Bios.Ghc.Gap (makeUserStyle)
 
 showPage :: DynFlags -> PprStyle -> SDoc -> String
-showPage dflag stl = showDocWith dflag PageMode . withPprStyleDoc dflag stl
+showPage dflag stl sdoc = showDocWith dflag PageMode $ runSDoc sdoc scontext
+  where
+    scontext = initSDocContext dflag stl
 
 showOneLine :: DynFlags -> PprStyle -> SDoc -> String
-showOneLine dflag stl = showDocWith dflag OneLineMode . withPprStyleDoc dflag stl
+showOneLine dflag stl sdoc = showDocWith dflag OneLineMode $ runSDoc sdoc scontext
+  where
+    scontext = initSDocContext dflag stl
 
 getStyle :: (GhcMonad m) => DynFlags -> m PprStyle
 getStyle dflags = makeUserStyle dflags <$> getPrintUnqual
