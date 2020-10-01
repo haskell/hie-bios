@@ -610,7 +610,7 @@ stackCradle wdir mc syaml =
         , runCradle = stackAction wdir mc syaml
         , runGhcCmd = \args ->
             readProcessWithCwd wdir "stack"
-              (stackYamlProcessArgs syaml <> ["exec", "--silent", "ghc", "--"] <> args)
+              (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
               ""
         }
     }
