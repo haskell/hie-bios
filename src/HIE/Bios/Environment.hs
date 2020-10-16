@@ -309,5 +309,9 @@ anyToken :: ReadP Char
 anyToken = satisfy $ const True
 
 -- Used for clipping the trailing newlines on GHC output
+-- Also only take the last line of output
+-- (Stack's ghc output has a lot of preceding noise from 7zip etc)
 trim :: String -> String
-trim = dropWhileEnd isSpace
+trim s = case lines s of
+  [] -> s
+  ls -> dropWhileEnd isSpace $ last ls
