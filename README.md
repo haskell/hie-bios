@@ -209,7 +209,7 @@ The implication of this configuration is a bit different, though. Given a source
 This configuration should work in (almost) every standard project setup, since `cabal` finds the component associated to a given source file.
 However, due to an unfortunate [bug](https://github.com/haskell/cabal/issues/6622), this fails on some files with `cabal` versions older than `3.4`.
 So, to make your project loadable by older `cabal` versions, you can specify a component to load.
-A [component](https://cabal.readthedocs.io/en/stable/nix-local-build.html?highlight=component#cabal-v2-build) is roughly speaking a library, executable, test-suite or benchmark in `cabal`.
+A [component](https://cabal.readthedocs.io/en/latest/nix-local-build.html?highlight=component#cabal-v2-build) is roughly speaking a library, executable, test-suite or benchmark in `cabal`.
 The `hie.yaml` file looks like this:
 
 ```yaml
@@ -228,7 +228,7 @@ cradle:
     component: "lib:hie-bios"
 ```
 
-The component syntax `"lib:hie-bios"` refers to the library of the package `hie-bios`. For a complete reference of the component syntax, we refer to the [documentation](https://cabal.readthedocs.io/en/stable/nix-local-build.html?highlight=component#cabal-v2-build).
+The component syntax `"lib:hie-bios"` refers to the library of the package `hie-bios`. For a complete reference of the component syntax, we refer to the [documentation](https://cabal.readthedocs.io/en/latest/nix-local-build.html?highlight=component#cabal-v2-build).
 
 Note that `cabal` and `stack` have different ways of specifying their
 components.
