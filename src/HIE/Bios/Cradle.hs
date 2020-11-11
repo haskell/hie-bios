@@ -26,6 +26,7 @@ module HIE.Bios.Cradle (
 import Control.Exception (handleJust)
 import qualified Data.Yaml as Yaml
 import Data.Void
+import Data.Char (isSpace)
 import System.Process
 import System.Exit
 import HIE.Bios.Types hiding (ActionName(..))
@@ -490,7 +491,10 @@ withCabalWrapperTool (mbGhc, ghcArgs) wdir k = do
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
 cabalAction work_dir mc l fp = do
   withCabalWrapperTool ("ghc", []) work_dir $ \wrapper_fp -> do
-    let cab_args = ["v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
+    abs_work_dir <- makeAbsolute work_dir
+    let dirHash = show (fingerprintString abs_work_dir)
+    buildDir <- getCacheDir ("dist-"<>filter (not . isSpace) (takeBaseName abs_work_dir)<>"-"<>dirHash)
+    let cab_args = ["--builddir="<>buildDir,"v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
     (ex, output, stde, args) <-
       readProcessWithOutputFile l work_dir (proc "cabal" cab_args)
     case processCabalWrapperArgs args of
