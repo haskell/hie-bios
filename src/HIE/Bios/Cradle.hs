@@ -401,15 +401,13 @@ cabalCradle wdir mc =
         { actionName = Types.Cabal
         , runCradle = cabalAction wdir mc
         , runGhcCmd = \args -> do
+            buildDir <- cabalBuildDir wdir
             -- Workaround for a cabal-install bug on 3.0.0.0:
             -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
-            -- (It's ok to pass 'dist-newstyle' here, as it can only be changed
-            -- with the --builddir flag and not cabal.project, which we aren't
-            -- using in our call to v2-exec)
-            createDirectoryIfMissing True (wdir </> "dist-newstyle" </> "tmp")
+            createDirectoryIfMissing True (buildDir </> "tmp")
             -- Need to pass -v0 otherwise we get "resolving dependencies..."
             readProcessWithCwd
-              wdir "cabal" (["v2-exec", "ghc", "-v0", "--"] ++ args) ""
+              wdir "cabal" (["--builddir="<>buildDir,"v2-exec", "ghc", "-v0", "--"] ++ args) ""
         }
     }
 
@@ -487,13 +485,18 @@ withCabalWrapperTool (mbGhc, ghcArgs) wdir k = do
   where
     setMode wrapper_fp = setFileMode wrapper_fp accessModes
 
+-- | Given the root directory, get the build dir we are using for cabal
+-- In the `hie-bios` cache directory
+cabalBuildDir :: FilePath -> IO FilePath
+cabalBuildDir work_dir = do
+  abs_work_dir <- makeAbsolute work_dir
+  let dirHash = show (fingerprintString abs_work_dir)
+  getCacheDir ("dist-"<>filter (not . isSpace) (takeBaseName abs_work_dir)<>"-"<>dirHash)
 
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
 cabalAction work_dir mc l fp = do
   withCabalWrapperTool ("ghc", []) work_dir $ \wrapper_fp -> do
-    abs_work_dir <- makeAbsolute work_dir
-    let dirHash = show (fingerprintString abs_work_dir)
-    buildDir <- getCacheDir ("dist-"<>filter (not . isSpace) (takeBaseName abs_work_dir)<>"-"<>dirHash)
+    buildDir <- cabalBuildDir work_dir
     let cab_args = ["--builddir="<>buildDir,"v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
     (ex, output, stde, args) <-
       readProcessWithOutputFile l work_dir (proc "cabal" cab_args)
@@ -590,9 +593,10 @@ stackCradle wdir mc syaml =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Stack
         , runCradle = stackAction wdir mc syaml
-        , runGhcCmd = \args ->
+        , runGhcCmd = \args -> do
+            buildDir <- stackBuildDir wdir
             readProcessWithCwd wdir "stack"
-              (stackYamlProcessArgs syaml <> ["exec", "--silent", "ghc", "--"] <> args)
+              (stackYamlProcessArgs syaml <> ["--work-dir", buildDir, "exec", "--silent", "ghc", "--"] <> args)
               ""
         }
     }
@@ -614,19 +618,28 @@ stackCradleDependencies wdir componentDir syaml = do
   return $ map normalise $
     cabalFiles ++ [relFp </> "package.yaml", stackYamlLocationOrDefault syaml]
 
+-- | Given the root directory, get the build dir we are using for stack
+-- In the `hie-bios` cache directory
+stackBuildDir :: FilePath -> IO FilePath
+stackBuildDir work_dir = do
+  abs_work_dir <- makeAbsolute work_dir
+  let dirHash = show (fingerprintString abs_work_dir)
+  getCacheDir ("stack-work-"<>filter (not . isSpace) (takeBaseName abs_work_dir)<>"-"<>dirHash)
+
 stackAction :: FilePath -> Maybe String -> StackYaml -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
 stackAction work_dir mc syaml l _fp = do
-  let ghcProcArgs = ("stack", stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
+  buildDir <- stackBuildDir work_dir
+  let ghcProcArgs = ("stack", stackYamlProcessArgs syaml <> ["--work-dir",buildDir,"exec", "ghc", "--"])
   -- Same wrapper works as with cabal
   withCabalWrapperTool ghcProcArgs work_dir $ \wrapper_fp -> do
     (ex1, _stdo, stde, args) <-
       readProcessWithOutputFile l work_dir $
-        stackProcess syaml
+        stackProcess syaml buildDir
                       $  ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
                       <> [ comp | Just comp <- [mc] ]
     (ex2, pkg_args, stdr, _) <-
       readProcessWithOutputFile l work_dir $
-        stackProcess syaml ["path", "--ghc-package-path"]
+        stackProcess syaml buildDir ["path", "--ghc-package-path"]
     let split_pkgs = concatMap splitSearchPath pkg_args
         pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
     case processCabalWrapperArgs args of
@@ -650,8 +663,8 @@ stackAction work_dir mc syaml l _fp = do
                     )
                     deps
 
-stackProcess :: StackYaml -> [String] -> CreateProcess
-stackProcess syaml args = proc "stack" $ stackYamlProcessArgs syaml <> args
+stackProcess :: StackYaml -> FilePath -> [String] -> CreateProcess
+stackProcess syaml buildDir args = proc "stack" $ stackYamlProcessArgs syaml <> ["--work-dir",buildDir] <> args
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess
