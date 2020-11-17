@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, CPP #-}
-module HIE.Bios.Environment (initSession, getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, getCacheDir, addCmdOpts) where
+module HIE.Bios.Environment (initSession, getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, getCacheDir, addCmdOpts) where
 
 import CoreMonad (liftIO)
 import GHC (GhcMonad)
@@ -10,7 +10,6 @@ import DynFlags
 
 import Control.Applicative
 import Control.Monad (void)
-import Control.Monad.Trans.Maybe
 
 import System.Directory
 import System.FilePath
@@ -21,7 +20,6 @@ import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Base16
 import Data.List
 import Data.Char (isSpace)
-import Data.Maybe
 import Text.ParserCombinators.ReadP hiding (optional)
 import HIE.Bios.Types
 import HIE.Bios.Ghc.Gap
@@ -48,9 +46,20 @@ initSession  ComponentOptions {..} = do
         $ setVerbosity 0                       -- Set verbosity to zero just in case the user specified `-vx` in the options.
         $ setLinkerOptions df''                 -- Set `-fno-code` to avoid generating object files, unless we have to.
         )
+
+    let targets' = makeTargetsAbsolute componentRoot targets
     -- Unset the default log action to avoid output going to stdout.
     unsetLogAction
-    return targets
+    return targets'
+
+----------------------------------------------------------------
+
+makeTargetsAbsolute :: FilePath -> [G.Target] -> [G.Target]
+makeTargetsAbsolute wdir = map (\target -> target {G.targetId = makeTargetIdAbsolute wdir (G.targetId target)})
+
+makeTargetIdAbsolute :: FilePath -> G.TargetId -> G.TargetId
+makeTargetIdAbsolute wdir (G.TargetFile fp phase) = G.TargetFile (wdir </> fp) phase
+makeTargetIdAbsolute _ tid = tid
 
 ----------------------------------------------------------------
 
@@ -63,21 +72,21 @@ initSession  ComponentOptions {..} = do
 -- 1. the @NIX_GHC_LIBDIR@ if it is set
 -- 2. calling 'runCradleGhc' on the provided cradle
 getRuntimeGhcLibDir :: Cradle a
-                    -> IO (Maybe FilePath)
-getRuntimeGhcLibDir cradle = runMaybeT $ fromNix <|> fromCradle
-  where
-    fromNix = MaybeT $ lookupEnv "NIX_GHC_LIBDIR"
-    fromCradle = MaybeT $ fmap (fmap trim) $
+                    -> IO (CradleLoadResult FilePath)
+getRuntimeGhcLibDir cradle = do
+  maybeNixLibDir <- lookupEnv "NIX_GHC_LIBDIR"
+  case maybeNixLibDir of
+    Just ld -> pure (CradleSuccess ld)
+    Nothing -> fmap (fmap trim) $
       runGhcCmd (cradleOptsProg cradle) ["--print-libdir"]
 
 -- | Gets the version of ghc used when compiling the cradle. It is based off of
 -- 'getRuntimeGhcLibDir'. If it can't work out the verison reliably, it will
--- fall back to the version of ghc used to compile hie-bios.
+-- return a 'CradleError'
 getRuntimeGhcVersion :: Cradle a
-                     -> IO String
+                     -> IO (CradleLoadResult String)
 getRuntimeGhcVersion cradle =
-  fmap (fromMaybe VERSION_ghc) $ fmap (fmap trim) $
-    runGhcCmd (cradleOptsProg cradle) ["--numeric-version"]
+  fmap (fmap trim) $ runGhcCmd (cradleOptsProg cradle) ["--numeric-version"]
 
 ----------------------------------------------------------------
 
@@ -189,21 +198,17 @@ addCmdOpts cmdOpts df1 = do
 -- This makes the 'DynFlags' independent of the current working directory.
 makeDynFlagsAbsolute :: FilePath -> DynFlags -> DynFlags
 makeDynFlagsAbsolute work_dir df =
-  mapOverIncludePaths (prependIfRelative work_dir)
+  mapOverIncludePaths (work_dir </>)
   $ df
-    { importPaths = map (prependIfRelative work_dir) (importPaths df)
+    { importPaths = map (work_dir </>) (importPaths df)
     , packageDBFlags =
         let makePackageDbAbsolute (PackageDB pkgConfRef) = PackageDB
               $ case pkgConfRef of
-                PkgConfFile fp -> PkgConfFile (prependIfRelative work_dir fp)
+                PkgConfFile fp -> PkgConfFile (work_dir </> fp)
                 conf -> conf
             makePackageDbAbsolute db = db
         in map makePackageDbAbsolute (packageDBFlags df)
     }
-  where
-    prependIfRelative wdir f
-      | isAbsolute f = f
-      | otherwise = wdir </> f
 
 -- partition_args, along with some of the other code in this file,
 -- was copied from ghc/Main.hs
@@ -304,5 +309,9 @@ anyToken :: ReadP Char
 anyToken = satisfy $ const True
 
 -- Used for clipping the trailing newlines on GHC output
+-- Also only take the last line of output
+-- (Stack's ghc output has a lot of preceding noise from 7zip etc)
 trim :: String -> String
-trim = dropWhileEnd isSpace
+trim s = case lines s of
+  [] -> s
+  ls -> dropWhileEnd isSpace $ last ls

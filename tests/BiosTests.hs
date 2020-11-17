@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
@@ -20,9 +21,11 @@ import Control.Monad.IO.Class
 import Control.Monad ( forM_, unless )
 import Data.Void
 import System.Directory
-import System.FilePath ( makeRelative, (</>) )
+import System.FilePath (addTrailingPathSeparator,  makeRelative, (</>) )
 import System.Info.Extra ( isWindows )
-import System.Exit (ExitCode(ExitFailure))
+import System.IO.Temp
+import System.Exit (ExitCode(ExitSuccess, ExitFailure))
+import Control.Monad.Extra (unlessM)
 
 main :: IO ()
 main = do
@@ -44,88 +47,169 @@ main = do
                   (Just "./tests/projects/simple-cabal/hie.yaml")
                 )
         ]
-      , testGroup "Stop files"
-        [ testCaseSteps "findCradle" $ \_ -> do
-            yamlFile <- findCradle "./tests/projects/stop-file/sub-package/Main.hs" 
-            unless (yamlFile == Nothing) (error "Didn't respect stop file")
-        , testCaseSteps "loadImplicitCradle" $ \_ -> do
-            crd <- loadImplicitCradle "./tests/projects/stop-file/sub-package/Main.hs"  :: IO (Cradle Void)
-            unless (actionName (cradleOptsProg crd) == Cabal) $
-              error $ "Didn't respect stop file: " <> show crd
+      , testGroup "Symlink"
+        [ testCaseSteps "Can load base module" $ \step -> do
+            withTempCopy "./tests/projects/symlink-test" $ \tmpdir -> do
+              crdl <- initialiseCradle isMultiCradle (addTrailingPathSeparator tmpdir) step
+              step "Load module A"
+              withCurrentDirectory (cradleRootDir crdl) $ do
+                runCradle (cradleOptsProg crdl) (const (pure ())) "./a/A.hs"
+                >>= \case
+                  CradleSuccess r ->
+                    componentOptions r `shouldMatchList` ["a"]
+                  _ -> expectationFailure "Cradle could not be loaded"
+
+        , testCaseSteps "Can load symlinked module" $ \step -> do
+            withTempCopy "./tests/projects/symlink-test" $ \tmpdir -> do
+              crdl <- initialiseCradle isMultiCradle (addTrailingPathSeparator tmpdir) step
+              step "Attemp to load symlinked module A"
+              withCurrentDirectory (cradleRootDir crdl) $ do
+                createDirectoryLink "./a" "./b"
+                unlessM (doesFileExist "./b/A.hs")
+                  $ expectationFailure "Test invariant broken, this file must exist."
+
+                runCradle (cradleOptsProg crdl) (const (pure ())) "./b/A.hs"
+                >>= \case
+                  CradleSuccess r ->
+                    componentOptions r `shouldMatchList` ["b"]
+                  _ -> expectationFailure "Cradle could not be loaded"
+
+        , testCaseSteps "Can not load symlinked module that is ignored" $ \step -> do
+            withTempCopy "./tests/projects/symlink-test" $ \tmpdir -> do
+              crdl <- initialiseCradle isMultiCradle (addTrailingPathSeparator tmpdir) step
+              step "Attemp to load symlinked module A"
+              withCurrentDirectory (cradleRootDir crdl) $ do
+                createDirectoryLink "./a" "./c"
+                unlessM (doesFileExist "./c/A.hs")
+                  $ expectationFailure "Test invariant broken, this file must exist."
+
+                runCradle (cradleOptsProg crdl) (const (pure ())) "./c/A.hs"
+                  >>= \case
+                    CradleNone -> pure ()
+                    _ -> expectationFailure "Cradle loaded symlink"
         ]
       , testGroup "Loading tests"
         $ linuxExlusiveTestCases
         ++
-           [ testCaseSteps "failing-cabal" $ testDirectoryFail isCabalCradle "./tests/projects/failing-cabal/MyLib.hs"
+           [ testCaseSteps "failing-cabal" $ testDirectoryFail isCabalCradle "./tests/projects/failing-cabal" "MyLib.hs"
               (\CradleError {..} -> do
                   cradleErrorExitCode `shouldBe` ExitFailure 1
                   cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
-           , testCaseSteps "failing-bios" $ testDirectoryFail isBiosCradle "./tests/projects/failing-bios/B.hs"
+           , testCaseSteps "failing-bios" $ testDirectoryFail isBiosCradle "./tests/projects/failing-bios" "B.hs"
               (\CradleError {..} -> do
                   cradleErrorExitCode `shouldBe` ExitFailure 1
                   cradleErrorDependencies `shouldMatchList` ["hie.yaml"])
-           , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell/B.hs"
-           , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal/B.hs"
-           , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct/B.hs"
+           , testCaseSteps "failing-bios-ghc" $ testGetGhcVersionFail isBiosCradle "./tests/projects/failing-bios-ghc" "B.hs"
+              (\CradleError {..} -> do
+                  cradleErrorExitCode `shouldBe` ExitSuccess
+                  cradleErrorDependencies `shouldMatchList` []
+                  length cradleErrorStderr `shouldBe` 1
+                  head cradleErrorStderr `shouldStartWith` "Couldn't execute myGhc")
+           , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell" "B.hs"
+           , testCaseSteps "simple-bios-shell-deps" $ testLoadCradleDependencies isBiosCradle "./tests/projects/simple-bios-shell" "B.hs" (assertEqual "dependencies" ["hie.yaml"])
+           , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal" "B.hs"
+           , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct" "B.hs"
+           , testCaseSteps "nested-cabal" $ testLoadCradleDependencies isCabalCradle "./tests/projects/nested-cabal" "sub-comp/Lib.hs"
+              (\deps -> deps `shouldMatchList` ["sub-comp" </> "sub-comp.cabal", "cabal.project", "cabal.project.local"]
+              )
+           , testCaseSteps "nested-cabal2" $ testLoadCradleDependencies isCabalCradle "./tests/projects/nested-cabal" "MyLib.hs"
+              (\deps -> deps `shouldMatchList` ["nested-cabal.cabal", "cabal.project", "cabal.project.local"]
+              )
            , testCaseSteps "multi-direct" {- tests if both components can be loaded -}
-                         $  testDirectory isMultiCradle "./tests/projects/multi-direct/A.hs"
-                         >> testDirectory isMultiCradle "./tests/projects/multi-direct/B.hs"
+                         $  testDirectory isMultiCradle "./tests/projects/multi-direct" "A.hs"
+                         >> testDirectory isMultiCradle "./tests/projects/multi-direct" "B.hs"
            , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
-                         $  testDirectory isCabalCradle "./tests/projects/multi-cabal/app/Main.hs"
-                         >> testDirectory isCabalCradle "./tests/projects/multi-cabal/src/Lib.hs"
+                         $  testDirectory isCabalCradle "./tests/projects/multi-cabal" "app/Main.hs"
+                         >> testDirectory isCabalCradle "./tests/projects/multi-cabal" "src/Lib.hs"
+           , testCaseSteps "monorepo-cabal" {- issue https://github.com/mpickering/hie-bios/issues/200 -}
+                         $  testDirectory isCabalCradle "./tests/projects/monorepo-cabal" "A/Main.hs"
+                         >> testDirectory isCabalCradle "./tests/projects/monorepo-cabal" "B/MyLib.hs"
            ]
 -- TODO: Remove once stack and ghc-8.10.1 play well
 -- https://github.com/bubba/hie-bios/runs/811271872?check_suite_focus=true
 #if __GLASGOW_HASKELL__ < 810
        ++ [ expectFailBecause "stack repl does not fail on an invalid cabal file" $
-              testCaseSteps "failing-stack" $ testDirectoryFail isStackCradle "./tests/projects/failing-stack/src/Lib.hs"
+              testCaseSteps "failing-stack" $ testDirectoryFail isStackCradle "./tests/projects/failing-stack" "src/Lib.hs"
                 (\CradleError {..} -> do
                     cradleErrorExitCode `shouldBe` ExitFailure 1
                     cradleErrorDependencies `shouldMatchList` ["failing-stack.cabal", "stack.yaml", "package.yaml"])
-          , testCaseSteps "simple-stack" $ testDirectory isStackCradle "./tests/projects/simple-stack/B.hs"
+          , testCaseSteps "simple-stack" $ testDirectory isStackCradle "./tests/projects/simple-stack" "B.hs"
           , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
-                        $  testDirectory isStackCradle "./tests/projects/multi-stack/app/Main.hs"
-                        >> testDirectory isStackCradle "./tests/projects/multi-stack/src/Lib.hs"
+                        $  testDirectory isStackCradle "./tests/projects/multi-stack" "app/Main.hs"
+                        >> testDirectory isStackCradle "./tests/projects/multi-stack" "src/Lib.hs"
+          , expectFailBecause "stack repl set the component directory to the root directory" $
+              testCaseSteps "nested-stack" $ testLoadCradleDependencies isStackCradle "./tests/projects/nested-stack" "sub-comp/Lib.hs"
+                (\deps -> deps `shouldMatchList`
+                  ["sub-comp" </> "sub-comp.cabal", "sub-comp" </> "package.yaml", "stack.yaml"]
+                )
+          , testCaseSteps "nested-stack2" $ testLoadCradleDependencies isStackCradle "./tests/projects/nested-stack" "MyLib.hs"
+              (\deps -> deps `shouldMatchList` ["nested-stack.cabal", "package.yaml", "stack.yaml"]
+              )
+          , testCaseSteps "stack-with-yaml" {- tests if both components can be loaded -}
+                        $  testDirectory isStackCradle "./tests/projects/stack-with-yaml" "app/Main.hs"
+                        >> testDirectory isStackCradle "./tests/projects/stack-with-yaml" "src/Lib.hs"
+          , testCaseSteps "multi-stack-with-yaml" {- tests if both components can be loaded -}
+                        $  testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appA/src/Lib.hs"
+                        >> testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appB/src/Lib.hs"
           ,
           -- Test for special characters in the path for parsing of the ghci-scripts.
           -- Issue https://github.com/mpickering/hie-bios/issues/162
           testCaseSteps "space stack"
-                        $  testDirectory isStackCradle "./tests/projects/space stack/A.hs"
-                        >> testDirectory isStackCradle "./tests/projects/space stack/B.hs"
+                        $  testDirectory isStackCradle "./tests/projects/space stack" "A.hs"
+                        >> testDirectory isStackCradle "./tests/projects/space stack" "B.hs"
           ]
 #endif
       , testGroup "Implicit cradle tests" $
-        [ testCaseSteps "implicit-cabal" $ testImplicitCradle "./tests/projects/implicit-cabal/Main.hs" Cabal
+        [ testCaseSteps "implicit-cabal" $
+            testImplicitCradle "./tests/projects/implicit-cabal" "Main.hs" Cabal
+        , testCaseSteps "implicit-cabal-no-project" $
+            testImplicitCradle "./tests/projects/implicit-cabal-no-project" "Main.hs" Cabal
+        , testCaseSteps "implicit-cabal-deep-project" $
+            testImplicitCradle "./tests/projects/implicit-cabal-deep-project" "foo/Main.hs" Cabal
 -- TODO: same here
 #if __GLASGOW_HASKELL__ < 810
-        , testCaseSteps "implicit-stack" $ testImplicitCradle "./tests/projects/implicit-stack/Main.hs" Stack
+        , testCaseSteps "implicit-stack" $
+            testImplicitCradle "./tests/projects/implicit-stack" "Main.hs" Stack
         , testCaseSteps "implicit-stack-multi"
-            $ testImplicitCradle "./tests/projects/implicit-stack-multi/Main.hs" Stack
-            >> testImplicitCradle "./tests/projects/implicit-stack-multi/other-package/Main.hs" Stack
+            $ testImplicitCradle "./tests/projects/implicit-stack-multi" "Main.hs" Stack
+            >> testImplicitCradle "./tests/projects/implicit-stack-multi" "other-package/Main.hs" Stack
 #endif
         ]
       ]
 
 linuxExlusiveTestCases :: [TestTree]
-linuxExlusiveTestCases =
-  [ testCaseSteps "simple-bios" $ testDirectory isBiosCradle "./tests/projects/simple-bios/B.hs" | not isWindows ]
+linuxExlusiveTestCases
+  | not isWindows
+  = [ testCaseSteps "simple-bios" $ testDirectory isBiosCradle "./tests/projects/simple-bios" "B.hs"
+    , testCaseSteps "simple-bios-ghc" $ testDirectory isBiosCradle "./tests/projects/simple-bios-ghc" "B.hs"
+    , testCaseSteps "simple-bios-deps" $ testLoadCradleDependencies isBiosCradle "./tests/projects/simple-bios" "B.hs" (assertEqual "dependencies" ["hie-bios.sh", "hie.yaml"])
+    ]
+  | otherwise
+  = []
 
-testDirectory :: (Cradle Void -> Bool) -> FilePath -> (String -> IO ()) -> IO ()
-testDirectory cradlePred fp step = do
-  a_fp <- canonicalizePath fp
-  crd <- initialiseCradle cradlePred a_fp step
-  step "Get runtime GHC library directory"
-  testGetGhcLibDir crd
-  step "Get runtime GHC version"
-  testGetGhcVersion crd
-  step "Initialise Flags"
-  testLoadFile crd a_fp step
+testDirectory :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (String -> IO ()) -> IO ()
+testDirectory cradlePred rootDir file step =
+  -- We need to copy over the directory to somewhere outside the source tree
+  -- when we test, since the cabal.project/stack.yaml/hie.yaml file in the root
+  -- of this repository interferes with the test cradles!
+  withTempCopy rootDir $ \rootDir' -> do
+    fp <- canonicalizePath (rootDir' </> file)
+    crd <- initialiseCradle cradlePred fp step
+    step "Get runtime GHC library directory"
+    testGetGhcLibDir crd
+    step "Get runtime GHC version"
+    testGetGhcVersion crd
+    step "Initialise Flags"
+    testLoadFile crd fp step
 
 -- | Here we are testing that the cradle's method of obtaining the ghcLibDir
 -- always works.
 testGetGhcLibDir :: Cradle a -> IO ()
-testGetGhcLibDir crd =
-  getRuntimeGhcLibDir crd `shouldNotReturn` Nothing
+testGetGhcLibDir crd = do
+  libDirRes <- getRuntimeGhcLibDir crd
+  libDirRes `shouldSatisfy` isSuccess
+  where isSuccess (CradleSuccess _) = True
+        isSuccess _ = False
 
 -- | Here we are testing that the cradle's method of getting the runtime ghc
 -- version is correct - which while testing, should be the version that we have
@@ -133,14 +217,29 @@ testGetGhcLibDir crd =
 -- that doesn't equal the ghc on your path though :(
 testGetGhcVersion :: Cradle a -> IO ()
 testGetGhcVersion crd =
-  getRuntimeGhcVersion crd `shouldReturn` VERSION_ghc
+  getRuntimeGhcVersion crd `shouldReturn` CradleSuccess VERSION_ghc
 
-testDirectoryFail :: (Cradle Void -> Bool) -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
-testDirectoryFail cradlePred fp cradleFailPred step = do
-  a_fp <- canonicalizePath fp
-  crd <- initialiseCradle cradlePred a_fp step
-  step "Initialise Flags"
-  testLoadFileCradleFail crd a_fp cradleFailPred step
+testGetGhcVersionFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
+testGetGhcVersionFail cradlePred rootDir file cradleFailPred step =
+  testCradle cradlePred rootDir file step $ \crd _ -> do
+    res <- getRuntimeGhcVersion crd
+
+    case res of
+      CradleSuccess _ -> liftIO $ expectationFailure "Cradle loaded successfully"
+      CradleNone -> liftIO $ expectationFailure "Unexpected none-Cradle"
+      CradleFail crdlFail -> liftIO $ cradleFailPred crdlFail
+
+testDirectoryFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
+testDirectoryFail cradlePred rootDir file cradleFailPred step =
+  testCradle cradlePred rootDir file step $ \crd fp ->
+    testLoadFileCradleFail crd fp cradleFailPred step
+
+testCradle :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (String -> IO ()) -> (Cradle Void -> FilePath -> IO a) -> IO a
+testCradle cradlePred rootDir file step cont = withTempCopy rootDir $ \rootDir' -> do
+    fp <- canonicalizePath (rootDir' </> file)
+    crd <- initialiseCradle cradlePred fp step
+    step "Initialise Flags"
+    cont crd fp
 
 initialiseCradle :: (Cradle Void -> Bool) -> FilePath -> (String -> IO ()) -> IO (Cradle Void)
 initialiseCradle cradlePred a_fp step = do
@@ -154,36 +253,54 @@ initialiseCradle cradlePred a_fp step = do
   pure crd
 
 testLoadFile :: Cradle a -> FilePath -> (String -> IO ()) -> IO ()
-testLoadFile crd fp step = do
-  a_fp <- canonicalizePath fp
-  libDir <- getRuntimeGhcLibDir crd
-  withCurrentDirectory (cradleRootDir crd) $
-    G.runGhc libDir $ do
-      let relFp = makeRelative (cradleRootDir crd) a_fp
-      res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
-      case res of
-        CradleSuccess (ini, _) -> do
+testLoadFile crd a_fp step = do
+  libDirRes <- getRuntimeGhcLibDir crd
+  handleCradleResult libDirRes $ \libDir ->
+    withCurrentDirectory (cradleRootDir crd) $
+      G.runGhc (Just libDir) $ do
+        let relFp = makeRelative (cradleRootDir crd) a_fp
+        res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
+        handleCradleResult res $ \(ini, _) -> do
           liftIO (step "Initial module load")
           sf <- ini
           case sf of
             -- Test resetting the targets
             Succeeded -> setTargetFilesWithMessage (Just (\_ n _ _ -> step (show n))) [(a_fp, a_fp)]
             Failed -> liftIO $ expectationFailure "Module loading failed"
-        CradleNone -> liftIO $ expectationFailure "None"
-        CradleFail (CradleError _deps _ex stde) -> liftIO $ expectationFailure (unlines stde)
 
 testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
-testLoadFileCradleFail crd fp cradleErrorExpectation step = do
-  a_fp <- canonicalizePath fp
-  libDir <- getRuntimeGhcLibDir crd
-  withCurrentDirectory (cradleRootDir crd) $
-    G.runGhc libDir $ do
-      let relFp = makeRelative (cradleRootDir crd) a_fp
-      res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
-      case res of
-        CradleSuccess _ -> liftIO $ expectationFailure "Cradle loaded successfully"
-        CradleNone -> liftIO $ expectationFailure "Unexpected none-Cradle"
-        CradleFail crdlFail -> liftIO $ cradleErrorExpectation crdlFail
+testLoadFileCradleFail crd a_fp cradleErrorExpectation step = do
+  -- don't spin up a ghc session, just run the opts program manually since
+  -- we're not guaranteed to be able to get the ghc libdir if the cradle is
+  -- failing
+  withCurrentDirectory (cradleRootDir crd) $ do
+    let relFp = makeRelative (cradleRootDir crd) a_fp
+    res <- runCradle (cradleOptsProg crd) (step . show) relFp
+    case res of
+      CradleSuccess _ -> liftIO $ expectationFailure "Cradle loaded successfully"
+      CradleNone -> liftIO $ expectationFailure "Unexpected none-Cradle"
+      CradleFail crdlFail -> liftIO $ cradleErrorExpectation crdlFail
+
+testLoadCradleDependencies :: (Cradle Void -> Bool) -> FilePath -> FilePath -> ([FilePath] -> Expectation) -> (String -> IO ()) -> IO ()
+testLoadCradleDependencies cradlePred rootDir file dependencyPred step =
+  withTempCopy rootDir $ \rootDir' -> do
+    a_fp <- canonicalizePath (rootDir' </> file)
+    crd <- initialiseCradle cradlePred a_fp step
+    libDirRes <- getRuntimeGhcLibDir crd
+    handleCradleResult libDirRes $ \libDir -> do
+      step "Initialise Flags"
+      withCurrentDirectory (cradleRootDir crd) $
+        G.runGhc (Just libDir) $ do
+          let relFp = makeRelative (cradleRootDir crd) a_fp
+          res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
+          handleCradleResult res $ \(_, options) ->
+            liftIO $ dependencyPred (componentDependencies options)
+
+handleCradleResult :: MonadIO m => CradleLoadResult a -> (a -> m ()) -> m ()
+handleCradleResult (CradleSuccess x) f = f x
+handleCradleResult CradleNone _ = liftIO $ expectationFailure "Unexpected none-Cradle"
+handleCradleResult (CradleFail (CradleError _deps _ex stde)) _ =
+  liftIO $ expectationFailure ("Unexpected cradle fail" ++ unlines stde)
 
 findCradleForModule :: FilePath -> Maybe FilePath -> (String -> IO ()) -> IO ()
 findCradleForModule fp expected' step = do
@@ -192,33 +309,64 @@ findCradleForModule fp expected' step = do
   step "Finding cradle"
   findCradle a_fp `shouldReturn` expected
 
-testImplicitCradle :: FilePath -> ActionName Void -> (String -> IO ()) -> IO ()
-testImplicitCradle fp' expectedActionName step = do
-  fp <- canonicalizePath fp'
-  step "Inferring implicit cradle"
-  crd <- loadImplicitCradle fp :: IO (Cradle Void)
-  actionName (cradleOptsProg crd) `shouldBe` expectedActionName
-  step "Initialize flags"
-  testLoadFile crd fp step
+testImplicitCradle :: FilePath -> FilePath -> ActionName Void -> (String -> IO ()) -> IO ()
+testImplicitCradle rootDir file expectedActionName step =
+  withTempCopy rootDir $ \rootDir' -> do
+    fp <- makeAbsolute (rootDir' </> file)
+    step "Inferring implicit cradle"
+    crd <- loadImplicitCradle fp :: IO (Cradle Void)
+
+    actionName (cradleOptsProg crd) `shouldBe` expectedActionName
+
+    expectedCradleRootDir <- makeAbsolute rootDir'
+    cradleRootDir crd `shouldBe` expectedCradleRootDir
+
+    step "Initialize flags"
+    testLoadFile crd fp step
+
+withTempCopy :: FilePath -> (FilePath -> IO a) -> IO a
+withTempCopy srcDir f =
+  withSystemTempDirectory "hie-bios-test" $ \newDir -> do
+    copyDir srcDir newDir
+    f newDir
+
+copyDir :: FilePath -> FilePath -> IO ()
+copyDir src dst = do
+  contents <- listDirectory src
+  forM_ contents $ \file -> do
+    unless (file `elem` ignored) $ do
+      let srcFp = src </> file
+          dstFp = dst </> file
+      isDir <- doesDirectoryExist srcFp
+      if isDir
+        then createDirectory dstFp >> copyDir srcFp dstFp
+        else copyFile srcFp dstFp
+  where ignored = ["dist", "dist-newstyle", ".stack-work"]
+
 
 writeStackYamlFiles :: IO ()
-writeStackYamlFiles = do
-  let yamlFile = stackYaml stackYamlResolver
-  forM_ stackProjects $ \proj ->
-    writeFile (proj </> "stack.yaml") yamlFile
+writeStackYamlFiles =
+  forM_ stackProjects $ \(proj, syaml, pkgs) ->
+    writeFile (proj </> syaml) (stackYaml stackYamlResolver pkgs)
 
-stackProjects :: [FilePath]
+stackProjects :: [(FilePath, FilePath, [FilePath])]
 stackProjects =
-  [ "tests" </> "projects" </> "multi-stack"
-  , "tests" </> "projects" </> "failing-stack"
-  , "tests" </> "projects" </> "simple-stack"
-  , "tests" </> "projects" </> "space stack"
-  , "tests" </> "projects" </> "implicit-stack"
-  , "tests" </> "projects" </> "implicit-stack-multi"
+  [ ("tests" </> "projects" </> "multi-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "failing-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "simple-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "nested-stack", "stack.yaml", [".", "./sub-comp"])
+  , ("tests" </> "projects" </> "space stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "implicit-stack", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "implicit-stack-multi", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "implicit-stack-multi", "stack.yaml", ["."])
+  , ("tests" </> "projects" </> "multi-stack-with-yaml", "stack-alt.yaml", ["appA", "appB"])
+  , ("tests" </> "projects" </> "stack-with-yaml", "stack-alt.yaml", ["."])
   ]
 
-stackYaml :: String -> String
-stackYaml resolver = unlines ["resolver: " ++ resolver, "packages:", "- ."]
+stackYaml :: String -> [FilePath] -> String
+stackYaml resolver pkgs = unlines
+  $ ["resolver: " ++ resolver, "packages:"]
+  ++ map ("- " ++) pkgs
 
 stackYamlResolver :: String
 stackYamlResolver =

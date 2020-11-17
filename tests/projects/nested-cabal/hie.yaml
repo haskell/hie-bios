@@ -1,0 +1,6 @@
+cradle:
+  cabal:
+    - path: ./sub-comp
+      component: "lib:sub-comp"
+    - path: ./
+      component: "lib:nested-cabal"

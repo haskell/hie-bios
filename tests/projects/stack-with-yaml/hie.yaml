@@ -1,0 +1,9 @@
+cradle:
+  stack:
+    stackYaml: "stack-alt.yaml"
+    components:
+    - path: ./src
+      component: "stack-with-yaml:lib"
+
+    - path: ./app
+      component: "stack-with-yaml:exe:stack-with-yaml"

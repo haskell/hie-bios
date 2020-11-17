@@ -1,6 +1,6 @@
 Cabal-Version:          2.2
 Name:                   hie-bios
-Version:                0.5.1
+Version:                0.7.1
 Author:                 Matthew Pickering <matthewtpickering@gmail.com>
 Maintainer:             Matthew Pickering <matthewtpickering@gmail.com>
 License:                BSD-3-Clause
@@ -12,41 +12,27 @@ Description:            Set up a GHC API session and obtain flags required to co
 Category:               Development
 Build-Type:             Simple
 -- No glob syntax until GHC 8.6 because of stack
-Extra-Source-Files:     ChangeLog
+Extra-Source-Files:     ChangeLog.md
                         README.md
                         wrappers/cabal
                         wrappers/cabal.hs
-                        tests/configs/bazel.yaml
-                        tests/configs/bios-1.yaml
-                        tests/configs/bios-2.yaml
-                        tests/configs/bios-3.yaml
-                        tests/configs/bios-4.yaml
-                        tests/configs/bios-5.yaml
-                        tests/configs/cabal-1.yaml
-                        tests/configs/cabal-multi.yaml
-                        tests/configs/ch-cabal.yaml
-                        tests/configs/ch-stack.yaml
-                        tests/configs/default.yaml
-                        tests/configs/dependencies.yaml
-                        tests/configs/direct.yaml
-                        tests/configs/multi.yaml
-                        tests/configs/multi-ch.yaml
-                        tests/configs/nested-cabal-multi.yaml
-                        tests/configs/nested-stack-multi.yaml
-                        tests/configs/none.yaml
-                        tests/configs/obelisk.yaml
-                        tests/configs/stack-config.yaml
-                        tests/configs/stack-multi.yaml
+                        tests/configs/*.yaml
+                        tests/projects/symlink-test/a/A.hs
+                        tests/projects/symlink-test/hie.yaml
                         tests/projects/multi-direct/A.hs
                         tests/projects/multi-direct/B.hs
                         tests/projects/multi-direct/hie.yaml
-                        tests/projects/multi-cabal/Setup.hs
                         tests/projects/multi-cabal/app/Main.hs
                         tests/projects/multi-cabal/cabal.project
                         tests/projects/multi-cabal/hie.yaml
                         tests/projects/multi-cabal/multi-cabal.cabal
                         tests/projects/multi-cabal/src/Lib.hs
-                        tests/projects/multi-stack/Setup.hs
+                        tests/projects/monorepo-cabal/cabal.project
+                        tests/projects/monorepo-cabal/hie.yaml
+                        tests/projects/monorepo-cabal/A/Main.hs
+                        tests/projects/monorepo-cabal/A/A.cabal
+                        tests/projects/monorepo-cabal/B/MyLib.hs
+                        tests/projects/monorepo-cabal/B/B.cabal
                         tests/projects/multi-stack/app/Main.hs
                         tests/projects/multi-stack/cabal.project
                         tests/projects/multi-stack/hie.yaml
@@ -55,25 +41,40 @@ Extra-Source-Files:     ChangeLog
                         tests/projects/failing-bios/A.hs
                         tests/projects/failing-bios/B.hs
                         tests/projects/failing-bios/hie.yaml
+                        tests/projects/failing-bios-ghc/A.hs
+                        tests/projects/failing-bios-ghc/B.hs
+                        tests/projects/failing-bios-ghc/hie.yaml
                         tests/projects/failing-cabal/failing-cabal.cabal
                         tests/projects/failing-cabal/hie.yaml
                         tests/projects/failing-cabal/MyLib.hs
-                        tests/projects/failing-cabal/Setup.hs
                         tests/projects/failing-stack/failing-stack.cabal
                         tests/projects/failing-stack/hie.yaml
                         tests/projects/failing-stack/src/Lib.hs
-                        tests/projects/failing-stack/Setup.hs
+                        tests/projects/nested-cabal/nested-cabal.cabal
+                        tests/projects/nested-cabal/cabal.project
+                        tests/projects/nested-cabal/hie.yaml
+                        tests/projects/nested-cabal/MyLib.hs
+                        tests/projects/nested-cabal/sub-comp/sub-comp.cabal
+                        tests/projects/nested-cabal/sub-comp/Lib.hs
+                        tests/projects/nested-stack/nested-stack.cabal
+                        tests/projects/nested-stack/hie.yaml
+                        tests/projects/nested-stack/MyLib.hs
+                        tests/projects/nested-stack/sub-comp/sub-comp.cabal
+                        tests/projects/nested-stack/sub-comp/Lib.hs
                         tests/projects/simple-bios/A.hs
                         tests/projects/simple-bios/B.hs
                         tests/projects/simple-bios/hie-bios.sh
+                        tests/projects/simple-bios/hie-bios-deps.sh
                         tests/projects/simple-bios/hie.yaml
+                        tests/projects/simple-bios-ghc/A.hs
+                        tests/projects/simple-bios-ghc/B.hs
+                        tests/projects/simple-bios-ghc/hie-bios.sh
+                        tests/projects/simple-bios-ghc/hie.yaml
                         tests/projects/simple-bios-shell/A.hs
                         tests/projects/simple-bios-shell/B.hs
                         tests/projects/simple-bios-shell/hie.yaml
                         tests/projects/simple-cabal/A.hs
                         tests/projects/simple-cabal/B.hs
-                        tests/projects/simple-cabal/CHANGELOG.md
-                        tests/projects/simple-cabal/Setup.hs
                         tests/projects/simple-cabal/cabal.project
                         tests/projects/simple-cabal/hie.yaml
                         tests/projects/simple-cabal/simple-cabal.cabal
@@ -82,37 +83,39 @@ Extra-Source-Files:     ChangeLog
                         tests/projects/simple-direct/hie.yaml
                         tests/projects/simple-stack/A.hs
                         tests/projects/simple-stack/B.hs
-                        tests/projects/simple-stack/CHANGELOG.md
-                        tests/projects/simple-stack/Setup.hs
                         tests/projects/simple-stack/cabal.project
                         tests/projects/simple-stack/hie.yaml
                         tests/projects/simple-stack/simple-stack.cabal
                         "tests/projects/space stack/A.hs"
                         "tests/projects/space stack/B.hs"
-                        "tests/projects/space stack/Setup.hs"
                         "tests/projects/space stack/hie.yaml"
                         "tests/projects/space stack/stackproj.cabal"
-                        tests/projects/implicit-cabal/Setup.hs
                         tests/projects/implicit-cabal/cabal.project
                         tests/projects/implicit-cabal/implicit-cabal.cabal
                         tests/projects/implicit-cabal/Main.hs
-                        tests/projects/implicit-stack/Setup.hs
+                        tests/projects/implicit-cabal-no-project/implicit-cabal-no-project.cabal
+                        tests/projects/implicit-cabal-no-project/Main.hs
+                        tests/projects/implicit-cabal-deep-project/README
+                        tests/projects/implicit-cabal-deep-project/implicit-cabal-deep-project.cabal
+                        tests/projects/implicit-cabal-deep-project/Main.hs
+                        tests/projects/implicit-cabal-deep-project/cabal.project
+                        tests/projects/implicit-cabal-deep-project/foo/foo.cabal
+                        tests/projects/implicit-cabal-deep-project/foo/Main.hs
                         tests/projects/implicit-stack/implicit-stack.cabal
                         tests/projects/implicit-stack/Main.hs
-                        tests/projects/implicit-stack-multi/Setup.hs
                         tests/projects/implicit-stack-multi/implicit-stack-multi.cabal
                         tests/projects/implicit-stack-multi/Main.hs
-                        tests/projects/implicit-stack-multi/other-package/Setup.hs
                         tests/projects/implicit-stack-multi/other-package/other-package.cabal
                         tests/projects/implicit-stack-multi/other-package/Main.hs
-                        tests/projects/stop-file/Main.hs
-                        tests/projects/stop-file/hie.yaml
-                        tests/projects/stop-file/stop-file.cabal
-                        tests/projects/stop-file/sub-package/Main.hs
-                        tests/projects/stop-file/sub-package/sub-package.cabal
-                        tests/projects/stop-file/sub-package/cabal.project
-                        tests/projects/stop-file/sub-package/.hie-bios.stop
-
+                        tests/projects/multi-stack-with-yaml/appA/appA.cabal
+                        tests/projects/multi-stack-with-yaml/appA/src/Lib.hs
+                        tests/projects/multi-stack-with-yaml/appB/appB.cabal
+                        tests/projects/multi-stack-with-yaml/appB/src/Lib.hs
+                        tests/projects/multi-stack-with-yaml/hie.yaml
+                        tests/projects/stack-with-yaml/app/Main.hs
+                        tests/projects/stack-with-yaml/hie.yaml
+                        tests/projects/stack-with-yaml/stack-with-yaml.cabal
+                        tests/projects/stack-with-yaml/src/Lib.hs
 
 tested-with: GHC==8.10.1, GHC==8.8.3, GHC==8.6.5, GHC==8.4.4
 
@@ -139,8 +142,8 @@ Library
   autogen-modules:      Paths_hie_bios
   Build-Depends:
                         base                 >= 4.8 && < 5,
-                        aeson                >= 1.4.1 && < 2,
-                        base16-bytestring    >= 0.1.1 && < 0.2,
+                        aeson                >= 1.4.5 && < 2,
+                        base16-bytestring    >= 0.1.1 && < 1.1,
                         bytestring           >= 0.10.8 && < 0.11,
                         deepseq              >= 1.4.3 && < 1.5,
                         containers           >= 0.5.10 && < 0.7,
@@ -157,7 +160,7 @@ Library
                         unix-compat          >= 0.5.1 && < 0.6,
                         unordered-containers >= 0.2.9 && < 0.3,
                         vector               >= 0.12.0 && < 0.13,
-                        yaml                 >= 0.8.32 && < 0.12,
+                        yaml                 >= 0.10.0 && < 0.12,
                         hslogger             >= 1.2 && < 1.4,
                         file-embed           >= 0.0.11 && < 1,
                         conduit              >= 1.3 && < 2,
@@ -183,6 +186,7 @@ test-suite parser-tests
       base,
       filepath,
       hie-bios,
+      hspec-expectations,
       tasty,
       tasty-hunit,
       text,
@@ -206,6 +210,7 @@ test-suite bios-tests
       hie-bios,
       filepath,
       directory,
+      temporary,
       ghc
 
   hs-source-dirs: tests/
