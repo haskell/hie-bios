@@ -3,7 +3,6 @@ name: Build and Test
 on: [push, pull_request]
 jobs:
   build:
-
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -19,7 +18,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - uses: actions/setup-haskell@v1.1.1
+    - uses: actions/setup-haskell@v1.1.4
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: '3.2'
@@ -31,14 +30,30 @@ jobs:
         path: ~/.cabal
         key: ${{ runner.OS }}-${{ matrix.ghc }}-cabal-0
 
-    - name: Run ShellCheck
-      uses: ludeeus/action-shellcheck@2f2aa0d
-      if: matrix.os == 'ubuntu-latest'
-      with:
-        ignore: tests
-
     - run: cabal update
     - name: Build
       run: cabal build
     - name: Test
       run: cabal test
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-haskell@v1.1.4
+    - name: Check
+      run: cabal check
+    - name: Generate sdist
+      run: cabal sdist
+    - uses: actions/upload-artifact@v2
+      with:
+        name: 'sdist'
+        path: dist-newstyle/sdist/hie-bios*.tar.gz
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: ludeeus/action-shellcheck@master
+      with:
+        ignore: tests
