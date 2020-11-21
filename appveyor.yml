@@ -1,0 +1,7 @@
+version: 1.0.{build}
+
+before_build:
+  - exit 0
+
+build_script:
+  - exit 0
