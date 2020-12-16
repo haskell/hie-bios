@@ -364,7 +364,7 @@ biosDepsAction l wdir (Just biosDepsCall) fp = do
   (ex, sout, serr, [(_, args)]) <- readProcessWithOutputs [hie_bios_output] l wdir biosDeps'
   case ex of
     ExitFailure _ ->  error $ show (ex, sout, serr)
-    ExitSuccess -> return args
+    ExitSuccess -> return $ fromMaybe [] args
 biosDepsAction _ _ Nothing _ = return []
 
 biosAction :: FilePath
@@ -381,7 +381,7 @@ biosAction wdir bios bios_deps l fp = do
         -- delimited by newlines.
         -- Execute the bios action and add dependencies of the cradle.
         -- Removes all duplicates.
-  return $ makeCradleResult (ex, std, wdir, res) deps
+  return $ makeCradleResult (ex, std, wdir, fromMaybe [] res) deps
 
 callableToProcess :: Callable -> Maybe String -> IO CreateProcess
 callableToProcess (Command shellCommand) file = do
@@ -501,8 +501,9 @@ cabalAction work_dir mc l fp = do
   withCabalWrapperTool ("ghc", []) work_dir $ \wrapper_fp -> do
     buildDir <- cabalBuildDir work_dir
     let cab_args = ["--builddir="<>buildDir,"v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
-    (ex, output, stde, [(_,args)]) <-
+    (ex, output, stde, [(_,mb_args)]) <-
       readProcessWithOutputs [hie_bios_output] l work_dir (proc "cabal" cab_args)
+    let args = fromMaybe [] mb_args
     case processCabalWrapperArgs args of
         Nothing -> do
           -- Best effort. Assume the working directory is the
@@ -512,7 +513,7 @@ cabalAction work_dir mc l fp = do
                     ["Failed to parse result of calling cabal"
                      , unlines output
                      , unlines stde
-                     , unlines args])
+                     , unlines $ args])
         Just (componentDir, final_args) -> do
           deps <- cabalCradleDependencies work_dir componentDir
           pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
@@ -625,7 +626,7 @@ stackAction work_dir mc syaml l _fp = do
   let ghcProcArgs = ("stack", stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
   withCabalWrapperTool ghcProcArgs work_dir $ \wrapper_fp -> do
-    (ex1, _stdo, stde, [(_, args)]) <-
+    (ex1, _stdo, stde, [(_, mb_args)]) <-
       readProcessWithOutputs [hie_bios_output] l work_dir $
         stackProcess syaml
                       $  ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
@@ -635,6 +636,7 @@ stackAction work_dir mc syaml l _fp = do
         stackProcess syaml ["path", "--ghc-package-path"]
     let split_pkgs = concatMap splitSearchPath pkg_args
         pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
+        args = fromMaybe [] mb_args
     case processCabalWrapperArgs args of
         Nothing -> do
           -- Best effort. Assume the working directory is the
@@ -801,7 +803,7 @@ readProcessWithOutputs
   -> LoggingFunction -- ^ Output of the process is streamed into this function.
   -> FilePath -- ^ Working directory. Process is executed in this directory.
   -> CreateProcess -- ^ Parameters for the process to be executed.
-  -> IO (ExitCode, [String], [String], [(OutputName, [String])])
+  -> IO (ExitCode, [String], [String], [(OutputName, Maybe [String])])
 readProcessWithOutputs outputNames l work_dir cp = flip runContT return $ do
   old_env <- liftIO getCleanEnvironment
   output_files <- traverse (withOutput old_env) outputNames
@@ -820,18 +822,32 @@ readProcessWithOutputs outputNames l work_dir cp = flip runContT return $ do
   return (ex, stdo, stde, res)
 
     where
-      readOutput :: FilePath -> IO [String]
-      readOutput path = withFile path ReadMode $ \handle -> do
-        hSetBuffering handle LineBuffering
-        !res <- force <$> hGetContents handle
-        return $ lines $ filter (/= '\r') res
+      readOutput :: FilePath -> IO (Maybe [String])
+      readOutput path = do
+        haveFile <- doesFileExist path
+        if haveFile
+          then withFile path ReadMode $ \handle -> do
+            hSetBuffering handle LineBuffering
+            !res <- force <$> hGetContents handle
+            return $ Just $ lines $ filter (/= '\r') res
+          else
+            return Nothing
 
       withOutput :: [(String,String)] -> OutputName -> ContT a IO (OutputName, String)
       withOutput env' name =
         case lookup name env' of
-          Just file@(_:_) -> ContT ($ (name, file))
-          _ -> ContT $ \action -> withSystemTempFile name $
-                 \ file h -> liftIO (hClose h) >> action (name, file)
+          Just file@(_:_) -> ContT $ \action -> do
+            removeFileIfExists file
+            action (name, file)
+          _ -> ContT $ \action -> withSystemTempFile name $ \ file h -> do
+            hClose h
+            removeFileIfExists file
+            action (name, file)
+
+removeFileIfExists :: FilePath -> IO ()
+removeFileIfExists f = do
+  yes <- doesFileExist f
+  when yes (removeFile f)
 
 makeCradleResult :: (ExitCode, [String], FilePath, [String]) -> [FilePath] -> CradleLoadResult ComponentOptions
 makeCradleResult (ex, err, componentDir, gopts) deps =
