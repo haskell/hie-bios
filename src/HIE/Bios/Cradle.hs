@@ -795,10 +795,9 @@ getCleanEnvironment = do
 type Outputs = [OutputName]
 type OutputName = String
 
--- | Call a given process.
--- * A special file is created for the process to write to, the process can discover the name of
--- the file by reading the @HIE_BIOS_OUTPUT@ environment variable. The contents of this file is
--- returned by the function.
+-- | Call a given process with temp files for the process to write to.
+-- * The process can discover the temp files paths by reading the environment.
+-- * The contents of the temp files are returned by this function, if any.
 -- * The logging function is called every time the process emits anything to stdout or stderr.
 -- it can be used to report progress of the process to a user.
 -- * The process is executed in the given directory.
