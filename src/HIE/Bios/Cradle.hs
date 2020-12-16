@@ -26,7 +26,6 @@ module HIE.Bios.Cradle (
 import Control.Exception (handleJust)
 import qualified Data.Yaml as Yaml
 import Data.Void
-import Data.Char (isSpace)
 import System.Process
 import System.Exit
 import HIE.Bios.Types hiding (ActionName(..))
@@ -408,13 +407,15 @@ cabalCradle wdir mc =
         { actionName = Types.Cabal
         , runCradle = cabalAction wdir mc
         , runGhcCmd = \args -> do
-            buildDir <- cabalBuildDir wdir
             -- Workaround for a cabal-install bug on 3.0.0.0:
             -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
-            createDirectoryIfMissing True (buildDir </> "tmp")
+            -- (It's ok to pass 'dist-newstyle' here, as it can only be changed
+            -- with the --builddir flag and not cabal.project, which we aren't
+            -- using in our call to v2-exec)
+            createDirectoryIfMissing True (wdir </> "dist-newstyle" </> "tmp")
             -- Need to pass -v0 otherwise we get "resolving dependencies..."
             readProcessWithCwd
-              wdir "cabal" (["--builddir="<>buildDir,"v2-exec", "ghc", "-v0", "--"] ++ args) ""
+              wdir "cabal" (["v2-exec", "ghc", "-v0", "--"] ++ args) ""
         }
     }
 
@@ -492,19 +493,11 @@ withCabalWrapperTool (mbGhc, ghcArgs) wdir k = do
   where
     setMode wrapper_fp = setFileMode wrapper_fp accessModes
 
--- | Given the root directory, get the build dir we are using for cabal
--- In the `hie-bios` cache directory
-cabalBuildDir :: FilePath -> IO FilePath
-cabalBuildDir work_dir = do
-  abs_work_dir <- makeAbsolute work_dir
-  let dirHash = show (fingerprintString abs_work_dir)
-  getCacheDir ("dist-"<>filter (not . isSpace) (takeBaseName abs_work_dir)<>"-"<>dirHash)
 
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
 cabalAction work_dir mc l fp = do
   withCabalWrapperTool ("ghc", []) work_dir $ \wrapper_fp -> do
-    buildDir <- cabalBuildDir work_dir
-    let cab_args = ["--builddir="<>buildDir,"v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
+    let cab_args = ["v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
     (ex, output, stde, [(_,mb_args)]) <-
       readProcessWithOutputs [hie_bios_output] l work_dir (proc "cabal" cab_args)
     let args = fromMaybe [] mb_args
