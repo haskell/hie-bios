@@ -375,8 +375,12 @@ biosAction :: FilePath
            -> IO (CradleLoadResult ComponentOptions)
 biosAction wdir bios bios_deps l fp = do
   bios' <- callableToProcess bios (Just fp)
-  (ex, _stdo, std, [(_, res)]) <- readProcessWithOutputs [hie_bios_output] l wdir bios'
-  deps <- biosDepsAction l wdir bios_deps fp
+  (ex, _stdo, std, [(_, res),(_, mb_deps)]) <-
+    readProcessWithOutputs [hie_bios_output, "HIE_BIOS_DEPS"] l wdir bios'
+
+  deps <- case mb_deps of
+    Just x  -> return x
+    Nothing -> biosDepsAction l wdir bios_deps fp
         -- Output from the program should be written to the output file and
         -- delimited by newlines.
         -- Execute the bios action and add dependencies of the cradle.
