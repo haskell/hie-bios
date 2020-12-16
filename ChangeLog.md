@@ -1,5 +1,11 @@
 # ChangeLog hie-bios
 
+## 2020-12-16 - 0.7.2
+
+* Faster Bios protocol [#271](https://github.com/mpickering/hie-bios/pull/271)
+* Modify unreachable cabal website links [#259](https://github.com/mpickering/hie-bios/pull/259)
+* Only take the last line of output in getRuntimeGhcX [#256](https://github.com/mpickering/hie-bios/pull/256)
+
 ## 2020-09-01 - 0.7.1
 
 * Add explicit type for stack.yaml location [#243](https://github.com/mpickering/hie-bios/pull/243)
