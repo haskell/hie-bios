@@ -18,7 +18,7 @@ module HIE.Bios.Cradle (
     , isDefaultCradle
     , isOtherCradle
     , getCradle
-    , readProcessWithOutputFile
+    , readProcessWithOutputs
     , readProcessWithCwd
     , makeCradleResult
   ) where
@@ -34,6 +34,7 @@ import qualified HIE.Bios.Types as Types
 import HIE.Bios.Config
 import HIE.Bios.Environment (getCacheDir)
 import System.Directory hiding (findFile)
+import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Maybe
 import System.FilePath
 import Control.Monad
@@ -60,6 +61,8 @@ import qualified Data.HashMap.Strict as Map
 import           Data.Maybe (fromMaybe, maybeToList)
 import           GHC.Fingerprint (fingerprintString)
 
+hie_bios_output :: String
+hie_bios_output = "HIE_BIOS_OUTPUT"
 ----------------------------------------------------------------
 
 -- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
@@ -358,10 +361,10 @@ biosWorkDir = findFileUpwards (".hie-bios" ==)
 biosDepsAction :: LoggingFunction -> FilePath -> Maybe Callable -> FilePath -> IO [FilePath]
 biosDepsAction l wdir (Just biosDepsCall) fp = do
   biosDeps' <- callableToProcess biosDepsCall (Just fp)
-  (ex, sout, serr, args) <- readProcessWithOutputFile l wdir biosDeps'
+  (ex, sout, serr, [(_, args)]) <- readProcessWithOutputs [hie_bios_output] l wdir biosDeps'
   case ex of
     ExitFailure _ ->  error $ show (ex, sout, serr)
-    ExitSuccess -> return args
+    ExitSuccess -> return $ fromMaybe [] args
 biosDepsAction _ _ Nothing _ = return []
 
 biosAction :: FilePath
@@ -372,13 +375,17 @@ biosAction :: FilePath
            -> IO (CradleLoadResult ComponentOptions)
 biosAction wdir bios bios_deps l fp = do
   bios' <- callableToProcess bios (Just fp)
-  (ex, _stdo, std, res) <- readProcessWithOutputFile l wdir bios'
-  deps <- biosDepsAction l wdir bios_deps fp
+  (ex, _stdo, std, [(_, res),(_, mb_deps)]) <-
+    readProcessWithOutputs [hie_bios_output, "HIE_BIOS_DEPS"] l wdir bios'
+
+  deps <- case mb_deps of
+    Just x  -> return x
+    Nothing -> biosDepsAction l wdir bios_deps fp
         -- Output from the program should be written to the output file and
         -- delimited by newlines.
         -- Execute the bios action and add dependencies of the cradle.
         -- Removes all duplicates.
-  return $ makeCradleResult (ex, std, wdir, res) deps
+  return $ makeCradleResult (ex, std, wdir, fromMaybe [] res) deps
 
 callableToProcess :: Callable -> Maybe String -> IO CreateProcess
 callableToProcess (Command shellCommand) file = do
@@ -498,8 +505,9 @@ cabalAction work_dir mc l fp = do
   withCabalWrapperTool ("ghc", []) work_dir $ \wrapper_fp -> do
     buildDir <- cabalBuildDir work_dir
     let cab_args = ["--builddir="<>buildDir,"v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
-    (ex, output, stde, args) <-
-      readProcessWithOutputFile l work_dir (proc "cabal" cab_args)
+    (ex, output, stde, [(_,mb_args)]) <-
+      readProcessWithOutputs [hie_bios_output] l work_dir (proc "cabal" cab_args)
+    let args = fromMaybe [] mb_args
     case processCabalWrapperArgs args of
         Nothing -> do
           -- Best effort. Assume the working directory is the
@@ -509,7 +517,7 @@ cabalAction work_dir mc l fp = do
                     ["Failed to parse result of calling cabal"
                      , unlines output
                      , unlines stde
-                     , unlines args])
+                     , unlines $ args])
         Just (componentDir, final_args) -> do
           deps <- cabalCradleDependencies work_dir componentDir
           pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
@@ -622,16 +630,17 @@ stackAction work_dir mc syaml l _fp = do
   let ghcProcArgs = ("stack", stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
   withCabalWrapperTool ghcProcArgs work_dir $ \wrapper_fp -> do
-    (ex1, _stdo, stde, args) <-
-      readProcessWithOutputFile l work_dir $
+    (ex1, _stdo, stde, [(_, mb_args)]) <-
+      readProcessWithOutputs [hie_bios_output] l work_dir $
         stackProcess syaml
                       $  ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
                       <> [ comp | Just comp <- [mc] ]
     (ex2, pkg_args, stdr, _) <-
-      readProcessWithOutputFile l work_dir $
+      readProcessWithOutputs [hie_bios_output] l work_dir $
         stackProcess syaml ["path", "--ghc-package-path"]
     let split_pkgs = concatMap splitSearchPath pkg_args
         pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
+        args = fromMaybe [] mb_args
     case processCabalWrapperArgs args of
         Nothing -> do
           -- Best effort. Assume the working directory is the
@@ -783,49 +792,65 @@ getCleanEnvironment = do
   e <- getEnvironment
   return $ Map.toList $ Map.delete "GHC_PACKAGE_PATH" $ Map.fromList e
 
--- | Call a given process.
--- * A special file is created for the process to write to, the process can discover the name of
--- the file by reading the @HIE_BIOS_OUTPUT@ environment variable. The contents of this file is
--- returned by the function.
+type Outputs = [OutputName]
+type OutputName = String
+
+-- | Call a given process with temp files for the process to write to.
+-- * The process can discover the temp files paths by reading the environment.
+-- * The contents of the temp files are returned by this function, if any.
 -- * The logging function is called every time the process emits anything to stdout or stderr.
 -- it can be used to report progress of the process to a user.
 -- * The process is executed in the given directory.
-readProcessWithOutputFile
-  :: LoggingFunction -- ^ Output of the process is streamed into this function.
+readProcessWithOutputs
+  :: Outputs  -- ^ Names of the outputs produced by this process
+  -> LoggingFunction -- ^ Output of the process is streamed into this function.
   -> FilePath -- ^ Working directory. Process is executed in this directory.
   -> CreateProcess -- ^ Parameters for the process to be executed.
-  -> IO (ExitCode, [String], [String], [String])
-readProcessWithOutputFile l work_dir cp = do
-  old_env <- getCleanEnvironment
+  -> IO (ExitCode, [String], [String], [(OutputName, Maybe [String])])
+readProcessWithOutputs outputNames l work_dir cp = flip runContT return $ do
+  old_env <- liftIO getCleanEnvironment
+  output_files <- traverse (withOutput old_env) outputNames
 
-  withHieBiosOutput old_env $ \output_file -> do
-    -- Pipe stdout directly into the logger
-    let process = cp { env = Just
-                              $ (hieBiosOutput, output_file)
-                              : (fromMaybe old_env (env cp)),
-                       cwd = Just work_dir
-                      }
+  let process = cp { env = Just $ output_files ++ fromMaybe old_env (env cp),
+                     cwd = Just work_dir
+                    }
 
     -- Windows line endings are not converted so you have to filter out `'r` characters
-    let  loggingConduit = (C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map T.unpack C..| C.iterM l C..| C.sinkList)
-    (ex, stdo, stde) <- sourceProcessWithStreams process mempty loggingConduit loggingConduit
-    res <- withFile output_file ReadMode $ \handle -> do
-             hSetBuffering handle LineBuffering
-             !res <- force <$> hGetContents handle
-             return res
+  let  loggingConduit = C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')  C..| C.map T.unpack C..| C.iterM l C..| C.sinkList
+  (ex, stdo, stde) <- liftIO $ sourceProcessWithStreams process mempty loggingConduit loggingConduit
 
-    return (ex, stdo, stde, lines (filter (/= '\r') res))
+  res <- forM output_files $ \(name,path) ->
+          liftIO $ (name,) <$> readOutput path
+
+  return (ex, stdo, stde, res)
 
     where
-      withHieBiosOutput :: [(String,String)] -> (FilePath -> IO a) -> IO a
-      withHieBiosOutput env' action = do
-        let mbHieBiosOut = lookup hieBiosOutput env'
-        case mbHieBiosOut of
-          Just file@(_:_) -> action file
-          _ -> withSystemTempFile "hie-bios" $
-                 \ file h -> hClose h >> action file
+      readOutput :: FilePath -> IO (Maybe [String])
+      readOutput path = do
+        haveFile <- doesFileExist path
+        if haveFile
+          then withFile path ReadMode $ \handle -> do
+            hSetBuffering handle LineBuffering
+            !res <- force <$> hGetContents handle
+            return $ Just $ lines $ filter (/= '\r') res
+          else
+            return Nothing
 
-      hieBiosOutput = "HIE_BIOS_OUTPUT"
+      withOutput :: [(String,String)] -> OutputName -> ContT a IO (OutputName, String)
+      withOutput env' name =
+        case lookup name env' of
+          Just file@(_:_) -> ContT $ \action -> do
+            removeFileIfExists file
+            action (name, file)
+          _ -> ContT $ \action -> withSystemTempFile name $ \ file h -> do
+            hClose h
+            removeFileIfExists file
+            action (name, file)
+
+removeFileIfExists :: FilePath -> IO ()
+removeFileIfExists f = do
+  yes <- doesFileExist f
+  when yes (removeFile f)
 
 makeCradleResult :: (ExitCode, [String], FilePath, [String]) -> [FilePath] -> CradleLoadResult ComponentOptions
 makeCradleResult (ex, err, componentDir, gopts) deps =

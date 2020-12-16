@@ -19,6 +19,10 @@ Extra-Source-Files:     ChangeLog.md
                         tests/configs/*.yaml
                         tests/projects/symlink-test/a/A.hs
                         tests/projects/symlink-test/hie.yaml
+                        tests/projects/deps-bios-new/A.hs
+                        tests/projects/deps-bios-new/B.hs
+                        tests/projects/deps-bios-new/hie-bios.sh
+                        tests/projects/deps-bios-new/hie.yaml
                         tests/projects/multi-direct/A.hs
                         tests/projects/multi-direct/B.hs
                         tests/projects/multi-direct/hie.yaml

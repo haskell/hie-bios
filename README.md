@@ -560,29 +560,23 @@ dependencies:
   - default.nix
 ```
 
-For the `Bios` cradle type, there is an optional field for specifying a program
-or shell command to obtain cradle dependencies from:
+For the `Bios` cradle type, the newline-separated cradle dependencies must be written out
+to the file specified by the `HIE_BIOS_DEPS` environment variable.
+
+Previous versions implemented a different mechanism for collecting cradle dependencies
+by means of a second program/shell field. This is still supported for backwards
+compatibility:
 
 ```yaml
 cradle:
   bios:
-    program: ./flags.sh
     dependency-program: ./dependency.sh
 ```
 ```yaml
 cradle:
   bios:
-    shell: build-tool flags $HIE_BIOS_ARG > $HIE_BIOS_OUTPUT
     dependency-shell: build-tool dependencies $HIE_BIOS_ARG > $HIE_BIOS_OUTPUT
 ```
-
-The dependency program or command is executed in a similar fashion to the bios
-program, using the environment variables HIE_BIOS_ARG and HIE_BIOS_OUTPUT to
-communicate respectively the path of the source file being loaded, and the path
-where the set of dependency paths should be written, one per line,
-and relative to the root of the cradle, not to the location of the program.
-
-Programs and shell commands for flags and dependencies can be mixed and matched.
 
 ## Configuration specification
 
