@@ -181,6 +181,7 @@ linuxExlusiveTestCases
   | not isWindows
   = [ testCaseSteps "simple-bios" $ testDirectory isBiosCradle "./tests/projects/simple-bios" "B.hs"
     , testCaseSteps "simple-bios-ghc" $ testDirectory isBiosCradle "./tests/projects/simple-bios-ghc" "B.hs"
+    , testCaseSteps "simple-bios-ghc-new" $ testDirectory isBiosCradle "./tests/projects/deps-bios-new" "B.hs"
     , testCaseSteps "simple-bios-deps" $ testLoadCradleDependencies isBiosCradle "./tests/projects/simple-bios" "B.hs" (assertEqual "dependencies" ["hie-bios.sh", "hie.yaml"])
     , testCaseSteps "simple-bios-deps-new" $ testLoadCradleDependencies isBiosCradle "./tests/projects/deps-bios-new" "B.hs" (assertEqual "dependencies" ["hie-bios.sh", "hie.yaml"])
     ]

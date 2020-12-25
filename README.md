@@ -369,9 +369,16 @@ There are two important environment variables:
 * `HIE_BIOS_ARG`: the source file that we want to load. Options returned by the `program` should be able to compile the given source file.
   * This environment variable is *only* available if a shell program is given.
 
+There are two additional environment variables:
+
+* `HIE_BIOS_DEPS`: the filepath to write the cradle dependencies
+* `HIE_BIOS_GHC`: the filepath to write the ghc path
+
 The program flow is roughly as follows:
 The process must consult the `HIE_BIOS_OUTPUT` environment variable and write a
-list of options to this file, separated by newlines. Once the process finishes
+list of options to this file, separated by newlines. Similarly, write a dependency
+per line out to the file specified by `HIE_BIOS_DEPS`, and the ghc path to the file
+specified by `HIE_BIOS_GHC`. Once the process finishes
 running, `hie-bios` reads this file and uses the arguments to set up the GHC
 session. This is how GHC's build system is able to support `hie-bios`.
 Note, the `program` is intended to produce the build flags to compile the *whole* component the given source file belongs to. This entails that the `program` lists all of the component's module- and file targets.
@@ -404,7 +411,8 @@ cradle:
     shell: "<build-tool flags $HIE_BIOS_ARG>"
 ```
 
-Additionally, you may specify the path to ghc. Otherwise, the one in the PATH will be used:
+Previous versions of hie-bios allowed to specify the path to ghc in the `hie.yaml` file.
+This is still supported for backwards compatibility, but `HIE_BIOS_GHC` is the preferred mechanism:
 
 ```yaml
 cradle:

@@ -59,11 +59,13 @@ import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.Text as T
 import qualified Data.HashMap.Strict as Map
-import           Data.Maybe (fromMaybe, maybeToList)
+import           Data.Maybe (listToMaybe, fromMaybe, maybeToList)
 import           GHC.Fingerprint (fingerprintString)
 
-hie_bios_output :: String
+hie_bios_output, hie_bios_deps, hie_bios_ghc :: String
 hie_bios_output = "HIE_BIOS_OUTPUT"
+hie_bios_deps = "HIE_BIOS_DEPS"
+hie_bios_ghc = "HIE_BIOS_GHC"
 ----------------------------------------------------------------
 
 -- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
@@ -365,8 +367,8 @@ biosAction :: Maybe FilePath
            -> IO (CradleLoadResult ComponentOptions)
 biosAction mbGhc wdir bios bios_deps l fp = do
   bios' <- callableToProcess bios (Just fp)
-  (ex, _stdo, std, [(_, res),(_, mb_deps)]) <-
-    readProcessWithOutputs [hie_bios_output, "HIE_BIOS_DEPS"] l wdir bios'
+  (ex, _stdo, std, [(_, res),(_, mb_deps), (_, mb_ghc)]) <-
+    readProcessWithOutputs [hie_bios_output, hie_bios_deps, hie_bios_ghc] l wdir bios'
 
   deps <- case mb_deps of
     Just x  -> return x
@@ -375,7 +377,7 @@ biosAction mbGhc wdir bios bios_deps l fp = do
         -- delimited by newlines.
         -- Execute the bios action and add dependencies of the cradle.
         -- Removes all duplicates.
-  let runGhc args = readProcessWithCwd wdir (fromMaybe "ghc" mbGhc) args ""
+  let runGhc args = readProcessWithCwd wdir (fromMaybe "ghc" $ (mb_ghc >>= listToMaybe) <> mbGhc) args ""
   return $ makeCradleResult (ex, std, wdir, fromMaybe [] res) deps runGhc
 
 callableToProcess :: Callable -> Maybe String -> IO CreateProcess
