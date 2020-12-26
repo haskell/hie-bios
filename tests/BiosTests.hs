@@ -10,7 +10,6 @@ import Test.Hspec.Expectations
 #if __GLASGOW_HASKELL__ < 810
 import Test.Tasty.ExpectedFailure
 #endif
-import qualified GHC as G
 import HIE.Bios
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Load
@@ -18,7 +17,7 @@ import HIE.Bios.Cradle
 import HIE.Bios.Environment
 import HIE.Bios.Types
 import Control.Monad.IO.Class
-import Control.Monad ( forM_, unless )
+import Control.Monad (forM_, unless )
 import Data.Void
 import System.Directory
 import System.FilePath (addTrailingPathSeparator,  makeRelative, (</>) )
@@ -196,16 +195,17 @@ testDirectory cradlePred rootDir file step =
   withTempCopy rootDir $ \rootDir' -> do
     fp <- canonicalizePath (rootDir' </> file)
     crd <- initialiseCradle cradlePred fp step
+    compOptions <- withCurrentDirectory rootDir' $ getCompilerOptions file crd
     step "Get runtime GHC library directory"
-    testGetGhcLibDir crd
+    handleCradleResult compOptions testGetGhcLibDir
     step "Get runtime GHC version"
-    testGetGhcVersion crd
+    handleCradleResult compOptions testGetGhcVersion
     step "Initialise Flags"
     testLoadFile crd fp step
 
 -- | Here we are testing that the cradle's method of obtaining the ghcLibDir
 -- always works.
-testGetGhcLibDir :: Cradle a -> IO ()
+testGetGhcLibDir :: ComponentOptions -> IO ()
 testGetGhcLibDir crd = do
   libDirRes <- getRuntimeGhcLibDir crd
   libDirRes `shouldSatisfy` isSuccess
@@ -216,14 +216,15 @@ testGetGhcLibDir crd = do
 -- version is correct - which while testing, should be the version that we have
 -- built the tests with. This will fail if you compiled the tests with a ghc
 -- that doesn't equal the ghc on your path though :(
-testGetGhcVersion :: Cradle a -> IO ()
+testGetGhcVersion :: ComponentOptions -> IO ()
 testGetGhcVersion crd =
   getRuntimeGhcVersion crd `shouldReturn` CradleSuccess VERSION_ghc
 
 testGetGhcVersionFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
 testGetGhcVersionFail cradlePred rootDir file cradleFailPred step =
-  testCradle cradlePred rootDir file step $ \crd _ -> do
-    res <- getRuntimeGhcVersion crd
+  testCradle cradlePred rootDir file step $ \crd fp -> do
+    component <- withCurrentDirectory rootDir $ getCompilerOptions fp crd
+    res <- component `bindIO` getRuntimeGhcVersion
 
     case res of
       CradleSuccess _ -> liftIO $ expectationFailure "Cradle loaded successfully"
@@ -255,19 +256,16 @@ initialiseCradle cradlePred a_fp step = do
 
 testLoadFile :: Cradle a -> FilePath -> (String -> IO ()) -> IO ()
 testLoadFile crd a_fp step = do
-  libDirRes <- getRuntimeGhcLibDir crd
-  handleCradleResult libDirRes $ \libDir ->
-    withCurrentDirectory (cradleRootDir crd) $
-      G.runGhc (Just libDir) $ do
-        let relFp = makeRelative (cradleRootDir crd) a_fp
-        res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
-        handleCradleResult res $ \(ini, _) -> do
-          liftIO (step "Initial module load")
-          sf <- ini
-          case sf of
-            -- Test resetting the targets
-            Succeeded -> setTargetFilesWithMessage (Just (\_ n _ _ -> step (show n))) [(a_fp, a_fp)]
-            Failed -> liftIO $ expectationFailure "Module loading failed"
+  let relFp = makeRelative (cradleRootDir crd) a_fp
+  res <- liftIO $ withCurrentDirectory (cradleRootDir crd) $
+    initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd $ \(ini,_) -> do
+            liftIO (step "Initial module load")
+            sf <- ini
+            case sf of
+              -- Test resetting the targets
+              Succeeded -> setTargetFilesWithMessage (Just (\_ n _ _ -> step (show n))) [(a_fp, a_fp)]
+              Failed -> liftIO $ expectationFailure "Module loading failed"
+  handleCradleResult res return
 
 testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
 testLoadFileCradleFail crd a_fp cradleErrorExpectation step = do
@@ -287,15 +285,12 @@ testLoadCradleDependencies cradlePred rootDir file dependencyPred step =
   withTempCopy rootDir $ \rootDir' -> do
     a_fp <- canonicalizePath (rootDir' </> file)
     crd <- initialiseCradle cradlePred a_fp step
-    libDirRes <- getRuntimeGhcLibDir crd
-    handleCradleResult libDirRes $ \libDir -> do
-      step "Initialise Flags"
-      withCurrentDirectory (cradleRootDir crd) $
-        G.runGhc (Just libDir) $ do
-          let relFp = makeRelative (cradleRootDir crd) a_fp
-          res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
-          handleCradleResult res $ \(_, options) ->
-            liftIO $ dependencyPred (componentDependencies options)
+    step "Initialise Flags"
+    let relFp = makeRelative (cradleRootDir crd) a_fp
+    res <- withCurrentDirectory (cradleRootDir crd) $
+      initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd $ \(_, options) -> do
+        liftIO $ dependencyPred (componentDependencies options)
+    handleCradleResult res return
 
 handleCradleResult :: MonadIO m => CradleLoadResult a -> (a -> m ()) -> m ()
 handleCradleResult (CradleSuccess x) f = f x

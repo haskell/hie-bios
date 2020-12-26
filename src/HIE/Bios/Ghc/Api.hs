@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables, CPP #-}
 -- | These functions are for conveniently implementing the simple CLI
 module HIE.Bios.Ghc.Api (
@@ -15,7 +16,7 @@ import qualified GHC as G
 import qualified HscMain as G
 import qualified GhcMake as G
 
-import Control.Monad (void)
+import Control.Monad (join, forM, void)
 import HIE.Bios.Types
 import HIE.Bios.Environment
 import HIE.Bios.Flags
@@ -24,23 +25,28 @@ import HIE.Bios.Flags
 
 -- | Initialize a GHC session by loading a given file into a given cradle.
 initializeFlagsWithCradle ::
-    GhcMonad m
-    => FilePath -- ^ The file we are loading the 'Cradle' because of
+       FilePath -- ^ The file we are loading the 'Cradle' because of
     -> Cradle a   -- ^ The cradle we want to load
-    -> m (CradleLoadResult (m G.SuccessFlag, ComponentOptions))
+    -> ((G.Ghc G.SuccessFlag, ComponentOptions) -> G.Ghc b)
+    -> IO (CradleLoadResult b)
 initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMsg)
 
 -- | The same as 'initializeFlagsWithCradle' but with an additional argument to control
 -- how the loading progress messages are displayed to the user. In @haskell-ide-engine@
 -- the module loading progress is displayed in the UI by using a progress notification.
 initializeFlagsWithCradleWithMessage ::
-  GhcMonad m
-  => Maybe G.Messager
+     Maybe G.Messager
   -> FilePath -- ^ The file we are loading the 'Cradle' because of
   -> Cradle a  -- ^ The cradle we want to load
-  -> m (CradleLoadResult (m G.SuccessFlag, ComponentOptions)) -- ^ Whether we actually loaded the cradle or not.
-initializeFlagsWithCradleWithMessage msg fp cradle =
-    fmap (initSessionWithMessage msg) <$> liftIO (getCompilerOptions fp cradle)
+  -> ((G.Ghc G.SuccessFlag, ComponentOptions) -> G.Ghc b)
+  -> IO (CradleLoadResult b)
+initializeFlagsWithCradleWithMessage msg fp cradle cont = do
+  componentLoadResult <- liftIO (getCompilerOptions fp cradle)
+  fmap join $ forM componentLoadResult $ \opts -> do
+    libDirResult <- getRuntimeGhcLibDir opts
+    forM libDirResult $ \libDir -> do
+      let res = initSessionWithMessage msg opts
+      G.runGhc (Just libDir) (cont res)
 
 -- | Actually perform the initialisation of the session. Initialising the session corresponds to
 -- parsing the command line flags, setting the targets for the session and then attempting to load

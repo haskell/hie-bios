@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -57,10 +59,6 @@ data CradleAction a = CradleAction {
                       -- ^ Name of the action.
                       , runCradle     :: LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
-                      , runGhcCmd :: [String] -> IO (CradleLoadResult String)
-                      -- ^ Executes the @ghc@ binary that is usually used to
-                      -- build the cradle. E.g. for a cabal cradle this should be
-                      -- equivalent to @cabal exec ghc -- args@
                       }
   deriving (Functor)
 
@@ -74,8 +72,25 @@ data CradleLoadResult r
   = CradleSuccess r -- ^ The cradle succeeded and returned these options.
   | CradleFail CradleError -- ^ We tried to load the cradle and it failed.
   | CradleNone -- ^ No attempt was made to load the cradle.
-  deriving (Functor, Show, Eq)
+  deriving (Functor, Foldable, Traversable, Show, Eq)
 
+instance Applicative CradleLoadResult where
+  pure = CradleSuccess
+  CradleSuccess a <*> CradleSuccess b = CradleSuccess (a b)
+  CradleFail err <*> _ = CradleFail err
+  _ <*> CradleFail err = CradleFail err
+  _ <*> _ = CradleNone
+
+instance Monad CradleLoadResult where
+  return = CradleSuccess
+  CradleSuccess r >>= k = k r
+  CradleFail err >>= _ = CradleFail err
+  CradleNone >>= _ = CradleNone
+
+bindIO :: CradleLoadResult a -> (a -> IO (CradleLoadResult b)) -> IO (CradleLoadResult b)
+bindIO  (CradleSuccess r) k = k r
+bindIO (CradleFail err) _ = return $ CradleFail err
+bindIO CradleNone _ = return CradleNone
 
 data CradleError = CradleError
   { cradleErrorDependencies :: [FilePath]
@@ -108,4 +123,8 @@ data ComponentOptions = ComponentOptions {
   -- This is useful, because, sometimes, adding specific files
   -- changes the options that a Cradle may return, thus, needs reload
   -- as soon as these files are created.
-  } deriving (Eq, Ord, Show)
+  , componentRunGhcCmd ::  [String] -> IO (CradleLoadResult String)
+  -- ^ Executes the @ghc@ binary that is usually used to
+  -- build the cradle. E.g. for a cabal cradle this should be
+  -- equivalent to @cabal exec ghc -- args@
+  }

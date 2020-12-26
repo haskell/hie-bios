@@ -63,30 +63,30 @@ makeTargetIdAbsolute _ tid = tid
 
 ----------------------------------------------------------------
 
--- | @getRuntimeGhcLibDir cradle@ will give you the ghc libDir:
+-- | @getRuntimeGhcLibDir componentOptions@ will give you the ghc libDir:
 -- __do not__ use 'runGhcCmd' directly.
 -- This will also perform additional lookups and fallbacks to try and get a
 -- reliable library directory.
 -- It tries this specific order of paths:
 --
 -- 1. the @NIX_GHC_LIBDIR@ if it is set
--- 2. calling 'runCradleGhc' on the provided cradle
-getRuntimeGhcLibDir :: Cradle a
+-- 2. calling 'componentRunGhcCmd' on the provided componentOptions
+getRuntimeGhcLibDir :: ComponentOptions
                     -> IO (CradleLoadResult FilePath)
-getRuntimeGhcLibDir cradle = do
+getRuntimeGhcLibDir componentOptions = do
   maybeNixLibDir <- lookupEnv "NIX_GHC_LIBDIR"
   case maybeNixLibDir of
     Just ld -> pure (CradleSuccess ld)
     Nothing -> fmap (fmap trim) $
-      runGhcCmd (cradleOptsProg cradle) ["--print-libdir"]
+      componentRunGhcCmd componentOptions ["--print-libdir"]
 
--- | Gets the version of ghc used when compiling the cradle. It is based off of
--- 'getRuntimeGhcLibDir'. If it can't work out the verison reliably, it will
+-- | Gets the version of ghc returned by the cradle. It is based off of
+-- 'getRuntimeGhcLibDir'. If it can't work out the version reliably, it will
 -- return a 'CradleError'
-getRuntimeGhcVersion :: Cradle a
+getRuntimeGhcVersion :: ComponentOptions
                      -> IO (CradleLoadResult String)
-getRuntimeGhcVersion cradle =
-  fmap (fmap trim) $ runGhcCmd (cradleOptsProg cradle) ["--numeric-version"]
+getRuntimeGhcVersion componentOptions =
+  fmap (fmap trim) $ componentRunGhcCmd componentOptions ["--numeric-version"]
 
 ----------------------------------------------------------------
 
