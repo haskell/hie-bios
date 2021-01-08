@@ -182,6 +182,7 @@ Executable hie-bios
                       , filepath
                       , ghc
                       , hie-bios
+                      , optparse-applicative
 
 test-suite parser-tests
   type: exitcode-stdio-1.0

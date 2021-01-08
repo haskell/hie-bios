@@ -41,7 +41,7 @@ checkSyntax cradle files = do
   where
     handleRes (CradleSuccess x) f = f x
     handleRes (CradleFail ce) _f = liftIO $ throwIO ce 
-    handleRes CradleNone _f = return "No cradle"
+    handleRes CradleNone _f = return "None cradle"
 
 ----------------------------------------------------------------
 
