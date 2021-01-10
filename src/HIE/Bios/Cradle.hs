@@ -61,8 +61,8 @@ import qualified Data.HashMap.Strict as Map
 import           Data.Maybe (fromMaybe, maybeToList)
 import           GHC.Fingerprint (fingerprintString)
 
-hie_bios_output :: String
-hie_bios_output = "HIE_BIOS_OUTPUT"
+hieBiosOutput :: String
+hieBiosOutput = "HIE_BIOS_OUTPUT"
 ----------------------------------------------------------------
 
 -- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
@@ -100,7 +100,7 @@ getCradle :: (b -> Cradle a) -> (CradleConfig b, FilePath) -> Cradle a
 getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
     Cabal CabalType{ cabalComponent = mc } -> cabalCradle wdir mc
     CabalMulti dc ms ->
-      getCradle buildCustomCradle $
+      getCradle buildCustomCradle
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Cabal $ dc <> c)) | (p, c) <- ms])
         , wdir)
@@ -110,7 +110,7 @@ getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleT
       in
         stackCradle wdir mc stackYamlConfig
     StackMulti ds ms ->
-      getCradle buildCustomCradle $
+      getCradle buildCustomCradle
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Stack $ ds <> c)) | (p, c) <- ms])
         , wdir)
@@ -312,7 +312,7 @@ multiAction buildCustomCradle cur_dir cs l cur_fp =
     canonicalizeCradles :: IO [(FilePath, CradleConfig b)]
     canonicalizeCradles =
       sortOn (Down . fst)
-        <$> mapM (\(p, c) -> (,c) <$> (makeAbsolute (cur_dir </> p))) cs
+        <$> mapM (\(p, c) -> (,c) <$> makeAbsolute (cur_dir </> p)) cs
 
     selectCradle [] =
       return (CradleFail (CradleError [] ExitSuccess err_msg))
@@ -361,7 +361,7 @@ biosWorkDir = findFileUpwards (".hie-bios" ==)
 biosDepsAction :: LoggingFunction -> FilePath -> Maybe Callable -> FilePath -> IO [FilePath]
 biosDepsAction l wdir (Just biosDepsCall) fp = do
   biosDeps' <- callableToProcess biosDepsCall (Just fp)
-  (ex, sout, serr, [(_, args)]) <- readProcessWithOutputs [hie_bios_output] l wdir biosDeps'
+  (ex, sout, serr, [(_, args)]) <- readProcessWithOutputs [hieBiosOutput] l wdir biosDeps'
   case ex of
     ExitFailure _ ->  error $ show (ex, sout, serr)
     ExitSuccess -> return $ fromMaybe [] args
@@ -376,7 +376,7 @@ biosAction :: FilePath
 biosAction wdir bios bios_deps l fp = do
   bios' <- callableToProcess bios (Just fp)
   (ex, _stdo, std, [(_, res),(_, mb_deps)]) <-
-    readProcessWithOutputs [hie_bios_output, "HIE_BIOS_DEPS"] l wdir bios'
+    readProcessWithOutputs [hieBiosOutput, "HIE_BIOS_DEPS"] l wdir bios'
 
   deps <- case mb_deps of
     Just x  -> return x
@@ -506,7 +506,7 @@ cabalAction work_dir mc l fp = do
     buildDir <- cabalBuildDir work_dir
     let cab_args = ["--builddir="<>buildDir,"v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
     (ex, output, stde, [(_,mb_args)]) <-
-      readProcessWithOutputs [hie_bios_output] l work_dir (proc "cabal" cab_args)
+      readProcessWithOutputs [hieBiosOutput] l work_dir (proc "cabal" cab_args)
     let args = fromMaybe [] mb_args
     case processCabalWrapperArgs args of
         Nothing -> do
@@ -631,12 +631,12 @@ stackAction work_dir mc syaml l _fp = do
   -- Same wrapper works as with cabal
   withCabalWrapperTool ghcProcArgs work_dir $ \wrapper_fp -> do
     (ex1, _stdo, stde, [(_, mb_args)]) <-
-      readProcessWithOutputs [hie_bios_output] l work_dir $
+      readProcessWithOutputs [hieBiosOutput] l work_dir $
         stackProcess syaml
                       $  ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
                       <> [ comp | Just comp <- [mc] ]
     (ex2, pkg_args, stdr, _) <-
-      readProcessWithOutputs [hie_bios_output] l work_dir $
+      readProcessWithOutputs [hieBiosOutput] l work_dir $
         stackProcess syaml ["path", "--ghc-package-path"]
     let split_pkgs = concatMap splitSearchPath pkg_args
         pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs

@@ -1,6 +1,6 @@
 Cabal-Version:          2.2
 Name:                   hie-bios
-Version:                0.7.1
+Version:                0.7.2
 Author:                 Matthew Pickering <matthewtpickering@gmail.com>
 Maintainer:             Matthew Pickering <matthewtpickering@gmail.com>
 License:                BSD-3-Clause
