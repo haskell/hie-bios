@@ -21,6 +21,11 @@ import Paths_hie_bios
 progVersion :: String
 progVersion = "hie-bios version " ++ showVersion version ++ " compiled by GHC " ++ cProjectVersion ++ "\n"
 
+data GlobalOptions = GlobalOptions {
+  globalVerbosity :: Maybe Int
+  , globalSubcommand :: Command
+  }
+
 data Command
   = Check { checkTargetFiles :: [FilePath] }
   | Flags { flagTargetFiles :: [FilePath] }
@@ -34,7 +39,7 @@ data Command
 filepathParser :: Parser [FilePath]
 filepathParser = some (argument str ( metavar "TARGET_FILES..."))
 
-progInfo :: ParserInfo Command
+progInfo :: ParserInfo GlobalOptions
 progInfo = info (progParser <**> helper)
   ( fullDesc
   <> progDesc "hie-bios is the way to specify how haskell-language-server and ghcide set up a GHC API session.\
@@ -42,16 +47,25 @@ progInfo = info (progParser <**> helper)
   <> header progVersion
   <> footer "You can report issues/contribute at https://github.com/mpickering/hie-bios")
 
-progParser :: Parser Command
-progParser = subparser
-    (command "check" (info (Check <$> filepathParser) (progDesc "Try to load modules into the GHC API."))
-    <> command "flags" (info (Flags <$> filepathParser) (progDesc "Print out the options that hie-bios thinks you will need to load a file."))
-    <> command "debug" (info (Debug <$> argument str ( metavar "TARGET_FILES...")) (progDesc "Print out the options that hie-bios thinks you will need to load a file."))
-    <> command "config" (info (ConfigInfo <$> filepathParser) (progDesc "Print out the cradle config."))
-    <> command "cradle" (info (CradleInfo <$> filepathParser) (progDesc "."))
-    <> command "root" (info (pure Root) (progDesc "Display the path towards the selected hie.yaml."))
-    <> command "version" (info (pure Version) (progDesc "Print version and exit."))
-    )
+progParser :: Parser GlobalOptions
+progParser = GlobalOptions <$> option auto
+          (long "log-level"
+          <> help "Log level"
+          <> showDefault
+          <> Options.Applicative.value (Just 0)
+          <> metavar "LOG_LEVEL")
+          <*> subcommandParser
+
+subcommandParser :: Parser Command
+subcommandParser = subparser
+        (command "check" (info (Check <$> filepathParser) (progDesc "Try to load modules into the GHC API."))
+        <> command "flags" (info (Flags <$> filepathParser) (progDesc "Print out the options that hie-bios thinks you will need to load a file."))
+        <> command "debug" (info (Debug <$> argument str ( metavar "TARGET_FILES...")) (progDesc "Print out the options that hie-bios thinks you will need to load a file."))
+        <> command "config" (info (ConfigInfo <$> filepathParser) (progDesc "Print out the cradle config."))
+        <> command "cradle" (info (CradleInfo <$> filepathParser) (progDesc "."))
+        <> command "root" (info (pure Root) (progDesc "Display the path towards the selected hie.yaml."))
+        <> command "version" (info (pure Version) (progDesc "Print version and exit."))
+        )
 
 
 ----------------------------------------------------------------
@@ -68,7 +82,7 @@ main = do
 
     cmd <- execParser progInfo
 
-    res <- case cmd of
+    res <- case globalSubcommand cmd of
       Check targetFiles -> checkSyntax cradle targetFiles
       Debug files -> case files of
         [] -> debugInfo (cradleRootDir cradle) cradle
