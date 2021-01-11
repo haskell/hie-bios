@@ -13,6 +13,7 @@ data BIOSVerbosity = Silent | Verbose
 
 data CradleOpts = CradleOpts
                 { cradleOptsVerbosity :: BIOSVerbosity
+                -- ^ unused so far
                 , cradleOptsHandle :: Maybe Handle
                 -- ^ The handle where to send output to, if not set, stderr.
                 }
