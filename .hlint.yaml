@@ -17,7 +17,7 @@
 - ignore: {name: "Eta reduce"}
 - ignore: {name: "Use const"}
 - ignore: {name: "Move brackets to avoid $"}
-- ignore: {name: "Parse error: possibly incorrect indentation or mismatched brackets"}
+- ignore: {name: "Parse error"}
 
 
 # Specify additional command line arguments
