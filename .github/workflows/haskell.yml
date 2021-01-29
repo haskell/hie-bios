@@ -8,17 +8,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['8.10.1', '8.8.3', '8.6.5', '8.4.4']
+        ghc: ['8.10.4', '8.8.4', '8.6.5', '8.4.4']
         os: [ubuntu-latest, macOS-latest, windows-latest]
         exclude:
-          - os: windows-latest
-            ghc: '8.8.3' # fails due to segfault
           - os: macOS-latest
             ghc: '8.4.4' # fails due to ghc panic
 
     steps:
     - uses: actions/checkout@v2
-    - uses: actions/setup-haskell@v1
+    - uses: haskell/actions/setup@v1
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: '3.2'
@@ -40,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - uses: actions/setup-haskell@v1
+    - uses: haskell/actions/setup@v1
     - name: Check
       run: cabal check
     - name: Generate sdist
@@ -57,3 +55,13 @@ jobs:
     - uses: ludeeus/action-shellcheck@master
       with:
         ignore: tests
+
+  windows-wrapper:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: haskell/actions/setup@v1
+      with:
+        ghc-version: ${{ matrix.ghc }}
+    - name: Compile Windows wrapper
+      run: ghc -hide-all-packages -package base -package directory -package process -Wall -Werror wrappers/cabal.hs -o CabalWrapper
