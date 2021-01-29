@@ -9,9 +9,9 @@ import System.IO (openFile, hClose, hPutStrLn, IOMode(..))
 main :: IO ()
 main = do
   args <- getArgs
-  output_file <- getEnv "HIE_BIOS_OUTPUT"
   case args of
     "--interactive":_ -> do
+      output_file <- getEnv "HIE_BIOS_OUTPUT"
       h <- openFile output_file AppendMode
       getCurrentDirectory >>= hPutStrLn h
       mapM_ (hPutStrLn h) args
