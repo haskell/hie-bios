@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveFoldable #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 {-# LANGUAGE DeriveFoldable #-}
@@ -68,7 +70,6 @@ data CradleLoadResult r
   | CradleNone -- ^ No attempt was made to load the cradle.
  deriving (Functor, Foldable, Traversable, Show, Eq)
 
-
 instance Applicative CradleLoadResult where
   pure = CradleSuccess
   CradleSuccess a <*> CradleSuccess b = CradleSuccess (a b)
@@ -86,7 +87,6 @@ bindIO :: CradleLoadResult a -> (a -> IO (CradleLoadResult b)) -> IO (CradleLoad
 bindIO  (CradleSuccess r) k = k r
 bindIO (CradleFail err) _ = return $ CradleFail err
 bindIO CradleNone _ = return CradleNone
-
 
 data CradleError = CradleError
   { cradleErrorDependencies :: [FilePath]
