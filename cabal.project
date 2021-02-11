@@ -1,1 +1,12 @@
 packages: .
+
+allow-newer:
+  hashable:base,
+  cryptohash-sha1:base,
+  zlib:base,
+  split:base,
+  time-compat:base,
+  these:base,
+  assoc:base,
+  hslogger:base,
+  async:base
