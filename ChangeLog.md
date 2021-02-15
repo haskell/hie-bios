@@ -1,5 +1,20 @@
 # ChangeLog hie-bios
 
+## 2021-01-29 - 0.7.3
+
+* Set builddir for cabal [#264](https://github.com/mpickering/hie-bios/pull/264)
+  * Essentially, change the build directory for cabal to the [`XDG_CACHE_HOME`](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
+    directory (e.g. `~/.cache/hie-bios/...`). This way, user
+    invocations of cabal will no longer trigger a `configure` step, improving
+    the overall developer experience.
+* Optparse-applicative CLI [#276](https://github.com/mpickering/hie-bios/pull/276)
+
+## 2020-12-16 - 0.7.2
+
+* Faster Bios protocol [#271](https://github.com/mpickering/hie-bios/pull/271)
+* Modify unreachable cabal website links [#259](https://github.com/mpickering/hie-bios/pull/259)
+* Only take the last line of output in getRuntimeGhcX [#256](https://github.com/mpickering/hie-bios/pull/256)
+
 ## 2020-09-01 - 0.7.1
 
 * Add explicit type for stack.yaml location [#243](https://github.com/mpickering/hie-bios/pull/243)
