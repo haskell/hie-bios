@@ -39,7 +39,7 @@ readAndClearLogRef (LogRef ref) = do
 
 appendLogRef :: DynFlags -> PprStyle -> LogRef -> LogAction
 appendLogRef df style (LogRef ref) _ _ sev src
-#if __GLASGOW_HASKELL__ < 811
+#if __GLASGOW_HASKELL__ < 900
   _style
 #endif
   msg = do
