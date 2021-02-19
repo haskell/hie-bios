@@ -1,5 +1,11 @@
 # ChangeLog hie-bios
 
+## 2021-02-19 - 0.7.4
+
+### Bug Fixes
+
+* Create the cache directory on linux if it is missing [#283](https://github.com/mpickering/hie-bios/pull/283)
+
 ## 2021-01-29 - 0.7.3
 
 * Set builddir for cabal [#264](https://github.com/mpickering/hie-bios/pull/264)
