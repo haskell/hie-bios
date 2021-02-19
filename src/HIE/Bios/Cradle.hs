@@ -467,6 +467,7 @@ type GhcProc = (FilePath, [String])
 withCabalWrapperTool :: GhcProc -> FilePath -> IO FilePath
 withCabalWrapperTool (mbGhc, ghcArgs) wdir = do
     cacheDir <- getCacheDir ""
+    createDirectoryIfMissing True cacheDir
     let wrapperContents = if isWindows then cabalWrapperHs else cabalWrapper
         suffix fp = if isWindows then fp <.> "exe" else fp
     let srcHash = show (fingerprintString wrapperContents)
@@ -477,7 +478,6 @@ withCabalWrapperTool (mbGhc, ghcArgs) wdir = do
       if isWindows
       then do
         withSystemTempDirectory "hie-bios" $ \ tmpDir -> do
-          createDirectoryIfMissing True cacheDir
           let wrapper_hs = cacheDir </> wrapper_name <.> "hs"
           writeFile wrapper_hs wrapperContents
           let ghc = (proc mbGhc $
