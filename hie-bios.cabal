@@ -182,6 +182,7 @@ Executable hie-bios
   Build-Depends:        base >= 4.9 && < 5
                       , directory
                       , filepath
+                      , ghc-api-compat
                       , ghc
                       , hie-bios
                       , optparse-applicative
