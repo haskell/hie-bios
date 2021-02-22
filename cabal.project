@@ -6,12 +6,5 @@ source-repository-package
   tag: 6178d75772c7d923918dfffa0b1f503dfb36d0a6
   
 allow-newer:
-  hashable:base,
   cryptohash-sha1:base,
-  zlib:base,
-  split:base,
-  time-compat:base,
-  these:base,
-  assoc:base,
-  hslogger:base,
-  async:base
+  hslogger:base
