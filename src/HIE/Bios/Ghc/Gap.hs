@@ -36,15 +36,7 @@ import qualified GHC as G
 import Outputable (PrintUnqualified, PprStyle, Depth(AllTheWay), mkUserStyle)
 import qualified HscTypes as G
 
-#if __GLASGOW_HASKELL__ >= 808
-import qualified DynamicLoading (initializePlugins)
-import qualified Plugins (plugins)
-#endif
-
-
 import qualified Control.Monad.Catch as E
-
-
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
@@ -57,6 +49,11 @@ import GHC (mgModSummaries, mapMG)
 
 #if __GLASGOW_HASKELL__ >= 806
 import DynFlags (IncludeSpecs(..))
+#endif
+
+#if __GLASGOW_HASKELL__ >= 808
+import qualified DynamicLoading (initializePlugins)
+import qualified Plugins (plugins)
 #endif
 
 #if __GLASGOW_HASKELL__ >= 810
@@ -77,6 +74,7 @@ import HsExpr (MatchGroup)
 
 #if __GLASGOW_HASKELL__ >= 900
 import GHC.Core.Type
+import HscTypes (hsc_dflags)
 #endif
 
 #if __GLASGOW_HASKELL__ >= 900
@@ -119,7 +117,7 @@ pattern RealSrcSpan t <- G.RealSrcSpan t
 ----------------------------------------------------------------
 
 setNoCode :: DynFlags -> DynFlags
-#if __GLASGOW_HASKELL__ >= 900
+#if __GLASGOW_HASKELL__ >= 901
 setNoCode d = d { G.backend = G.NoBackend }
 #else
 setNoCode d = d { G.hscTarget = G.HscNothing }
@@ -144,7 +142,7 @@ overPkgDbRef _f db = db
 ----------------------------------------------------------------
 
 guessTarget :: GhcMonad m => String -> Maybe G.Phase -> m G.Target
-#if __GLASGOW_HASKELL__ >= 900
+#if __GLASGOW_HASKELL__ >= 901
 guessTarget a b = G.guessTarget a Nothing b
 #else
 guessTarget a b = G.guessTarget a b
