@@ -33,6 +33,7 @@ import DynFlags (DynFlags, includePaths, LogAction)
 import qualified DynFlags as G
 import GHC(LHsBind, LHsExpr, LPat, Type, ModSummary, ModuleGraph, HscEnv, setLogAction, GhcMonad)
 import qualified GHC as G
+import qualified Exception as G
 import Outputable (PrintUnqualified, PprStyle, Depth(AllTheWay), mkUserStyle)
 import qualified HscTypes as G
 
@@ -73,8 +74,7 @@ import HsExpr (MatchGroup)
 #endif
 
 #if __GLASGOW_HASKELL__ >= 900
-import GHC.Core.Type
-import HscTypes (hsc_dflags)
+import GHC.Core.Multiplicity (irrelevantMult)
 #endif
 
 #if __GLASGOW_HASKELL__ >= 900
@@ -95,7 +95,7 @@ handle :: (G.ExceptionMonad m, E.Exception e) => (e -> m a) -> m a -> m a
 handle = G.ghandle
 #endif
 
-#if __GLASGOW_HASKELL__ >= 900
+#if __GLASGOW_HASKELL__ >= 810
 catch :: (E.MonadCatch m, E.Exception e) => m a -> (e -> m a) -> m a
 catch =
   E.catch
@@ -126,7 +126,7 @@ setNoCode d = d { G.hscTarget = G.HscNothing }
 ----------------------------------------------------------------
 
 set_hsc_dflags :: DynFlags -> HscEnv -> HscEnv
-set_hsc_dflags dflags hsc_env = hsc_env { hsc_dflags = dflags }
+set_hsc_dflags dflags hsc_env = hsc_env { G.hsc_dflags = dflags }
 
 overPkgDbRef :: (FilePath -> FilePath) -> G.PackageDBFlag -> G.PackageDBFlag
 overPkgDbRef f (G.PackageDB pkgConfRef) = G.PackageDB
