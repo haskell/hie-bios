@@ -44,6 +44,7 @@ initSession  ComponentOptions {..} = do
         $ setIgnoreInterfacePragmas            -- Ignore any non-essential information in interface files such as unfoldings changing.
         $ writeInterfaceFiles (Just cache_dir) -- Write interface files to the cache
         $ setVerbosity 0                       -- Set verbosity to zero just in case the user specified `-vx` in the options.
+        $ (if dynamicGhc then updateWays . addWay' WayDyn else id) -- Add dynamic way if GHC is built with dynamic linking 
         $ setLinkerOptions df''                 -- Set `-fno-code` to avoid generating object files, unless we have to.
         )
 
