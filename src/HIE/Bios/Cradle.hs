@@ -60,6 +60,7 @@ import qualified Data.Text as T
 import qualified Data.HashMap.Strict as Map
 import           Data.Maybe (fromMaybe, maybeToList)
 import           GHC.Fingerprint (fingerprintString)
+import DynFlags (dynamicGhc)
 
 hie_bios_output :: String
 hie_bios_output = "HIE_BIOS_OUTPUT"
@@ -172,6 +173,9 @@ readCradleConfig yamlHie = do
 configFileName :: FilePath
 configFileName = "hie.yaml"
 
+argDynamic :: [String]
+argDynamic = ["-dynamic" | dynamicGhc]
+
 ---------------------------------------------------------------
 
 isCabalCradle :: Cradle a -> Bool
@@ -225,7 +229,7 @@ defaultCradle cur_dir =
     , cradleOptsProg = CradleAction
         { actionName = Types.Default
         , runCradle = \_ _ ->
-            return (CradleSuccess (ComponentOptions [] cur_dir []))
+            return (CradleSuccess (ComponentOptions argDynamic cur_dir []))
         , runGhcCmd = runGhcCmdOnPath cur_dir
         }
     }
@@ -334,7 +338,7 @@ directCradle wdir args =
     , cradleOptsProg = CradleAction
         { actionName = Types.Direct
         , runCradle = \_ _ ->
-            return (CradleSuccess (ComponentOptions args wdir []))
+            return (CradleSuccess (ComponentOptions (args ++ argDynamic) wdir []))
         , runGhcCmd = runGhcCmdOnPath wdir
         }
     }
