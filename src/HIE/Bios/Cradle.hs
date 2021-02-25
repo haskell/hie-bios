@@ -173,6 +173,11 @@ readCradleConfig yamlHie = do
 configFileName :: FilePath
 configFileName = "hie.yaml"
 
+-- | We need pass -dynamic flag when GHC is built with dynamic linking.
+-- 
+-- The flage is appended to options of 'defaultCradle' and 'directCradle',
+-- because unlike the case of using build tools, which means -dynamic can be set via
+-- .cabal or package.yaml, users have to create an explicit hie.yaml to pass this flag.
 argDynamic :: [String]
 argDynamic = ["-dynamic" | dynamicGhc]
 
