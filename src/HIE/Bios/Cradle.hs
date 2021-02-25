@@ -60,6 +60,7 @@ import qualified Data.Text as T
 import qualified Data.HashMap.Strict as Map
 import           Data.Maybe (fromMaybe, maybeToList)
 import           GHC.Fingerprint (fingerprintString)
+import DynFlags (dynamicGhc)
 
 hie_bios_output :: String
 hie_bios_output = "HIE_BIOS_OUTPUT"
@@ -172,6 +173,14 @@ readCradleConfig yamlHie = do
 configFileName :: FilePath
 configFileName = "hie.yaml"
 
+-- | We need pass -dynamic flag when GHC is built with dynamic linking.
+-- 
+-- The flage is appended to options of 'defaultCradle' and 'directCradle',
+-- because unlike the case of using build tools, which means -dynamic can be set via
+-- .cabal or package.yaml, users have to create an explicit hie.yaml to pass this flag.
+argDynamic :: [String]
+argDynamic = ["-dynamic" | dynamicGhc]
+
 ---------------------------------------------------------------
 
 isCabalCradle :: Cradle a -> Bool
@@ -225,7 +234,7 @@ defaultCradle cur_dir =
     , cradleOptsProg = CradleAction
         { actionName = Types.Default
         , runCradle = \_ _ ->
-            return (CradleSuccess (ComponentOptions [] cur_dir []))
+            return (CradleSuccess (ComponentOptions argDynamic cur_dir []))
         , runGhcCmd = runGhcCmdOnPath cur_dir
         }
     }
@@ -334,7 +343,7 @@ directCradle wdir args =
     , cradleOptsProg = CradleAction
         { actionName = Types.Direct
         , runCradle = \_ _ ->
-            return (CradleSuccess (ComponentOptions args wdir []))
+            return (CradleSuccess (ComponentOptions (args ++ argDynamic) wdir []))
         , runGhcCmd = runGhcCmdOnPath wdir
         }
     }
