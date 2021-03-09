@@ -26,6 +26,10 @@ import System.Info.Extra ( isWindows )
 import System.IO.Temp
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import Control.Monad.Extra (unlessM)
+import DynFlags (dynamicGhc)
+
+argDynamic :: [String]
+argDynamic = ["-dynamic" | dynamicGhc]
 
 main :: IO ()
 main = do
@@ -56,7 +60,7 @@ main = do
                 runCradle (cradleOptsProg crdl) (const (pure ())) "./a/A.hs"
                 >>= \case
                   CradleSuccess r ->
-                    componentOptions r `shouldMatchList` ["a"]
+                    componentOptions r `shouldMatchList` ["a"] <> argDynamic
                   _ -> expectationFailure "Cradle could not be loaded"
 
         , testCaseSteps "Can load symlinked module" $ \step -> do
@@ -71,7 +75,7 @@ main = do
                 runCradle (cradleOptsProg crdl) (const (pure ())) "./b/A.hs"
                 >>= \case
                   CradleSuccess r ->
-                    componentOptions r `shouldMatchList` ["b"]
+                    componentOptions r `shouldMatchList` ["b"] <> argDynamic
                   _ -> expectationFailure "Cradle could not be loaded"
 
         , testCaseSteps "Can not load symlinked module that is ignored" $ \step -> do
