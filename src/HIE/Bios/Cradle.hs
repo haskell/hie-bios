@@ -173,11 +173,11 @@ readCradleConfig yamlHie = do
 configFileName :: FilePath
 configFileName = "hie.yaml"
 
--- | We need pass -dynamic flag when GHC is built with dynamic linking.
+-- | Pass '-dynamic' flag when GHC is built with dynamic linking.
 -- 
--- The flage is appended to options of 'defaultCradle' and 'directCradle',
--- because unlike the case of using build tools, which means -dynamic can be set via
--- .cabal or package.yaml, users have to create an explicit hie.yaml to pass this flag.
+-- Append flag to options of 'defaultCradle' and 'directCradle' if GHC is dynmically linked,
+-- because unlike the case of using build tools, which means '-dynamic' can be set via
+-- '.cabal' or 'package.yaml', users have to create an explicit hie.yaml to pass this flag.
 argDynamic :: [String]
 argDynamic = ["-dynamic" | dynamicGhc]
 
@@ -493,7 +493,7 @@ withCabalWrapperTool (mbGhc, ghcArgs) wdir = do
                       ghcArgs ++ ["-rtsopts=ignore", "-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs])
                       { cwd = Just wdir }
           readCreateProcess ghc "" >>= putStr
-      else withFile wrapper_fp WriteMode $ \h -> hPutStr h wrapperContents
+      else writeFile wrapper_fp wrapperContents
     setMode wrapper_fp
     pure wrapper_fp
   where

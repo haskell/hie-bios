@@ -1,5 +1,11 @@
 # ChangeLog hie-bios
 
+## 2021-03-21 - 0.7.5
+
+### Bug Fixes
+
+* Improve out-of-the-box support for dynamically linked GHC. [#286](https://github.com/mpickering/hie-bios/pull/286), [#287](https://github.com/mpickering/hie-bios/pull/287)
+
 ## 2021-02-19 - 0.7.4
 
 ### Bug Fixes
