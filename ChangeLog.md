@@ -1,5 +1,8 @@
 # ChangeLog hie-bios
 
+## TBA - 0.7.6
+
+* Log stderr of stack to display more informative error messages to users. [#254](https://github.com/mpickering/hie-bios/pull/254)
 ## 2021-03-21 - 0.7.5
 
 ### Bug Fixes
