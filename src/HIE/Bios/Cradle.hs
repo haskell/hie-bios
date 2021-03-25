@@ -174,7 +174,7 @@ configFileName :: FilePath
 configFileName = "hie.yaml"
 
 -- | Pass '-dynamic' flag when GHC is built with dynamic linking.
--- 
+--
 -- Append flag to options of 'defaultCradle' and 'directCradle' if GHC is dynmically linked,
 -- because unlike the case of using build tools, which means '-dynamic' can be set via
 -- '.cabal' or 'package.yaml', users have to create an explicit hie.yaml to pass this flag.
@@ -608,10 +608,14 @@ stackCradle wdir mc syaml =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Stack
         , runCradle = stackAction wdir mc syaml
-        , runGhcCmd = \args ->
-            readProcessWithCwd wdir "stack"
-              (stackYamlProcessArgs syaml <> ["exec", "--silent", "ghc", "--"] <> args)
-              ""
+        , runGhcCmd = \args -> do
+            -- Setup stack silently, since stack might print stuff to stdout in some cases (e.g. on Win)
+            -- Issue 242 from HLS: https://github.com/haskell/haskell-language-server/issues/242
+            stackSetup <- readProcessWithCwd wdir "stack" (stackYamlProcessArgs syaml <> ["setup", "--silent"]) ""
+            stackSetup `bindIO` \_ ->
+              readProcessWithCwd wdir "stack"
+                (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
+                ""
         }
     }
 
