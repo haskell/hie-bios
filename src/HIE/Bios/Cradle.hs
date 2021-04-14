@@ -74,10 +74,10 @@ findCradle wfile = do
 
 -- | Given root\/hie.yaml load the Cradle.
 loadCradle :: FilePath -> IO (Cradle Void)
-loadCradle = loadCradleWithOpts Types.defaultCradleOpts absurd
+loadCradle = loadCradleWithOpts absurd
 
 loadCustomCradle :: Yaml.FromJSON b => (b -> Cradle a) -> FilePath -> IO (Cradle a)
-loadCustomCradle = loadCradleWithOpts Types.defaultCradleOpts
+loadCustomCradle = loadCradleWithOpts
 
 -- | Given root\/foo\/bar.hs, load an implicit cradle
 loadImplicitCradle :: Show a => FilePath -> IO (Cradle a)
@@ -92,8 +92,8 @@ loadImplicitCradle wfile = do
 --   Find a cabal file by tracing ancestor directories.
 --   Find a sandbox according to a cabal sandbox config
 --   in a cabal directory.
-loadCradleWithOpts :: (Yaml.FromJSON b) => CradleOpts -> (b -> Cradle a) -> FilePath -> IO (Cradle a)
-loadCradleWithOpts _copts buildCustomCradle wfile = do
+loadCradleWithOpts :: (Yaml.FromJSON b) => (b -> Cradle a) -> FilePath -> IO (Cradle a)
+loadCradleWithOpts buildCustomCradle wfile = do
     cradleConfig <- readCradleConfig wfile
     return $ getCradle buildCustomCradle (cradleConfig, takeDirectory wfile)
 
