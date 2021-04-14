@@ -5,7 +5,6 @@
 module HIE.Bios.Cradle (
       findCradle
     , loadCradle
-    , loadCustomCradle
     , loadImplicitCradle
     , yamlConfig
     , defaultCradle
@@ -75,9 +74,6 @@ findCradle wfile = do
 -- | Given root\/hie.yaml load the Cradle.
 loadCradle :: FilePath -> IO (Cradle Void)
 loadCradle = loadCradleWithOpts absurd
-
-loadCustomCradle :: Yaml.FromJSON b => (b -> Cradle a) -> FilePath -> IO (Cradle a)
-loadCustomCradle = loadCradleWithOpts
 
 -- | Given root\/foo\/bar.hs, load an implicit cradle
 loadImplicitCradle :: Show a => FilePath -> IO (Cradle a)
