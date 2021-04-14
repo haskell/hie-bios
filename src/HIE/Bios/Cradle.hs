@@ -27,6 +27,7 @@ import Control.Exception (handleJust)
 import qualified Data.Yaml as Yaml
 import Data.Void
 import Data.Char (isSpace)
+import Data.Bifunctor (first)
 import System.Process
 import System.Exit
 import HIE.Bios.Types hiding (ActionName(..))
@@ -142,20 +143,36 @@ addCradleDeps deps c =
                 CradleNone -> pure CradleNone
          }
 
+-- | Try to infer an appropriate implicit cradle type from stuff we can find in the enclosing directories:
+--   * If a .hie-bios file is found, we can treat this as a @Bios@ cradle
+--   * If a stack.yaml file is found, we can treat this as a @Stack@ cradle
+--   * If a cabal.project or an xyz.cabal file is found, we can treat this as a @Cabal@ cradle
+inferCradleType :: FilePath -> MaybeT IO (CradleType a, FilePath)
+inferCradleType fp =
+       maybeItsBios
+   <|> maybeItsStack
+   <|> maybeItsCabal
+-- <|> maybeItsObelisk
+-- <|> maybeItsObelisk
 
+  where
+  maybeItsBios = (\wdir -> (Bios (Program $ wdir </> ".hie-bios") Nothing Nothing, wdir)) <$> biosWorkDir fp
+
+  maybeItsStack = stackExecutable >> (Stack $ StackType Nothing Nothing,) <$> stackWorkDir fp
+
+  maybeItsCabal = (Cabal $ CabalType Nothing,) <$> cabalWorkDir fp
+
+  -- maybeItsObelisk = (Obelisk,) <$> obeliskWorkDir fp
+
+  -- maybeItsBazel = (Bazel,) <$> rulesHaskellWorkDir fp
+
+
+-- | Wraps up the cradle inferred by @inferCradleType@ as a @CradleConfig@ with no dependencies
 implicitConfig :: FilePath -> MaybeT IO (CradleConfig a, FilePath)
-implicitConfig fp = do
-  (crdType, wdir) <- implicitConfig' fp
-  return (CradleConfig [] crdType, wdir)
-
-implicitConfig' :: FilePath -> MaybeT IO (CradleType a, FilePath)
-implicitConfig' fp = (\wdir ->
-         (Bios (Program $ wdir </> ".hie-bios") Nothing Nothing, wdir)) <$> biosWorkDir fp
-  --   <|> (Obelisk,) <$> obeliskWorkDir fp
-  --   <|> (Bazel,) <$> rulesHaskellWorkDir fp
-     <|> (stackExecutable >> (Stack $ StackType Nothing Nothing,) <$> stackWorkDir fp)
-     <|> ((Cabal $ CabalType Nothing,) <$> cabalWorkDir fp)
-
+implicitConfig = (fmap . first) (CradleConfig noDeps) . inferCradleType
+  where
+  noDeps :: [FilePath]
+  noDeps = []
 
 yamlConfig :: FilePath ->  MaybeT IO FilePath
 yamlConfig fp = do
