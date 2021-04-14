@@ -26,22 +26,11 @@ import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Data.HashMap.Strict as Map
 import           Data.Maybe (mapMaybe)
-import           Data.Semigroup
+import           Data.Monoid (Last(..))
 import           Data.Foldable (foldrM)
 import           Data.Aeson (JSONPath)
 import           Data.Yaml
 import           Data.Yaml.Internal (Warning(..))
-
-type MLast a = Maybe (Last a)
-
-viewLast :: MLast a -> Maybe a
-viewLast (Just l) = Just $ getLast l
-viewLast Nothing = Nothing
-
-pattern MLast :: Maybe a -> MLast a
-pattern MLast m <- (viewLast -> m) where
-    MLast (Just l) = Just $ Last l
-    MLast Nothing = Nothing
 
 -- | Configuration that can be used to load a 'Cradle'.
 -- A configuration has roughly the following form:
@@ -70,7 +59,7 @@ data Callable = Program FilePath | Command String
     deriving (Show, Eq)
 
 data CabalType
-    = CabalType_ { _cabalComponent :: !(MLast String) }
+    = CabalType_ { _cabalComponent :: !(Last String) }
     deriving (Eq)
 
 instance Semigroup CabalType where
@@ -80,14 +69,14 @@ instance Monoid CabalType where
     mempty = CabalType_ mempty
 
 pattern CabalType :: Maybe String -> CabalType
-pattern CabalType { cabalComponent } = CabalType_ (MLast cabalComponent)
+pattern CabalType { cabalComponent } = CabalType_ (Last cabalComponent)
 {-# COMPLETE CabalType #-}
 
 instance Show CabalType where
   show = show . Cabal
 
 data StackType
-    = StackType_ { _stackComponent :: !(MLast String) , _stackYaml :: !(MLast String) }
+    = StackType_ { _stackComponent :: !(Last String) , _stackYaml :: !(Last String) }
     deriving (Eq)
 
 instance Semigroup StackType where
@@ -97,7 +86,7 @@ instance Monoid StackType where
     mempty = StackType_ mempty mempty
 
 pattern StackType :: Maybe String -> Maybe String -> StackType
-pattern StackType { stackComponent, stackYaml } = StackType_ (MLast stackComponent) (MLast stackYaml)
+pattern StackType { stackComponent, stackYaml } = StackType_ (Last stackComponent) (Last stackYaml)
 {-# COMPLETE StackType #-}
 
 instance Show StackType where
