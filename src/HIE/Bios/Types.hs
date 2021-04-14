@@ -8,19 +8,9 @@
 module HIE.Bios.Types where
 
 import           System.Exit
-import           System.IO
 import           Control.Exception              ( Exception )
 
 data BIOSVerbosity = Silent | Verbose
-
-data CradleOpts = CradleOpts
-                { cradleOptsVerbosity :: BIOSVerbosity
-                , cradleOptsHandle :: Maybe Handle
-                -- ^ The handle where to send output to, if not set, stderr.
-                }
-
-defaultCradleOpts :: CradleOpts
-defaultCradleOpts = CradleOpts Silent Nothing
 
 ----------------------------------------------------------------
 
