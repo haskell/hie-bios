@@ -44,7 +44,7 @@ initSession  ComponentOptions {..} = do
         $ setIgnoreInterfacePragmas            -- Ignore any non-essential information in interface files such as unfoldings changing.
         $ writeInterfaceFiles (Just cache_dir) -- Write interface files to the cache
         $ setVerbosity 0                       -- Set verbosity to zero just in case the user specified `-vx` in the options.
-        $ (if dynamicGhc then updateWays . addWay' WayDyn else id) -- Add dynamic way if GHC is built with dynamic linking 
+        $ (if dynamicGhc then updateWays . addWay' WayDyn else id) -- Add dynamic way if GHC is built with dynamic linking
         $ setLinkerOptions df''                 -- Set `-fno-code` to avoid generating object files, unless we have to.
         )
 
@@ -66,19 +66,12 @@ makeTargetIdAbsolute _ tid = tid
 
 -- | @getRuntimeGhcLibDir cradle@ will give you the ghc libDir:
 -- __do not__ use 'runGhcCmd' directly.
--- This will also perform additional lookups and fallbacks to try and get a
--- reliable library directory.
--- It tries this specific order of paths:
 --
--- 1. the @NIX_GHC_LIBDIR@ if it is set
--- 2. calling 'runCradleGhc' on the provided cradle
+--
+-- Obtains libdir by calling 'runCradleGhc' on the provided cradle.
 getRuntimeGhcLibDir :: Cradle a
                     -> IO (CradleLoadResult FilePath)
-getRuntimeGhcLibDir cradle = do
-  maybeNixLibDir <- lookupEnv "NIX_GHC_LIBDIR"
-  case maybeNixLibDir of
-    Just ld -> pure (CradleSuccess ld)
-    Nothing -> fmap (fmap trim) $
+getRuntimeGhcLibDir cradle = fmap (fmap trim) $
       runGhcCmd (cradleOptsProg cradle) ["--print-libdir"]
 
 -- | Gets the version of ghc used when compiling the cradle. It is based off of
