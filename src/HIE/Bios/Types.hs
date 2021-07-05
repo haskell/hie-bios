@@ -77,7 +77,7 @@ instance Applicative CradleLoadResult where
   _ <*> _ = CradleNone
 
 instance Monad CradleLoadResult where
-  return = CradleSuccess
+  return = pure
   CradleSuccess r >>= k = k r
   CradleFail err >>= _ = CradleFail err
   CradleNone >>= _ = CradleNone
