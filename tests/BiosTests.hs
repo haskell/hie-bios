@@ -26,10 +26,11 @@ import System.Info.Extra ( isWindows )
 import System.IO.Temp
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import Control.Monad.Extra (unlessM)
-import DynFlags (dynamicGhc)
+
+import qualified HIE.Bios.Ghc.Gap as Gap
 
 argDynamic :: [String]
-argDynamic = ["-dynamic" | dynamicGhc]
+argDynamic = ["-dynamic" | Gap.hostIsDynamic]
 
 main :: IO ()
 main = do
