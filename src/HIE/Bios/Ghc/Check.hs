@@ -1,10 +1,19 @@
+{-# LANGUAGE CPP #-}
 module HIE.Bios.Ghc.Check (
     checkSyntax
   , check
   ) where
 
 import GHC (DynFlags(..), GhcMonad)
-import Exception
+import qualified GHC as G
+
+#if __GLASGOW_HASKELL__ >= 900
+import qualified GHC.Driver.Session as G
+#else
+import qualified DynFlags as G
+#endif
+
+import Control.Exception
 
 import HIE.Bios.Environment
 import HIE.Bios.Ghc.Api
@@ -17,8 +26,6 @@ import Control.Monad.IO.Class
 import System.IO.Unsafe (unsafePerformIO)
 import qualified HIE.Bios.Ghc.Gap as Gap
 
-import qualified DynFlags as G
-import qualified GHC as G
 
 ----------------------------------------------------------------
 
@@ -40,7 +47,7 @@ checkSyntax cradle files = do
           either id id <$> check files
   where
     handleRes (CradleSuccess x) f = f x
-    handleRes (CradleFail ce) _f = liftIO $ throwIO ce 
+    handleRes (CradleFail ce) _f = liftIO $ throwIO ce
     handleRes CradleNone _f = return "None cradle"
 
 ----------------------------------------------------------------

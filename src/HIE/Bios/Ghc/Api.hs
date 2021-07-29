@@ -7,15 +7,20 @@ module HIE.Bios.Ghc.Api (
   , withDynFlags
   ) where
 
-import CoreMonad (liftIO)
-import GHC (LoadHowMuch(..), GhcMonad)
-import DynFlags
-
+import GHC (LoadHowMuch(..), DynFlags, GhcMonad)
 import qualified GHC as G
+
+#if __GLASGOW_HASKELL__ >= 900
+import qualified GHC.Driver.Main as G
+import qualified GHC.Driver.Make as G
+#else
 import qualified HscMain as G
 import qualified GhcMake as G
+#endif
 
+import qualified HIE.Bios.Ghc.Gap as Gap
 import Control.Monad (void)
+import Control.Monad.IO.Class
 import HIE.Bios.Types
 import HIE.Bios.Environment
 import HIE.Bios.Flags
@@ -28,7 +33,7 @@ initializeFlagsWithCradle ::
     => FilePath -- ^ The file we are loading the 'Cradle' because of
     -> Cradle a   -- ^ The cradle we want to load
     -> m (CradleLoadResult (m G.SuccessFlag, ComponentOptions))
-initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMsg)
+initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just Gap.batchMsg)
 
 -- | The same as 'initializeFlagsWithCradle' but with an additional argument to control
 -- how the loading progress messages are displayed to the user. In @haskell-ide-engine@
@@ -61,7 +66,7 @@ initSessionWithMessage msg compOpts = (do
 withDynFlags ::
   (GhcMonad m)
   => (DynFlags -> DynFlags) -> m a -> m a
-withDynFlags setFlag body = G.gbracket setup teardown (\_ -> body)
+withDynFlags setFlag body = Gap.bracket setup teardown (\_ -> body)
   where
     setup = do
         dflag <- G.getSessionDynFlags

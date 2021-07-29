@@ -2,8 +2,6 @@
 
 module Main where
 
-import Config (cProjectVersion)
-
 import Control.Monad ( forM )
 import Data.Version (showVersion)
 import Options.Applicative
@@ -13,13 +11,14 @@ import System.FilePath( (</>) )
 
 import HIE.Bios
 import HIE.Bios.Ghc.Check
+import HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Internal.Debug
 import Paths_hie_bios
 
 ----------------------------------------------------------------
 
 progVersion :: String
-progVersion = "hie-bios version " ++ showVersion version ++ " compiled by GHC " ++ cProjectVersion ++ "\n"
+progVersion = "hie-bios version " ++ showVersion version ++ " compiled by GHC " ++ Gap.ghcVersion ++ "\n"
 
 data Command
   = Check { checkTargetFiles :: [FilePath] }

@@ -33,6 +33,7 @@ import HIE.Bios.Types hiding (ActionName(..))
 import qualified HIE.Bios.Types as Types
 import HIE.Bios.Config
 import HIE.Bios.Environment (getCacheDir)
+import qualified HIE.Bios.Ghc.Gap as Gap
 import System.Directory hiding (findFile)
 import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Maybe
@@ -60,7 +61,6 @@ import qualified Data.Text as T
 import qualified Data.HashMap.Strict as Map
 import           Data.Maybe (fromMaybe, maybeToList)
 import           GHC.Fingerprint (fingerprintString)
-import DynFlags (dynamicGhc)
 
 hie_bios_output :: String
 hie_bios_output = "HIE_BIOS_OUTPUT"
@@ -192,7 +192,7 @@ configFileName = "hie.yaml"
 -- because unlike the case of using build tools, which means '-dynamic' can be set via
 -- '.cabal' or 'package.yaml', users have to create an explicit hie.yaml to pass this flag.
 argDynamic :: [String]
-argDynamic = ["-dynamic" | dynamicGhc]
+argDynamic = ["-dynamic" | Gap.hostIsDynamic ]
 
 ---------------------------------------------------------------
 
