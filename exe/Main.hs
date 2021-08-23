@@ -14,6 +14,7 @@ import HIE.Bios.Ghc.Check
 import HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Internal.Debug
 import Paths_hie_bios
+import qualified Data.List.NonEmpty as NE
 
 ----------------------------------------------------------------
 
@@ -78,19 +79,24 @@ main = do
         _ -> do
           res <- forM files $ \fp -> do
                   res <- getCompilerOptions fp cradle
-                  case res of
-                      CradleFail (CradleError _deps _ex err) ->
-                        return $ "Failed to show flags for \""
-                                                  ++ fp
-                                                  ++ "\": " ++ show err
-                      CradleSuccess opts ->
-                        return $ unlines ["Options: " ++ show (componentOptions opts)
-                                        ,"ComponentDir: " ++ componentRoot opts
-                                        ,"Dependencies: " ++ show (componentDependencies opts) ]
-                      CradleNone -> return $ "No flags/None Cradle: component " ++ fp ++ " should not be loaded"
+                  pure $ printFlagsLoadResult fp res
+
           return (unlines res)
       ConfigInfo files -> configInfo files
       CradleInfo files -> cradleInfo files
       Root    -> rootInfo cradle
       Version -> return progVersion
     putStr res
+
+printFlagsLoadResult :: FilePath -> CradleLoadResult (NE.NonEmpty ComponentOptions) -> String
+printFlagsLoadResult fp = \case
+  CradleFail (CradleError _deps _ex err) ->
+    "Failed to show flags for \""
+                              ++ fp
+                              ++ "\": " ++ show err
+  CradleSuccess opts -> unlines $ NE.toList $ fmap showOpts opts
+  CradleNone -> "No flags/None Cradle: component " ++ fp ++ " should not be loaded"
+  where
+    showOpts opt = unlines ["Options: " ++ show (componentOptions opt)
+                    ,"ComponentDir: " ++ componentRoot opt
+                    ,"Dependencies: " ++ show (componentDependencies opt) ]
