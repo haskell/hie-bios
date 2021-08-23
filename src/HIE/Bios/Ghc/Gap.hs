@@ -260,6 +260,9 @@ mapOverIncludePaths f df = df
       G.IncludeSpecs
           (map f $ G.includePathsQuote  (includePaths df))
           (map f $ G.includePathsGlobal (includePaths df))
+#if __GLASGOW_HASKELL__ >= 902
+          (map f $ G.includePathsQuoteImplicit (includePaths df))
+#endif
 #else
       map f (includePaths df)
 #endif
