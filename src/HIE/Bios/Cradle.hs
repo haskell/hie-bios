@@ -2,6 +2,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module HIE.Bios.Cradle (
       findCradle
     , loadCradle
@@ -27,6 +29,7 @@ import qualified Data.Yaml as Yaml
 import Data.Void
 import Data.Char (isSpace)
 import Data.Bifunctor (first)
+import Cabal.BuildInfo
 import System.Process
 import System.Exit
 import HIE.Bios.Types hiding (ActionName(..))
@@ -62,6 +65,8 @@ import qualified Data.Text as T
 import qualified Data.HashMap.Strict as Map
 import           Data.Maybe (fromMaybe, maybeToList)
 import           GHC.Fingerprint (fingerprintString)
+import Data.Version
+import HIE.Bios.Cabal.BuildInfo
 
 hie_bios_output :: String
 hie_bios_output = "HIE_BIOS_OUTPUT"
@@ -523,33 +528,64 @@ cabalBuildDir work_dir = do
   let dirHash = show (fingerprintString abs_work_dir)
   getCacheDir ("dist-"<>filter (not . isSpace) (takeBaseName abs_work_dir)<>"-"<>dirHash)
 
+getCabalVersion :: IO Version
+getCabalVersion = (makeVersion . map (read . T.unpack) . T.splitOn "." . T.pack) <$> readProcess "cabal" ["--numeric-version"] ""
+
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult (NonEmpty ComponentOptions))
 cabalAction work_dir mc l fp = do
-    wrapper_fp <- withCabalWrapperTool ("ghc", []) work_dir
+    ver <- getCabalVersion
     buildDir <- cabalBuildDir work_dir
-    let cab_args = ["--builddir="<>buildDir,"v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
-    (ex, output, stde, [(_,mb_args)]) <-
-      readProcessWithOutputs [hie_bios_output] l work_dir (proc "cabal" cab_args)
-    let args = fromMaybe [] mb_args
-    case processCabalWrapperArgs args of
-        Nothing -> do
-          -- Best effort. Assume the working directory is the
-          -- the root of the component, so we are right in trivial cases at least.
-          deps <- cabalCradleDependencies work_dir work_dir
-          pure $ CradleFail (CradleError deps ex
-                    ["Failed to parse result of calling cabal"
-                     , unlines output
-                     , unlines stde
-                     , unlines $ args])
-        Just (componentDir, final_args) -> do
-          deps <- cabalCradleDependencies work_dir componentDir
-          pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
-  where
-    -- Need to make relative on Windows, due to a Cabal bug with how it
-    -- parses file targets with a C: drive in it
-    fixTargetPath x
-      | isWindows && hasDrive x = makeRelative work_dir x
-      | otherwise = x
+    if ver >= makeVersion [3, 6]
+      then do
+        (ex, output, stde, []) <- readProcessWithOutputs [] l work_dir (proc "cabal" ["--builddir=" ++ buildDir, "build", "--enable-build-info", "-O0", "all"])
+
+        Just buildInfo <- collectBuildInfo buildDir
+        case components buildInfo of
+          [] -> pure CradleNone
+          (x:xs) -> fmap CradleSuccess $ sequenceA (infoToOptions x :| fmap infoToOptions xs)
+      else do
+        wrapper_fp <- withCabalWrapperTool ("ghc", []) work_dir
+        let cab_args = ["--builddir="<>buildDir,"v2-repl", "--with-compiler", wrapper_fp, fromMaybe (fixTargetPath fp) mc]
+        (ex, output, stde, [(_,mb_args)]) <-
+          readProcessWithOutputs [hie_bios_output] l work_dir (proc "cabal" cab_args)
+        let args = fromMaybe [] mb_args
+        case processCabalWrapperArgs args of
+            Nothing -> do
+              -- Best effort. Assume the working directory is the
+              -- the root of the component, so we are right in trivial cases at least.
+              deps <- cabalCradleDependencies work_dir work_dir
+              pure $ CradleFail (CradleError deps ex
+                        ["Failed to parse result of calling cabal"
+                        , unlines output
+                        , unlines stde
+                        , unlines $ args])
+            Just (componentDir, final_args) -> do
+              deps <- cabalCradleDependencies work_dir componentDir
+              pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
+      where
+        -- Need to make relative on Windows, due to a Cabal bug with how it
+        -- parses file targets with a C: drive in it
+        fixTargetPath x
+          | isWindows && hasDrive x = makeRelative work_dir x
+          | otherwise = x
+
+infoToOptions :: ComponentInfo -> IO ComponentOptions
+infoToOptions ComponentInfo {..} = do
+    sourceFiles <- guessSourceFiles componentSrcFiles
+    pure $ ComponentOptions
+      { componentRoot = componentSrcDir
+      , componentDependencies = maybeToList componentCabalFile
+      , componentOptions = componentCompilerArgs ++ componentModules ++ sourceFiles
+      }
+    where
+      -- | Output from 'cabal show-build-info' doesn't tell us the full path for source files.
+      -- Guess the full path here.
+      guessSourceFiles s
+        | [l] <- componentHsSrcDirs = pure $ fmap (l </>) s
+        | otherwise = do
+            let candidates = [ dir </> src | src <- s, dir <- componentHsSrcDirs]
+            filterM doesFileExist candidates
+
 
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
