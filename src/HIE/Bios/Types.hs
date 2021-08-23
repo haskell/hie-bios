@@ -9,6 +9,7 @@ module HIE.Bios.Types where
 
 import           System.Exit
 import           Control.Exception              ( Exception )
+import           Data.List.NonEmpty             ( NonEmpty )
 
 data BIOSVerbosity = Silent | Verbose
 
@@ -47,7 +48,7 @@ data ActionName a
 data CradleAction a = CradleAction {
                         actionName    :: ActionName a
                       -- ^ Name of the action.
-                      , runCradle     :: LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
+                      , runCradle     :: LoggingFunction -> FilePath -> IO (CradleLoadResult (NonEmpty ComponentOptions))
                       -- ^ Options to compile the given file with.
                       , runGhcCmd :: [String] -> IO (CradleLoadResult String)
                       -- ^ Executes the @ghc@ binary that is usually used to

@@ -12,6 +12,7 @@ import HIE.Bios.Types
 import HIE.Bios.Flags
 
 import System.Directory
+import qualified Data.List.NonEmpty as NE
 
 ----------------------------------------------------------------
 
@@ -34,10 +35,8 @@ debugInfo fp cradle = unlines <$> do
     crdl <- findCradle' canonFp
     ghcLibDir <- getRuntimeGhcLibDir cradle
     ghcVer <- getRuntimeGhcVersion cradle
-    case res of
-      CradleSuccess (ComponentOptions gopts croot deps) -> do
-        return [
-            "Root directory:        " ++ rootDir
+    let printOptions (ComponentOptions gopts croot deps) =
+          [ "Root directory:        " ++ rootDir
           , "Component directory:   " ++ croot
           , "GHC options:           " ++ unwords (map quoteIfNeeded gopts)
           , "GHC library directory: " ++ show ghcLibDir
@@ -46,11 +45,13 @@ debugInfo fp cradle = unlines <$> do
           , "Cradle:                " ++ crdl
           , "Dependencies:          " ++ unwords deps
           ]
+    case res of
+      CradleSuccess opts -> return $ concatMap printOptions (NE.toList opts)
       CradleFail (CradleError deps ext stderr) ->
         return ["Cradle failed to load"
-               , "Deps: " ++ show deps
-               , "Exit Code: " ++ show ext
-               , "Stderr: " ++ unlines stderr]
+              , "Deps: " ++ show deps
+              , "Exit Code: " ++ show ext
+              , "Stderr: " ++ unlines stderr]
       CradleNone ->
         return ["No cradle"]
   where
