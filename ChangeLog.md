@@ -1,8 +1,13 @@
 # ChangeLog hie-bios
 
-## TBA - 0.7.6
+## 2021-08-30 - 0.7.6
 
+* Don't look for NIX_GHC_LIBDIR as it is redundant [#294](https://github.com/mpickering/hie-bios/pull/294)
+* Add compatbility for GHC 9.0 and 9.2 [#300](https://github.com/mpickering/hie-bios/pull/300)
+  * Add CPP statements for IncludeSpecs [#307](https://github.com/mpickering/hie-bios/pull/307)
+* Refactor implicit config discovery [#291](https://github.com/mpickering/hie-bios/pull/291)
 * Log stderr of stack to display more informative error messages to users. [#254](https://github.com/mpickering/hie-bios/pull/254)
+
 ## 2021-03-21 - 0.7.5
 
 ### Bug Fixes
