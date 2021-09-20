@@ -59,13 +59,13 @@ main :: IO ()
 main = do
     hSetEncoding stdout utf8
     cwd <- getCurrentDirectory
+    cmd <- execParser progInfo
     cradle <-
         -- find cradle does a takeDirectory on the argument, so make it into a file
         findCradle (cwd </> "File.hs") >>= \case
           Just yaml -> loadCradle yaml
           Nothing -> loadImplicitCradle (cwd </> "File.hs")
 
-    cmd <- execParser progInfo
 
     res <- case cmd of
       Check targetFiles -> checkSyntax cradle targetFiles
