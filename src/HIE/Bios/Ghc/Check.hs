@@ -17,7 +17,7 @@ import Control.Exception
 import Control.Monad.Extra (concatForM)
 import Control.Monad.IO.Class
 
-import qualified Data.List.NonEmpty as NE
+import qualified Data.Foldable as F
 
 import HIE.Bios.Environment
 import HIE.Bios.Ghc.Api
@@ -45,7 +45,7 @@ checkSyntax cradle files = do
       G.runGhcT (Just libDir) $ do
         Log.debugm $ "Cradle: " ++ show cradle
         res <- initializeFlagsWithCradle (head files) cradle
-        handleRes res $ \comps -> concatForM (NE.toList comps) $ \(ini, _) -> do
+        handleRes res $ \comps -> concatForM (F.toList comps) $ \(ini, _) -> do
           _sf <- ini
           either id id <$> check files
   where

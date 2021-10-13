@@ -1,15 +1,16 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
-
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 module HIE.Bios.Types where
 
 import           System.Exit
 import           Control.Exception              ( Exception )
-import           Data.List.NonEmpty             ( NonEmpty )
 
 ----------------------------------------------------------------
 
@@ -43,20 +44,59 @@ data ActionName a
   | Other a
   deriving (Show, Eq, Ord, Functor)
 
-data CradleAction a = CradleAction {
-                        actionName    :: ActionName a
-                      -- ^ Name of the action.
-                      , runCradle     :: LoggingFunction -> FilePath -> IO (CradleLoadResult (NonEmpty ComponentOptions))
-                      -- ^ Options to compile the given file with.
-                      , runGhcCmd :: [String] -> IO (CradleLoadResult String)
-                      -- ^ Executes the @ghc@ binary that is usually used to
-                      -- build the cradle. E.g. for a cabal cradle this should be
-                      -- equivalent to @cabal exec ghc -- args@
-                      }
+data CradleAction a = CradleAction
+  { actionName    :: ActionName a
+  -- ^ Name of the action.
+  , runCradle     :: LoggingFunction -> FilePath -> IO (CradleLoadResult LoadResult)
+  -- ^ Options to compile the given file with.
+  --
+  -- The given FilePath /must/ be part of 'LoadResult.loadResultComponent' if
+  -- the loading operation succeeds.
+  , runGhcCmd :: [String] -> IO (CradleLoadResult String)
+  -- ^ Executes the @ghc@ binary that is usually used to
+  -- build the cradle. E.g. for a cabal cradle this should be
+  -- equivalent to @cabal exec ghc -- args@
+  }
   deriving (Functor)
 
 instance Show a => Show (CradleAction a) where
   show CradleAction { actionName = name } = "CradleAction: " ++ show name
+
+type LoadResult = LoadResult' ComponentOptions
+
+-- | Record for expressing successful loading.
+-- Can express partial success.
+data LoadResult' a = LoadResult
+  { loadResultComponent :: Maybe a
+  -- ^ Component options for the FilePath that produced this 'LoadResult'.
+  -- See 'CradleAction.runCradle' for information on how to produce a 'LoadResult'.
+  --
+  -- This field can be 'Nothing' to indicate that loading partially failed/succeeded.
+  , loadResultDependencies :: [a]
+  -- ^ Direct or indirect dependencies from the component from above.
+  -- Indirect means that it is not required that 'ComponentOptions' in this list
+  -- are required dependencies of 'loadResultComponent'. It is specifically allowed
+  -- to list 'ComponentOptions' that have no relation with 'loadResultComponent'.
+  --
+  -- Example:
+  --
+  -- Assume we load an executable component, then its options must be located
+  -- in 'loadResultComponent' and its local dependencies in 'loadResultDependencies',
+  -- but additionally it is possible to list other executable component's
+  -- options in 'loadResultDependencies'.
+  } deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+-- | Create a simple LoadResult from a single 'ComponentOptions' record.
+-- Sets the 'ComponentOptions' as 'loadResultComponent'.
+mkSimpleLoadResult :: ComponentOptions -> LoadResult
+mkSimpleLoadResult opts = LoadResult
+  { loadResultComponent = Just opts
+  , loadResultDependencies = []
+  }
+
+-- | Helper to access the main component if there is one.
+pattern Main :: a -> LoadResult' a
+pattern Main opts <- (loadResultComponent -> Just opts)
 
 -- | Result of an attempt to set up a GHC session for a 'Cradle'.
 -- This is the go-to error handling mechanism. When possible, this

@@ -24,7 +24,6 @@ import Control.Monad.IO.Class
 import HIE.Bios.Types
 import HIE.Bios.Environment
 import HIE.Bios.Flags
-import Data.List.NonEmpty (NonEmpty)
 
 ----------------------------------------------------------------
 
@@ -33,7 +32,7 @@ initializeFlagsWithCradle ::
     GhcMonad m
     => FilePath -- ^ The file we are loading the 'Cradle' because of
     -> Cradle a   -- ^ The cradle we want to load
-    -> m (CradleLoadResult (NonEmpty (m G.SuccessFlag, ComponentOptions)))
+    -> m (CradleLoadResult (LoadResult' (m G.SuccessFlag, ComponentOptions)))
 initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just G.batchMsg)
 
 -- | The same as 'initializeFlagsWithCradle' but with an additional argument to control
@@ -44,7 +43,7 @@ initializeFlagsWithCradleWithMessage ::
   => Maybe G.Messager
   -> FilePath -- ^ The file we are loading the 'Cradle' because of
   -> Cradle a  -- ^ The cradle we want to load
-  -> m (CradleLoadResult (NonEmpty (m G.SuccessFlag, ComponentOptions))) -- ^ Whether we actually loaded the cradle or not.
+  -> m (CradleLoadResult (LoadResult' (m G.SuccessFlag, ComponentOptions))) -- ^ Whether we actually loaded the cradle or not.
 initializeFlagsWithCradleWithMessage msg fp cradle = do
     options <- liftIO (getCompilerOptions fp cradle)
     pure $ fmap (fmap (initSessionWithMessage msg)) options

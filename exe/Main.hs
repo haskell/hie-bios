@@ -3,6 +3,7 @@
 module Main where
 
 import Control.Monad ( forM )
+import qualified Data.Foldable as F
 import Data.Version (showVersion)
 import Options.Applicative
 import System.Directory (getCurrentDirectory)
@@ -14,7 +15,6 @@ import HIE.Bios.Ghc.Check
 import HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Internal.Debug
 import Paths_hie_bios
-import qualified Data.List.NonEmpty as NE
 
 ----------------------------------------------------------------
 
@@ -77,6 +77,7 @@ main = do
         -- TODO force optparse to acquire one
         [] -> error "too few arguments"
         _ -> do
+          -- TODO: might print identical information multiple times
           res <- forM files $ \fp -> do
                   res <- getCompilerOptions fp cradle
                   pure $ printFlagsLoadResult fp res
@@ -88,15 +89,15 @@ main = do
       Version -> return progVersion
     putStr res
 
-printFlagsLoadResult :: FilePath -> CradleLoadResult (NE.NonEmpty ComponentOptions) -> String
+printFlagsLoadResult :: FilePath -> CradleLoadResult LoadResult -> String
 printFlagsLoadResult fp = \case
   CradleFail (CradleError _deps _ex err) ->
-    "Failed to show flags for \""
-                              ++ fp
-                              ++ "\": " ++ show err
-  CradleSuccess opts -> unlines $ NE.toList $ fmap showOpts opts
+    "Failed to show flags for \"" ++ fp ++ "\": " ++ show err
+  CradleSuccess opts -> unlines $ F.toList $ fmap showOpts opts
   CradleNone -> "No flags/None Cradle: component " ++ fp ++ " should not be loaded"
   where
-    showOpts opt = unlines ["Options: " ++ show (componentOptions opt)
-                    ,"ComponentDir: " ++ componentRoot opt
-                    ,"Dependencies: " ++ show (componentDependencies opt) ]
+    showOpts opt = unlines
+      [ "Options: " ++ show (componentOptions opt)
+      , "ComponentDir: " ++ componentRoot opt
+      , "Dependencies: " ++ show (componentDependencies opt)
+      ]

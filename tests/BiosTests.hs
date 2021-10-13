@@ -27,7 +27,6 @@ import System.IO.Temp
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import Control.Monad.Extra (unlessM)
 import qualified HIE.Bios.Ghc.Gap as Gap
-import Data.List.NonEmpty (NonEmpty((:|)))
 
 argDynamic :: [String]
 argDynamic = ["-dynamic" | Gap.hostIsDynamic]
@@ -60,7 +59,7 @@ main = do
               withCurrentDirectory (cradleRootDir crdl) $ do
                 runCradle (cradleOptsProg crdl) (const (pure ())) "./a/A.hs"
                 >>= \case
-                  CradleSuccess (r :| []) ->
+                  CradleSuccess (Main r) ->
                     componentOptions r `shouldMatchList` ["a"] <> argDynamic
                   _ -> expectationFailure "Cradle could not be loaded"
 
@@ -75,7 +74,7 @@ main = do
 
                 runCradle (cradleOptsProg crdl) (const (pure ())) "./b/A.hs"
                 >>= \case
-                  CradleSuccess (r :| []) ->
+                  CradleSuccess (Main r) ->
                     componentOptions r `shouldMatchList` ["b"] <> argDynamic
                   _ -> expectationFailure "Cradle could not be loaded"
 
@@ -264,7 +263,7 @@ testLoadFile crd a_fp step = do
       G.runGhc (Just libDir) $ do
         let relFp = makeRelative (cradleRootDir crd) a_fp
         res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
-        handleCradleResult res $ \((ini, _) :| []) -> do
+        handleCradleResult res $ \(Main (ini, _)) -> do
           liftIO (step "Initial module load")
           sf <- ini
           case sf of
@@ -297,7 +296,7 @@ testLoadCradleDependencies cradlePred rootDir file dependencyPred step =
         G.runGhc (Just libDir) $ do
           let relFp = makeRelative (cradleRootDir crd) a_fp
           res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
-          handleCradleResult res $ \((_, options) :| []) ->
+          handleCradleResult res $ \(Main (_, options)) ->
             liftIO $ dependencyPred (componentDependencies options)
 
 handleCradleResult :: MonadIO m => CradleLoadResult a -> (a -> m ()) -> m ()
