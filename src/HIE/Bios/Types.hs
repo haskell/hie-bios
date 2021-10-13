@@ -11,8 +11,6 @@ import           System.Exit
 import           Control.Exception              ( Exception )
 import           Data.List.NonEmpty             ( NonEmpty )
 
-data BIOSVerbosity = Silent | Verbose
-
 ----------------------------------------------------------------
 
 -- | The environment of a single 'Cradle'.
