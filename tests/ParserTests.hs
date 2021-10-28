@@ -1,14 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 module Main where
 
 import Test.Hspec.Expectations
 import Test.Tasty
 import Test.Tasty.HUnit
 import HIE.Bios.Config
+#if MIN_VERSION_aeson(2,0,0)
+import           Data.Aeson.Key ( Key )
+import qualified Data.Aeson.KeyMap as Map
+#else
 import qualified Data.HashMap.Strict as Map
+import qualified Data.Text as T
+#endif
 import Data.Void
 import Data.Yaml
-import qualified Data.Text as T
 import System.FilePath
 import Control.Applicative ( (<|>) )
 import Control.Exception
@@ -120,7 +126,7 @@ instance FromJSON CabalHelper where
 
   parseJSON _ = fail "Not a valid cabal-helper specification"
 
-simpleCabalHelperYaml :: T.Text -> Value
+simpleCabalHelperYaml :: Key -> Value
 simpleCabalHelperYaml tool =
   object
     [ ( "cabal-helper", object
@@ -128,3 +134,11 @@ simpleCabalHelperYaml tool =
         ]
       )
     ]
+
+-- ------------------------------------------------------------------
+-- Helper functions to support aeson < 2
+-- ------------------------------------------------------------------
+
+#if !MIN_VERSION_aeson(2,0,0)
+type Key = T.Text
+#endif

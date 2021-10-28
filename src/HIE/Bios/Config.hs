@@ -5,6 +5,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE CPP #-}
 -- | Logic and datatypes for parsing @hie.yaml@ files.
 module HIE.Bios.Config(
     readConfig,
@@ -24,13 +25,35 @@ module HIE.Bios.Config(
 import Control.Exception
 import qualified Data.Text as T
 import qualified Data.Vector as V
+#if MIN_VERSION_aeson(2,0,0)
+import           Data.Aeson.Key (fromText)
+import           Data.Aeson.KeyMap (KeyMap)
+import qualified Data.Aeson.KeyMap as Map
+#else
 import qualified Data.HashMap.Strict as Map
+#endif
 import           Data.Maybe (mapMaybe)
 import           Data.Monoid (Last(..))
 import           Data.Foldable (foldrM)
 import           Data.Aeson (JSONPath)
 import           Data.Yaml
 import           Data.Yaml.Internal (Warning(..))
+
+
+#if !MIN_VERSION_aeson(2,0,0)
+-- | Backwards compatible type-def for Key
+-- This used to be just a Text, but since aeson >= 2
+-- this is an opaque datatype.
+type Key = T.Text
+-- | Backwards compatible type-def for KeyMap
+-- This used to be just a HashMap, but since aeson >= 2
+-- this is an opaque datatype.
+type KeyMap v = Map.HashMap T.Text v
+
+-- | Create a Key from a Text.
+fromText :: T.Text -> Key
+fromText = id
+#endif
 
 -- | Configuration that can be used to load a 'Cradle'.
 -- A configuration has roughly the following form:
@@ -149,7 +172,7 @@ parseSingleOrMultiple
   :: Monoid x
   => (x -> CradleType a)
   -> (x -> [(FilePath, x)] -> CradleType a)
-  -> (Map.HashMap T.Text Value -> Parser x)
+  -> (KeyMap Value -> Parser x)
   -> Value
   -> Parser (CradleType a)
 parseSingleOrMultiple single multiple parse = doParse where
@@ -224,7 +247,7 @@ parseBios (Object x) =
         exclusive l Nothing = l
         exclusive Nothing r = r
         stringTypeFromMap :: (String -> t) -> T.Text -> Maybe t
-        stringTypeFromMap constructor name = constructor <$> (intoString =<< Map.lookup name x)
+        stringTypeFromMap constructor name = constructor <$> (intoString =<< Map.lookup (fromText name) x)
         intoString :: Value -> Maybe String
         intoString (String s) = Just (T.unpack s)
         intoString _ = Nothing
