@@ -1,6 +1,6 @@
 # ChangeLog hie-bios
 
-## TBD - 0.8.0
+## 2021-11-29 - 0.8.0
 
 * Support aeson >= 2.0. [#313](https://github.com/haskell/hie-bios/pull/313)
 * Remove CradleOpt Type [#293](https://github.com/haskell/hie-bios/pull/293)
