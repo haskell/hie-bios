@@ -1,5 +1,9 @@
 # ChangeLog hie-bios
 
+## 2022-01-06 - 0.8.1
+
+* Add support for GHC 9.0.2 [#322](https://github.com/haskell/hie-bios/pull/322)
+
 ## 2021-11-29 - 0.8.0
 
 * Support aeson >= 2.0. [#313](https://github.com/haskell/hie-bios/pull/313)
