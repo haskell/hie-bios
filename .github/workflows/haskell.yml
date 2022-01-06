@@ -13,6 +13,8 @@ jobs:
         exclude:
           - os: macOS-latest
             ghc: '8.4.4' # fails due to ghc panic
+          - os: windows-latest
+            ghc: '9.0.2' # fails due to unix-compat being incompatible
 
     steps:
     - uses: actions/checkout@v2
