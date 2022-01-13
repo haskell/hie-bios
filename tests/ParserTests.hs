@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
-import Test.Hspec.Expectations
 import Test.Tasty
 import Test.Tasty.HUnit
 import HIE.Bios.Config
@@ -18,6 +18,7 @@ import Data.Yaml
 import System.FilePath
 import Control.Applicative ( (<|>) )
 import Control.Exception
+import Data.Typeable
 
 configDir :: FilePath
 configDir = "tests/configs"
@@ -105,6 +106,21 @@ assertCustomParser fp cc = do
 noDeps :: CradleType a -> Config a
 noDeps c = Config (CradleConfig [] c)
 
+shouldThrow :: (HasCallStack, Exception e) => IO a -> Selector e -> Assertion
+shouldThrow act select = do
+  r <- try act
+  case r of
+    Left (exc :: e)
+      | select exc -> pure ()
+    Left exc -> assertFailure $ "Exception Type is not expected: " ++ exceptionType ++ " (" ++ show exc ++ ")"
+    Right _ -> assertFailure $ "did not get expected exception: " ++ exceptionType
+  where
+    -- a string repsentation of the expected exception's type
+    exceptionType = (show . typeOf . instanceOf) select
+      where
+        instanceOf :: Selector a -> a
+        instanceOf _ = error "ParserTests.shouldThrow: broken Typeable instance"
+
 -- ------------------------------------------------------------------
 
 data CabalHelper
@@ -134,6 +150,8 @@ simpleCabalHelperYaml tool =
         ]
       )
     ]
+
+type Selector a = a -> Bool
 
 -- ------------------------------------------------------------------
 -- Helper functions to support aeson < 2

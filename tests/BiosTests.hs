@@ -6,7 +6,6 @@ module Main where
 
 import Test.Tasty
 import Test.Tasty.HUnit
-import Test.Hspec.Expectations
 #if __GLASGOW_HASKELL__ < 810
 import Test.Tasty.ExpectedFailure
 #endif
@@ -20,6 +19,7 @@ import HIE.Bios.Types
 import Control.Monad.IO.Class
 import Control.Monad ( forM_, unless )
 import Data.Void
+import Data.List ( sort, isPrefixOf )
 import System.Directory
 import System.FilePath (addTrailingPathSeparator,  makeRelative, (</>) )
 import System.Info.Extra ( isWindows )
@@ -61,7 +61,7 @@ main = do
                 >>= \case
                   CradleSuccess (Main r) ->
                     componentOptions r `shouldMatchList` ["a"] <> argDynamic
-                  _ -> expectationFailure "Cradle could not be loaded"
+                  _ -> assertFailure "Cradle could not be loaded"
 
         , testCaseSteps "Can load symlinked module" $ \step -> do
             withTempCopy "./tests/projects/symlink-test" $ \tmpdir -> do
@@ -70,13 +70,13 @@ main = do
               withCurrentDirectory (cradleRootDir crdl) $ do
                 createDirectoryLink "./a" "./b"
                 unlessM (doesFileExist "./b/A.hs")
-                  $ expectationFailure "Test invariant broken, this file must exist."
+                  $ assertFailure "Test invariant broken, this file must exist."
 
                 runCradle (cradleOptsProg crdl) (const (pure ())) "./b/A.hs"
                 >>= \case
                   CradleSuccess (Main r) ->
                     componentOptions r `shouldMatchList` ["b"] <> argDynamic
-                  _ -> expectationFailure "Cradle could not be loaded"
+                  _ -> assertFailure "Cradle could not be loaded"
 
         , testCaseSteps "Can not load symlinked module that is ignored" $ \step -> do
             withTempCopy "./tests/projects/symlink-test" $ \tmpdir -> do
@@ -85,30 +85,30 @@ main = do
               withCurrentDirectory (cradleRootDir crdl) $ do
                 createDirectoryLink "./a" "./c"
                 unlessM (doesFileExist "./c/A.hs")
-                  $ expectationFailure "Test invariant broken, this file must exist."
+                  $ assertFailure "Test invariant broken, this file must exist."
 
                 runCradle (cradleOptsProg crdl) (const (pure ())) "./c/A.hs"
                   >>= \case
                     CradleNone -> pure ()
-                    _ -> expectationFailure "Cradle loaded symlink"
+                    _ -> assertFailure "Cradle loaded symlink"
         ]
       , testGroup "Loading tests"
         $ linuxExlusiveTestCases
         ++
           [ testCaseSteps "failing-cabal" $ testDirectoryFail isCabalCradle "./tests/projects/failing-cabal" "MyLib.hs"
             (\CradleError {..} -> do
-                cradleErrorExitCode `shouldBe` ExitFailure 1
+                cradleErrorExitCode @?= ExitFailure 1
                 cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
           , testCaseSteps "failing-bios" $ testDirectoryFail isBiosCradle "./tests/projects/failing-bios" "B.hs"
             (\CradleError {..} -> do
-                cradleErrorExitCode `shouldBe` ExitFailure 1
+                cradleErrorExitCode @?= ExitFailure 1
                 cradleErrorDependencies `shouldMatchList` ["hie.yaml"])
           , testCaseSteps "failing-bios-ghc" $ testGetGhcVersionFail isBiosCradle "./tests/projects/failing-bios-ghc" "B.hs"
             (\CradleError {..} -> do
-                cradleErrorExitCode `shouldBe` ExitSuccess
+                cradleErrorExitCode @?= ExitSuccess
                 cradleErrorDependencies `shouldMatchList` []
-                length cradleErrorStderr `shouldBe` 1
-                head cradleErrorStderr `shouldStartWith` "Couldn't execute myGhc")
+                length cradleErrorStderr @?= 1
+                "Couldn't execute myGhc" `isPrefixOf` head cradleErrorStderr @? "Error message should contain basic information" )
           , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell" "B.hs"
           , testCaseSteps "simple-bios-shell-deps" $ testLoadCradleDependencies isBiosCradle "./tests/projects/simple-bios-shell" "B.hs" (assertEqual "dependencies" ["hie.yaml"])
           , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal" "B.hs"
@@ -134,7 +134,7 @@ main = do
           , expectFailBecause "stack repl does not fail on an invalid cabal file" $
               testCaseSteps "failing-stack" $ testDirectoryFail isStackCradle "./tests/projects/failing-stack" "src/Lib.hs"
                 (\CradleError {..} -> do
-                    cradleErrorExitCode `shouldBe` ExitFailure 1
+                    cradleErrorExitCode @?= ExitFailure 1
                     cradleErrorDependencies `shouldMatchList` ["failing-stack.cabal", "stack.yaml", "package.yaml"])
           , testCaseSteps "simple-stack" $ testDirectory isStackCradle "./tests/projects/simple-stack" "B.hs"
           , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
@@ -210,7 +210,7 @@ testDirectory cradlePred rootDir file step =
 testGetGhcLibDir :: Cradle a -> IO ()
 testGetGhcLibDir crd = do
   libDirRes <- getRuntimeGhcLibDir crd
-  libDirRes `shouldSatisfy` isSuccess
+  isSuccess libDirRes @? "Must succeed loading ghc lib directory"
   where isSuccess (CradleSuccess _) = True
         isSuccess _ = False
 
@@ -219,20 +219,21 @@ testGetGhcLibDir crd = do
 -- built the tests with. This will fail if you compiled the tests with a ghc
 -- that doesn't equal the ghc on your path though :(
 testGetGhcVersion :: Cradle a -> IO ()
-testGetGhcVersion crd =
-  getRuntimeGhcVersion crd `shouldReturn` CradleSuccess VERSION_ghc
+testGetGhcVersion crd = do
+  version <- getRuntimeGhcVersion crd
+  version @?= CradleSuccess VERSION_ghc
 
-testGetGhcVersionFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
+testGetGhcVersionFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Assertion) -> (String -> IO ()) -> IO ()
 testGetGhcVersionFail cradlePred rootDir file cradleFailPred step =
   testCradle cradlePred rootDir file step $ \crd _ -> do
     res <- getRuntimeGhcVersion crd
 
     case res of
-      CradleSuccess _ -> liftIO $ expectationFailure "Cradle loaded successfully"
-      CradleNone -> liftIO $ expectationFailure "Unexpected none-Cradle"
+      CradleSuccess _ -> liftIO $ assertFailure "Cradle loaded successfully"
+      CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
       CradleFail crdlFail -> liftIO $ cradleFailPred crdlFail
 
-testDirectoryFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
+testDirectoryFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Assertion) -> (String -> IO ()) -> IO ()
 testDirectoryFail cradlePred rootDir file cradleFailPred step =
   testCradle cradlePred rootDir file step $ \crd fp ->
     testLoadFileCradleFail crd fp cradleFailPred step
@@ -252,7 +253,7 @@ initialiseCradle cradlePred a_fp step = do
   crd <- case mcfg of
           Just cfg -> loadCradle cfg
           Nothing -> loadImplicitCradle a_fp
-  crd `shouldSatisfy` cradlePred
+  cradlePred crd @? "Must be the correct kind of cradle"
   pure crd
 
 testLoadFile :: Cradle a -> FilePath -> (String -> IO ()) -> IO ()
@@ -269,9 +270,9 @@ testLoadFile crd a_fp step = do
           case sf of
             -- Test resetting the targets
             Succeeded -> setTargetFilesWithMessage (Just (\_ n _ _ -> step (show n))) [(a_fp, a_fp)]
-            Failed -> liftIO $ expectationFailure "Module loading failed"
+            Failed -> liftIO $ assertFailure "Module loading failed"
 
-testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Expectation) -> (String -> IO ()) -> IO ()
+testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Assertion) -> (String -> IO ()) -> IO ()
 testLoadFileCradleFail crd a_fp cradleErrorExpectation step = do
   -- don't spin up a ghc session, just run the opts program manually since
   -- we're not guaranteed to be able to get the ghc libdir if the cradle is
@@ -280,11 +281,11 @@ testLoadFileCradleFail crd a_fp cradleErrorExpectation step = do
     let relFp = makeRelative (cradleRootDir crd) a_fp
     res <- runCradle (cradleOptsProg crd) (step . show) relFp
     case res of
-      CradleSuccess _ -> liftIO $ expectationFailure "Cradle loaded successfully"
-      CradleNone -> liftIO $ expectationFailure "Unexpected none-Cradle"
+      CradleSuccess _ -> liftIO $ assertFailure "Cradle loaded successfully"
+      CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
       CradleFail crdlFail -> liftIO $ cradleErrorExpectation crdlFail
 
-testLoadCradleDependencies :: (Cradle Void -> Bool) -> FilePath -> FilePath -> ([FilePath] -> Expectation) -> (String -> IO ()) -> IO ()
+testLoadCradleDependencies :: (Cradle Void -> Bool) -> FilePath -> FilePath -> ([FilePath] -> Assertion) -> (String -> IO ()) -> IO ()
 testLoadCradleDependencies cradlePred rootDir file dependencyPred step =
   withTempCopy rootDir $ \rootDir' -> do
     a_fp <- canonicalizePath (rootDir' </> file)
@@ -301,16 +302,17 @@ testLoadCradleDependencies cradlePred rootDir file dependencyPred step =
 
 handleCradleResult :: MonadIO m => CradleLoadResult a -> (a -> m ()) -> m ()
 handleCradleResult (CradleSuccess x) f = f x
-handleCradleResult CradleNone _ = liftIO $ expectationFailure "Unexpected none-Cradle"
+handleCradleResult CradleNone _ = liftIO $ assertFailure "Unexpected none-Cradle"
 handleCradleResult (CradleFail (CradleError _deps _ex stde)) _ =
-  liftIO $ expectationFailure ("Unexpected cradle fail" ++ unlines stde)
+  liftIO $ assertFailure ("Unexpected cradle fail" ++ unlines stde)
 
 findCradleForModule :: FilePath -> Maybe FilePath -> (String -> IO ()) -> IO ()
 findCradleForModule fp expected' step = do
   expected <- maybe (return Nothing) (fmap Just . canonicalizePath) expected'
   a_fp <- canonicalizePath fp
   step "Finding cradle"
-  findCradle a_fp `shouldReturn` expected
+  crdl <- findCradle a_fp
+  crdl @?= expected
 
 testImplicitCradle :: FilePath -> FilePath -> ActionName Void -> (String -> IO ()) -> IO ()
 testImplicitCradle rootDir file expectedActionName step =
@@ -319,10 +321,10 @@ testImplicitCradle rootDir file expectedActionName step =
     step "Inferring implicit cradle"
     crd <- loadImplicitCradle fp :: IO (Cradle Void)
 
-    actionName (cradleOptsProg crd) `shouldBe` expectedActionName
+    actionName (cradleOptsProg crd) @?= expectedActionName
 
     expectedCradleRootDir <- makeAbsolute rootDir'
-    cradleRootDir crd `shouldBe` expectedCradleRootDir
+    cradleRootDir crd @?= expectedCradleRootDir
 
     step "Initialize flags"
     testLoadFile crd fp step
@@ -346,6 +348,14 @@ copyDir src dst = do
         else copyFile srcFp dstFp
   where ignored = ["dist", "dist-newstyle", ".stack-work"]
 
+-- ------------------------------------------------------------------
+-- Helper functions
+-- ------------------------------------------------------------------
+
+shouldMatchList :: (Show a, Ord a) => [a] -> [a] -> Assertion
+shouldMatchList xs ys = sort xs @?= sort ys
+
+infix 1 `shouldMatchList`
 
 writeStackYamlFiles :: IO ()
 writeStackYamlFiles =

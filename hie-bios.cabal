@@ -1,6 +1,6 @@
 Cabal-Version:          2.2
 Name:                   hie-bios
-Version:                0.8.0
+Version:                0.8.1
 Author:                 Matthew Pickering <matthewtpickering@gmail.com>
 Maintainer:             Matthew Pickering <matthewtpickering@gmail.com>
 License:                BSD-3-Clause
@@ -121,7 +121,7 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/stack-with-yaml/stack-with-yaml.cabal
                         tests/projects/stack-with-yaml/src/Lib.hs
 
-tested-with: GHC==8.10.1, GHC==8.8.3, GHC==8.6.5, GHC==8.4.4
+tested-with: GHC ==8.4.4 || ==8.6.5 || ==8.8.4 || ==8.10.4 || ==9.0.1 || ==9.0.2 || ==9.2.1
 
 Library
   Default-Language:     Haskell2010
@@ -194,7 +194,6 @@ test-suite parser-tests
       aeson,
       filepath,
       hie-bios,
-      hspec-expectations,
       tasty,
       tasty-hunit,
       text,
@@ -214,7 +213,6 @@ test-suite bios-tests
       tasty,
       tasty-hunit,
       tasty-expected-failure,
-      hspec-expectations,
       hie-bios,
       filepath,
       directory,
