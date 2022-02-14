@@ -129,6 +129,7 @@ Library
   HS-Source-Dirs:       src
   Exposed-Modules:      HIE.Bios
                         HIE.Bios.Config
+                        HIE.Bios.Config.YAML
                         HIE.Bios.Cradle
                         HIE.Bios.Environment
                         HIE.Bios.Internal.Debug
