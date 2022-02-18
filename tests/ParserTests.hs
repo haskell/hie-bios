@@ -81,6 +81,7 @@ main = defaultMain $
         , (".", CradleConfig [] None)
         ]))
     assertParserFails "keys-not-unique-fails.yaml" invalidYamlException
+    assertParser "cabal-empty-config.yaml" (noDeps (Cabal $ CabalType Nothing))
 
 assertParser :: FilePath -> Config Void -> Assertion
 assertParser fp cc = do

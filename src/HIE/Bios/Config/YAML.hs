@@ -72,6 +72,12 @@ data MultiSubComponent a
 data CabalConfig
   = CabalConfig { cabalComponents :: OneOrManyComponents CabalComponent }
 
+instance FromJSON CabalConfig where
+  parseJSON v@(Array _)  = CabalConfig . ManyComponents <$> parseJSON v
+  parseJSON v@(Object _) = CabalConfig <$> parseJSON v
+  parseJSON Null         = pure $ CabalConfig NoComponent
+  parseJSON v            = typeMismatch "CabalConfig" v
+
 data CabalComponent
   = CabalComponent { cabalPath      :: FilePath
                    , cabalComponent :: String
@@ -83,11 +89,6 @@ instance FromJSON CabalComponent where
                                     <$> obj .: "path"
                                     <*> obj .: "component"
      in withObject "CabalComponent" parseCabalComponent
-
-instance FromJSON CabalConfig where
-  parseJSON v@(Array _)  = CabalConfig . ManyComponents <$> parseJSON v
-  parseJSON v@(Object _) = CabalConfig <$> parseJSON v
-  parseJSON v            = typeMismatch "CabalConfig" v
 
 data StackConfig
   = StackConfig { stackYaml       :: Maybe FilePath
@@ -105,6 +106,7 @@ instance FromJSON StackConfig where
   parseJSON v@(Object obj)  = StackConfig
                                 <$> obj .:? "stackYaml"
                                 <*> parseJSON v
+  parseJSON Null            = pure $ StackConfig Nothing NoComponent
   parseJSON v               = typeMismatch "StackConfig" v
 
 instance FromJSON StackComponent where
