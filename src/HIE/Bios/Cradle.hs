@@ -132,14 +132,12 @@ addCradleDeps deps c =
     addActionDeps :: CradleAction a -> CradleAction a
     addActionDeps ca =
       ca { runCradle = \l fp ->
-            runCradle ca l fp
-              >>= \case
-                CradleSuccess (ComponentOptions os' dir ds) ->
-                  pure $ CradleSuccess (ComponentOptions os' dir (ds `union` deps))
-                CradleFail err ->
-                  pure $ CradleFail
-                    (err { cradleErrorDependencies = cradleErrorDependencies err `union` deps })
-                CradleNone -> pure CradleNone
+            (cradleLoadResult
+                CradleNone
+                (\err -> CradleFail (err { cradleErrorDependencies = cradleErrorDependencies err `union` deps }))
+                (\(ComponentOptions os' dir ds) -> CradleSuccess (ComponentOptions os' dir (ds `union` deps)))
+            )
+            <$> runCradle ca l fp
          }
 
 -- | Try to infer an appropriate implicit cradle type from stuff we can find in the enclosing directories:
@@ -431,16 +429,15 @@ cabalCradle wdir mc =
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = Types.Cabal
-        , runCradle = cabalAction wdir mc
-        , runGhcCmd = \args -> do
-            buildDir <- cabalBuildDir wdir
+        , runCradle = \l f -> runCradleResultT . cabalAction wdir mc l $ f
+        , runGhcCmd = \args -> runCradleResultT $ do
+            buildDir <- liftIO $ cabalBuildDir wdir
             -- Workaround for a cabal-install bug on 3.0.0.0:
             -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
-            createDirectoryIfMissing True (buildDir </> "tmp")
+            liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
             -- Need to pass -v0 otherwise we get "resolving dependencies..."
-            cabalProcLoadResult <- cabalProcess wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
-            cabalProcLoadResult `bindIO` \cabalProc ->
-              readProcessWithCwd' cabalProc ""
+            cabalProc <- cabalProcess wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
+            readProcessWithCwd' cabalProc ""
         }
     }
 
@@ -453,16 +450,15 @@ cabalCradle wdir mc =
 -- to the custom ghc wrapper via 'HIE_BIOS_GHC' environment variable which
 -- the custom ghc wrapper may use as a fallback if it can not respond to certain
 -- queries, such as ghc version or location of the libdir.
-cabalProcess :: FilePath -> String -> [String] -> IO (CradleLoadResult CreateProcess)
+cabalProcess :: FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
 cabalProcess workDir command args = do
-  ghcDirLoadResult <- cabalGhcDirs workDir
-  ghcDirLoadResult `bindIO` \ghcDirs -> do
-    newEnvironment <- setupEnvironment ghcDirs
-    cabalProc <- setupCabalCommand ghcDirs
-    pure $ CradleSuccess (cabalProc
-        { env = Just newEnvironment
-        , cwd = Just workDir
-        })
+  ghcDirs <- cabalGhcDirs workDir
+  newEnvironment <- liftIO $ setupEnvironment ghcDirs
+  cabalProc <- liftIO $ setupCabalCommand ghcDirs
+  pure $ (cabalProc
+      { env = Just newEnvironment
+      , cwd = Just workDir
+      })
   where
     processEnvironment :: (FilePath, FilePath) -> [(String, String)]
     processEnvironment (ghcBin, libdir) =
@@ -648,42 +644,36 @@ cabalBuildDir workDir = do
 -- 'withGhcWrapperTool'.
 --
 -- If cabal can not figure it out, a 'CradleError' is returned.
-cabalGhcDirs :: FilePath -> IO (CradleLoadResult (FilePath, FilePath))
+cabalGhcDirs :: FilePath -> CradleLoadResultT IO (FilePath, FilePath)
 cabalGhcDirs workDir = do
-  libdirLoadResult <- readProcessWithCwd workDir  "cabal" ["exec", "-v0", "--", "ghc", "--print-libdir"] ""
-  libdirLoadResult `bindIO` \libdir -> do
-    exePathLoadResult <- readProcessWithCwd workDir  "cabal"
-        ["exec", "-v0", "--", "ghc", "-package-env=-", "-e", "do e <- System.Environment.getExecutablePath ; System.IO.putStr e"] ""
-    exePathLoadResult `bindIO` \exe -> pure $ CradleSuccess (trimEnd exe, trimEnd libdir)
+  libdir <- readProcessWithCwd_ workDir  "cabal" ["exec", "-v0", "--", "ghc", "--print-libdir"] ""
+  exe <- readProcessWithCwd_ workDir  "cabal"
+      ["exec", "-v0", "--", "ghc", "-package-env=-", "-e", "do e <- System.Environment.getExecutablePath ; System.IO.putStr e"] ""
+  pure (trimEnd exe, trimEnd libdir)
 
-cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
-cabalAction workDir mc l fp =
-  cabalProcess workDir "v2-repl" [fromMaybe (fixTargetPath fp) mc] >>= \case
-    CradleNone -> pure CradleNone
-    CradleFail err -> do
+cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> CradleLoadResultT IO ComponentOptions
+cabalAction workDir mc l fp = do
+  cabalProc <- (cabalProcess workDir "v2-repl" [fromMaybe (fixTargetPath fp) mc]) `modCradleError` \err -> do
+      deps <- cabalCradleDependencies workDir workDir
+      pure $ err { cradleErrorDependencies = cradleErrorDependencies err ++ deps }
+
+  (ex, output, stde, [(_, maybeArgs)]) <- liftIO $ readProcessWithOutputs [hie_bios_output] l workDir cabalProc
+
+  let args = fromMaybe [] maybeArgs
+  case processCabalWrapperArgs args of
+    Nothing -> do
       -- Provide some dependencies an IDE can look for to trigger a reload.
       -- Best effort. Assume the working directory is the
       -- root of the component, so we are right in trivial cases at least.
-      deps <- cabalCradleDependencies workDir workDir
-      pure $ CradleFail err { cradleErrorDependencies = cradleErrorDependencies err ++ deps }
-    CradleSuccess cabalProc -> do
-      (ex, output, stde, [(_, maybeArgs)]) <- readProcessWithOutputs [hie_bios_output] l workDir cabalProc
-
-      let args = fromMaybe [] maybeArgs
-      case processCabalWrapperArgs args of
-        Nothing -> do
-          -- Provide some dependencies an IDE can look for to trigger a reload.
-          -- Best effort. Assume the working directory is the
-          -- root of the component, so we are right in trivial cases at least.
-          deps <- cabalCradleDependencies workDir workDir
-          pure $ CradleFail (CradleError deps ex
-                    ["Failed to parse result of calling cabal"
-                    , unlines output
-                    , unlines stde
-                    , unlines $ args])
-        Just (componentDir, final_args) -> do
-          deps <- cabalCradleDependencies workDir componentDir
-          pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
+      deps <- liftIO $ cabalCradleDependencies workDir workDir
+      throwCE (CradleError deps ex
+                ["Failed to parse result of calling cabal"
+                , unlines output
+                , unlines stde
+                , unlines $ args])
+    Just (componentDir, final_args) -> do
+      deps <- liftIO $ cabalCradleDependencies workDir componentDir
+      CradleLoadResultT $ pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
   where
     -- Need to make relative on Windows, due to a Cabal bug with how it
     -- parses file targets with a C: drive in it
@@ -764,14 +754,13 @@ stackCradle wdir mc syaml =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Stack
         , runCradle = stackAction wdir mc syaml
-        , runGhcCmd = \args -> do
+        , runGhcCmd = \args -> runCradleResultT $ do
             -- Setup stack silently, since stack might print stuff to stdout in some cases (e.g. on Win)
             -- Issue 242 from HLS: https://github.com/haskell/haskell-language-server/issues/242
-            stackSetup <- readProcessWithCwd wdir "stack" (stackYamlProcessArgs syaml <> ["setup", "--silent"]) ""
-            stackSetup `bindIO` \_ ->
-              readProcessWithCwd wdir "stack"
-                (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
-                ""
+            _ <- readProcessWithCwd_ wdir "stack" (stackYamlProcessArgs syaml <> ["setup", "--silent"]) ""
+            readProcessWithCwd_ wdir "stack"
+              (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
+              ""
         }
     }
 
@@ -1036,22 +1025,25 @@ runGhcCmdOnPath wdir args = readProcessWithCwd wdir "ghc" args ""
 -- | Wrapper around 'readCreateProcess' that sets the working directory and
 -- clears the environment, suitable for invoking cabal/stack and raw ghc commands.
 readProcessWithCwd :: FilePath -> FilePath -> [String] -> String -> IO (CradleLoadResult String)
-readProcessWithCwd dir cmd args stdin = do
-  cleanEnv <- getCleanEnvironment
+readProcessWithCwd dir cmd args stdin = runCradleResultT $ readProcessWithCwd_ dir cmd args stdin
+
+readProcessWithCwd_ :: FilePath -> FilePath -> [String] -> String -> CradleLoadResultT IO String
+readProcessWithCwd_ dir cmd args stdin = do
+  cleanEnv <- liftIO getCleanEnvironment
   let createProc = (proc cmd args) { cwd = Just dir, env = Just cleanEnv }
   readProcessWithCwd' createProc stdin
 
 -- | Wrapper around 'readCreateProcessWithExitCode', wrapping the result in
 -- a 'CradleLoadResult'. Provides better error messages than raw 'readCreateProcess'.
-readProcessWithCwd' :: CreateProcess -> String -> IO (CradleLoadResult String)
+readProcessWithCwd' :: CreateProcess -> String -> CradleLoadResultT IO String
 readProcessWithCwd' createdProcess stdin = do
-  mResult <- optional $ readCreateProcessWithExitCode createdProcess stdin
+  mResult <- liftIO $ optional $ readCreateProcessWithExitCode createdProcess stdin
   let cmdString = prettyCmdSpec $ cmdspec createdProcess
   case mResult of
-    Just (ExitSuccess, stdo, _) -> pure $ CradleSuccess stdo
-    Just (exitCode, stdo, stde) -> pure $ CradleFail $
+    Just (ExitSuccess, stdo, _) -> pure stdo
+    Just (exitCode, stdo, stde) -> throwCE $
       CradleError [] exitCode ["Error when calling " <> cmdString, stdo, stde]
-    Nothing -> pure $ CradleFail $
+    Nothing -> throwCE $
       CradleError [] ExitSuccess ["Couldn't execute " <> cmdString]
 
 -- | Prettify 'CmdSpec', so we can show the command to a user
