@@ -23,11 +23,22 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - id:   extra-ghc
+      uses: haskell/actions/setup@v1
+      with:
+        ghc-version: '8.10.7'
+
     - uses: haskell/actions/setup@v1
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: '3.6'
         enable-stack: true
+
+    - name: Print extra ghc version
+      run: ghc-8.10.7 --version
+
+    - name: Print normal ghc version
+      run: ghc --version
 
     - name: Cache Cabal
       uses: actions/cache@v1.2.0
@@ -38,8 +49,11 @@ jobs:
     - run: cabal update
     - name: Build
       run: cabal build
-    - name: Test
-      run: cabal test
+    - name: Test Parser
+      run: cabal test parser-tests --test-show-details=direct
+    - name: Test Bios
+      # Run all tests in the project
+      run: cabal test bios-tests --test-show-details=direct --test-options="--ignore-tool-deps"
 
   sdist:
     runs-on: ubuntu-latest

@@ -2,13 +2,15 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeApplications #-}
 module Main where
 
 import Test.Tasty
 import Test.Tasty.HUnit
-#if __GLASGOW_HASKELL__ < 810
 import Test.Tasty.ExpectedFailure
-#endif
+import qualified Test.Tasty.Options as Tasty
+import qualified Test.Tasty.Ingredients as Tasty
 import qualified GHC as G
 import HIE.Bios
 import HIE.Bios.Ghc.Api
@@ -18,8 +20,9 @@ import HIE.Bios.Environment
 import HIE.Bios.Types
 import Control.Monad.IO.Class
 import Control.Monad ( forM_, unless )
+import Data.List ( sort, isPrefixOf, isInfixOf )
+import Data.Typeable
 import Data.Void
-import Data.List ( sort, isPrefixOf )
 import System.Directory
 import System.FilePath (addTrailingPathSeparator,  makeRelative, (</>) )
 import System.Info.Extra ( isWindows )
@@ -31,10 +34,25 @@ import qualified HIE.Bios.Ghc.Gap as Gap
 argDynamic :: [String]
 argDynamic = ["-dynamic" | Gap.hostIsDynamic]
 
+-- | This ghc version is assumed to be tested by CI to validate
+-- the "with-compiler" field is honoured by hie-bios.
+--
+-- If you change this version, make sure to also update 'cabal.project'
+-- in 'tests\/projects\/cabal-with-ghc'.
+extraGhcVersion :: String
+extraGhcVersion = "8.10.7"
+
+extraGhc :: String
+extraGhc = "ghc-" ++ extraGhcVersion
+
 main :: IO ()
 main = do
   writeStackYamlFiles
-  defaultMain $
+  stackDep <- checkToolIsAvailable "stack"
+  cabalDep <- checkToolIsAvailable "cabal"
+  extraGhcDep <- checkToolIsAvailable extraGhc
+
+  defaultMainWithIngredients (ignoreToolTests:defaultIngredients) $
     testGroup "Bios-tests"
       [ testGroup "Find cradle"
         [ testCaseSteps "simple-cabal"
@@ -93,89 +111,10 @@ main = do
                     _ -> assertFailure "Cradle loaded symlink"
         ]
       , testGroup "Loading tests"
-        $ linuxExlusiveTestCases
-        ++
-          [ testCaseSteps "failing-cabal" $ testDirectoryFail isCabalCradle "./tests/projects/failing-cabal" "MyLib.hs"
-            (\CradleError {..} -> do
-                cradleErrorExitCode @?= ExitFailure 1
-                cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
-          , testCaseSteps "failing-bios" $ testDirectoryFail isBiosCradle "./tests/projects/failing-bios" "B.hs"
-            (\CradleError {..} -> do
-                cradleErrorExitCode @?= ExitFailure 1
-                cradleErrorDependencies `shouldMatchList` ["hie.yaml"])
-          , testCaseSteps "failing-bios-ghc" $ testGetGhcVersionFail isBiosCradle "./tests/projects/failing-bios-ghc" "B.hs"
-            (\CradleError {..} -> do
-                cradleErrorExitCode @?= ExitSuccess
-                cradleErrorDependencies `shouldMatchList` []
-                length cradleErrorStderr @?= 1
-                "Couldn't execute myGhc" `isPrefixOf` head cradleErrorStderr @? "Error message should contain basic information" )
-          , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell" "B.hs"
-          , testCaseSteps "simple-bios-shell-deps" $ testLoadCradleDependencies isBiosCradle "./tests/projects/simple-bios-shell" "B.hs" (assertEqual "dependencies" ["hie.yaml"])
-          , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal" "B.hs"
-          , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct" "B.hs"
-          , testCaseSteps "nested-cabal" $ testLoadCradleDependencies isCabalCradle "./tests/projects/nested-cabal" "sub-comp/Lib.hs"
-            (\deps -> deps `shouldMatchList` ["sub-comp" </> "sub-comp.cabal", "cabal.project", "cabal.project.local"]
-            )
-          , testCaseSteps "nested-cabal2" $ testLoadCradleDependencies isCabalCradle "./tests/projects/nested-cabal" "MyLib.hs"
-            (\deps -> deps `shouldMatchList` ["nested-cabal.cabal", "cabal.project", "cabal.project.local"]
-            )
-          , testCaseSteps "multi-direct" {- tests if both components can be loaded -}
-                        $  testDirectory isMultiCradle "./tests/projects/multi-direct" "A.hs"
-                        >> testDirectory isMultiCradle "./tests/projects/multi-direct" "B.hs"
-          , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
-                        $  testDirectory isCabalCradle "./tests/projects/multi-cabal" "app/Main.hs"
-                        >> testDirectory isCabalCradle "./tests/projects/multi-cabal" "src/Lib.hs"
-          , testCaseSteps "monorepo-cabal" {- issue https://github.com/mpickering/hie-bios/issues/200 -}
-                        $  testDirectory isCabalCradle "./tests/projects/monorepo-cabal" "A/Main.hs"
-                        >> testDirectory isCabalCradle "./tests/projects/monorepo-cabal" "B/MyLib.hs"
--- TODO: Remove once stack and ghc-8.10.1 play well
--- https://github.com/bubba/hie-bios/runs/811271872?check_suite_focus=true
-#if __GLASGOW_HASKELL__ < 810
-          , expectFailBecause "stack repl does not fail on an invalid cabal file" $
-              testCaseSteps "failing-stack" $ testDirectoryFail isStackCradle "./tests/projects/failing-stack" "src/Lib.hs"
-                (\CradleError {..} -> do
-                    cradleErrorExitCode @?= ExitFailure 1
-                    cradleErrorDependencies `shouldMatchList` ["failing-stack.cabal", "stack.yaml", "package.yaml"])
-          , testCaseSteps "simple-stack" $ testDirectory isStackCradle "./tests/projects/simple-stack" "B.hs"
-          , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
-                        $  testDirectory isStackCradle "./tests/projects/multi-stack" "app/Main.hs"
-                        >> testDirectory isStackCradle "./tests/projects/multi-stack" "src/Lib.hs"
-          , testCaseSteps "nested-stack" $ testLoadCradleDependencies isStackCradle "./tests/projects/nested-stack" "sub-comp/Lib.hs"
-                (\deps -> deps `shouldMatchList`
-                  ["sub-comp" </> "sub-comp.cabal", "sub-comp" </> "package.yaml", "stack.yaml"]
-                )
-          , testCaseSteps "nested-stack2" $ testLoadCradleDependencies isStackCradle "./tests/projects/nested-stack" "MyLib.hs"
-              (\deps -> deps `shouldMatchList` ["nested-stack.cabal", "package.yaml", "stack.yaml"]
-              )
-          , testCaseSteps "stack-with-yaml" {- tests if both components can be loaded -}
-                        $  testDirectory isStackCradle "./tests/projects/stack-with-yaml" "app/Main.hs"
-                        >> testDirectory isStackCradle "./tests/projects/stack-with-yaml" "src/Lib.hs"
-          , testCaseSteps "multi-stack-with-yaml" {- tests if both components can be loaded -}
-                        $  testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appA/src/Lib.hs"
-                        >> testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appB/src/Lib.hs"
-          ,
-          -- Test for special characters in the path for parsing of the ghci-scripts.
-          -- Issue https://github.com/mpickering/hie-bios/issues/162
-          testCaseSteps "space stack"
-                        $  testDirectory isStackCradle "./tests/projects/space stack" "A.hs"
-                        >> testDirectory isStackCradle "./tests/projects/space stack" "B.hs"
-#endif
-        ]
-      , testGroup "Implicit cradle tests" $
-        [ testCaseSteps "implicit-cabal" $
-            testImplicitCradle "./tests/projects/implicit-cabal" "Main.hs" Cabal
-        , testCaseSteps "implicit-cabal-no-project" $
-            testImplicitCradle "./tests/projects/implicit-cabal-no-project" "Main.hs" Cabal
-        , testCaseSteps "implicit-cabal-deep-project" $
-            testImplicitCradle "./tests/projects/implicit-cabal-deep-project" "foo/Main.hs" Cabal
--- TODO: same here
-#if __GLASGOW_HASKELL__ < 810
-        , testCaseSteps "implicit-stack" $
-            testImplicitCradle "./tests/projects/implicit-stack" "Main.hs" Stack
-        , testCaseSteps "implicit-stack-multi"
-            $ testImplicitCradle "./tests/projects/implicit-stack-multi" "Main.hs" Stack
-            >> testImplicitCradle "./tests/projects/implicit-stack-multi" "other-package/Main.hs" Stack
-#endif
+        [ testGroup "bios" biosTestCases
+        , testGroup "direct" directTestCases
+        , testGroupWithDependency cabalDep (cabalTestCases extraGhcDep)
+        , ignoreOnGhc9AndNewer $ testGroupWithDependency stackDep stackTestCases
         ]
       ]
 
@@ -190,6 +129,108 @@ linuxExlusiveTestCases
   | otherwise
   = []
 
+cabalTestCases :: ToolDependency -> [TestTree]
+cabalTestCases extraGhcDep =
+  [ testCaseSteps "failing-cabal" $ testDirectoryFail isCabalCradle "./tests/projects/failing-cabal" "MyLib.hs"
+    (\CradleError {..} -> do
+        cradleErrorExitCode @?= ExitFailure 1
+        cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
+  , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal" "B.hs"
+  , testCaseSteps "nested-cabal" $ testLoadCradleDependencies isCabalCradle "./tests/projects/nested-cabal" "sub-comp/Lib.hs"
+    (\deps -> deps `shouldMatchList` ["sub-comp" </> "sub-comp.cabal", "cabal.project", "cabal.project.local"]
+    )
+  , testCaseSteps "nested-cabal2" $ testLoadCradleDependencies isCabalCradle "./tests/projects/nested-cabal" "MyLib.hs"
+    (\deps -> deps `shouldMatchList` ["nested-cabal.cabal", "cabal.project", "cabal.project.local"]
+    )
+  , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
+                $  testDirectory isCabalCradle "./tests/projects/multi-cabal" "app/Main.hs"
+                >> testDirectory isCabalCradle "./tests/projects/multi-cabal" "src/Lib.hs"
+  , testCaseSteps "monorepo-cabal" {- issue https://github.com/mpickering/hie-bios/issues/200 -}
+                $  testDirectory isCabalCradle "./tests/projects/monorepo-cabal" "A/Main.hs"
+                >> testDirectory isCabalCradle "./tests/projects/monorepo-cabal" "B/MyLib.hs"
+  , testGroup "Implicit cradle tests" $
+        [ testCaseSteps "implicit-cabal" $
+            testImplicitCradle "./tests/projects/implicit-cabal" "Main.hs" Cabal
+        , testCaseSteps "implicit-cabal-no-project" $
+            testImplicitCradle "./tests/projects/implicit-cabal-no-project" "Main.hs" Cabal
+        , testCaseSteps "implicit-cabal-deep-project" $
+            testImplicitCradle "./tests/projects/implicit-cabal-deep-project" "foo/Main.hs" Cabal
+        ]
+  , testGroupWithDependency extraGhcDep
+    [ expectFailBecause "hie-bios does not honour ghc in cabal.project"
+      $ testCaseSteps "Appropriate ghc and libdir" $ \step -> do
+        fp <- canonicalizePath "./tests/projects/cabal-with-ghc/src/MyLib.hs"
+        crd <- initialiseCradle isCabalCradle fp step
+        step "Get runtime GHC library directory"
+        testGetGhcLibDir crd extraGhcVersion
+        step "Get runtime GHC version"
+        testGetGhcVersion crd extraGhcVersion
+    ]
+  ]
+
+stackTestCases :: [TestTree]
+stackTestCases =
+  [ expectFailBecause "stack repl does not fail on an invalid cabal file" $
+      testCaseSteps "failing-stack" $ testDirectoryFail isStackCradle "./tests/projects/failing-stack" "src/Lib.hs"
+        (\CradleError {..} -> do
+            cradleErrorExitCode @?= ExitFailure 1
+            cradleErrorDependencies `shouldMatchList` ["failing-stack.cabal", "stack.yaml", "package.yaml"])
+  , testCaseSteps "simple-stack" $ testDirectory isStackCradle "./tests/projects/simple-stack" "B.hs"
+  , testCaseSteps "multi-stack" {- tests if both components can be loaded -}
+                $  testDirectory isStackCradle "./tests/projects/multi-stack" "app/Main.hs"
+                >> testDirectory isStackCradle "./tests/projects/multi-stack" "src/Lib.hs"
+  , testCaseSteps "nested-stack" $ testLoadCradleDependencies isStackCradle "./tests/projects/nested-stack" "sub-comp/Lib.hs"
+        (\deps -> deps `shouldMatchList`
+          ["sub-comp" </> "sub-comp.cabal", "sub-comp" </> "package.yaml", "stack.yaml"]
+        )
+  , testCaseSteps "nested-stack2" $ testLoadCradleDependencies isStackCradle "./tests/projects/nested-stack" "MyLib.hs"
+      (\deps -> deps `shouldMatchList` ["nested-stack.cabal", "package.yaml", "stack.yaml"]
+      )
+  , testCaseSteps "stack-with-yaml" {- tests if both components can be loaded -}
+                $  testDirectory isStackCradle "./tests/projects/stack-with-yaml" "app/Main.hs"
+                >> testDirectory isStackCradle "./tests/projects/stack-with-yaml" "src/Lib.hs"
+  , testCaseSteps "multi-stack-with-yaml" {- tests if both components can be loaded -}
+                $  testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appA/src/Lib.hs"
+                >> testDirectory isStackCradle "./tests/projects/multi-stack-with-yaml" "appB/src/Lib.hs"
+  ,
+    -- Test for special characters in the path for parsing of the ghci-scripts.
+    -- Issue https://github.com/mpickering/hie-bios/issues/162
+    testCaseSteps "space stack"
+                  $  testDirectory isStackCradle "./tests/projects/space stack" "A.hs"
+                  >> testDirectory isStackCradle "./tests/projects/space stack" "B.hs"
+  , testGroup "Implicit cradle tests"
+      [ testCaseSteps "implicit-stack" $
+          testImplicitCradle "./tests/projects/implicit-stack" "Main.hs" Stack
+      , testCaseSteps "implicit-stack-multi"
+          $ testImplicitCradle "./tests/projects/implicit-stack-multi" "Main.hs" Stack
+          >> testImplicitCradle "./tests/projects/implicit-stack-multi" "other-package/Main.hs" Stack
+      ]
+  ]
+
+biosTestCases :: [TestTree]
+biosTestCases =
+  [ testCaseSteps "failing-bios" $ testDirectoryFail isBiosCradle "./tests/projects/failing-bios" "B.hs"
+    (\CradleError {..} -> do
+        cradleErrorExitCode @?= ExitFailure 1
+        cradleErrorDependencies `shouldMatchList` ["hie.yaml"])
+  , testCaseSteps "failing-bios-ghc" $ testGetGhcVersionFail isBiosCradle "./tests/projects/failing-bios-ghc" "B.hs"
+    (\CradleError {..} -> do
+        cradleErrorExitCode @?= ExitSuccess
+        cradleErrorDependencies `shouldMatchList` []
+        length cradleErrorStderr @?= 1
+        "Couldn't execute myGhc" `isPrefixOf` head cradleErrorStderr @? "Error message should contain basic information" )
+  , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell" "B.hs"
+  , testCaseSteps "simple-bios-shell-deps" $ testLoadCradleDependencies isBiosCradle "./tests/projects/simple-bios-shell" "B.hs" (assertEqual "dependencies" ["hie.yaml"])
+  ]
+
+directTestCases :: [TestTree]
+directTestCases =
+  [ testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct" "B.hs"
+  , testCaseSteps "multi-direct" {- tests if both components can be loaded -}
+      $  testDirectory isMultiCradle "./tests/projects/multi-direct" "A.hs"
+      >> testDirectory isMultiCradle "./tests/projects/multi-direct" "B.hs"
+  ]
+
 testDirectory :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (String -> IO ()) -> IO ()
 testDirectory cradlePred rootDir file step =
   -- We need to copy over the directory to somewhere outside the source tree
@@ -199,29 +240,34 @@ testDirectory cradlePred rootDir file step =
     fp <- canonicalizePath (rootDir' </> file)
     crd <- initialiseCradle cradlePred fp step
     step "Get runtime GHC library directory"
-    testGetGhcLibDir crd
+    testGetGhcLibDir crd VERSION_ghc
     step "Get runtime GHC version"
-    testGetGhcVersion crd
+    testGetGhcVersion crd VERSION_ghc
     step "Initialise Flags"
     testLoadFile crd fp step
 
 -- | Here we are testing that the cradle's method of obtaining the ghcLibDir
 -- always works.
-testGetGhcLibDir :: Cradle a -> IO ()
-testGetGhcLibDir crd = do
+testGetGhcLibDir :: Cradle a -> String -> IO ()
+testGetGhcLibDir crd ghcVersion = do
   libDirRes <- getRuntimeGhcLibDir crd
-  isSuccess libDirRes @? "Must succeed loading ghc lib directory"
-  where isSuccess (CradleSuccess _) = True
-        isSuccess _ = False
+  isSuccess libDirRes
+  where
+    -- heuristically test that the produced $libdir makes sense.
+    isSuccess (CradleSuccess path) =
+      ghcVersion `isInfixOf` path @? "Expected \"" ++ ghcVersion
+                                     ++ "\" to be infix of: " ++ path
+    isSuccess _ =
+      assertFailure "Must succeed loading ghc lib directory"
 
 -- | Here we are testing that the cradle's method of getting the runtime ghc
 -- version is correct - which while testing, should be the version that we have
 -- built the tests with. This will fail if you compiled the tests with a ghc
 -- that doesn't equal the ghc on your path though :(
-testGetGhcVersion :: Cradle a -> IO ()
-testGetGhcVersion crd = do
+testGetGhcVersion :: Cradle a -> String -> IO ()
+testGetGhcVersion crd ghcVersion = do
   version <- getRuntimeGhcVersion crd
-  version @?= CradleSuccess VERSION_ghc
+  version @?= CradleSuccess ghcVersion
 
 testGetGhcVersionFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Assertion) -> (String -> IO ()) -> IO ()
 testGetGhcVersionFail cradlePred rootDir file cradleFailPred step =
@@ -400,3 +446,75 @@ stackYamlResolver =
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,2,2,0)))
   "lts-11.22" -- GHC 8.2.2
 #endif
+
+-- ------------------------------------------------------------------
+-- Most tests have some run-time tool dependencies.
+-- We only want to run tests if these tools are available.
+-- ------------------------------------------------------------------
+
+data ToolDependency = ToolDependency
+  { toolName :: String
+  , toolExists :: Bool
+  }
+
+checkToolIsAvailable :: String -> IO ToolDependency
+checkToolIsAvailable f = do
+  exists <- maybe False (const True) <$> findExecutable f
+  pure ToolDependency
+    { toolName = f
+    , toolExists = exists
+    }
+
+testGroupWithDependency :: ToolDependency -> [TestTree] -> TestTree
+testGroupWithDependency td tc = askOption @IgnoreToolDeps (\case
+  IgnoreToolDeps ignoreToolDep
+    | ignoreToolDep || toolExists td -> tg
+    | otherwise -> itg
+  )
+  where
+    tg = testGroup (toolName td) tc
+
+    itg =
+      ignoreTestBecause
+        ("These tests require that the following" ++
+        " tool can be found on the path: " ++ toolName td)
+        tg
+
+-- ------------------------------------------------------------------
+-- Run test-suite ignoring run-time tool dependencies.
+-- Can be used to force CI to run the whole test-suite.
+-- Makes sure that the full test-suite is being run on a properly configured
+-- environment.
+-- ------------------------------------------------------------------
+
+-- | This option, when set to 'True', specifies that we should run in the
+-- «list tests» mode
+newtype IgnoreToolDeps = IgnoreToolDeps Bool
+  deriving (Eq, Ord, Typeable)
+
+instance Tasty.IsOption IgnoreToolDeps where
+  defaultValue = IgnoreToolDeps False
+  parseValue = fmap IgnoreToolDeps . Tasty.safeReadBool
+  optionName = pure "ignore-tool-deps"
+  optionHelp = pure "Run tests whether their tool dependencies exist or not"
+  optionCLParser = Tasty.flagCLParser Nothing (IgnoreToolDeps True)
+
+-- | The ingredient that provides the test listing functionality
+ignoreToolTests :: Tasty.Ingredient
+ignoreToolTests = Tasty.TestManager [Tasty.Option (Proxy :: Proxy IgnoreToolDeps)] $
+  \opts _tree ->
+    case Tasty.lookupOption opts of
+      IgnoreToolDeps False -> Nothing
+      IgnoreToolDeps True -> Just $ pure True
+
+-- ------------------------------------------------------------------
+-- Ignore test group if built with GHC 9 or newer
+-- ------------------------------------------------------------------
+
+ignoreOnGhc9AndNewer :: TestTree -> TestTree
+ignoreOnGhc9AndNewer tt =
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && MIN_VERSION_GLASGOW_HASKELL(9,0,0,0))
+  ignoreTestBecause "Not supported on GHC >= 9"
+#endif
+  tt
+
