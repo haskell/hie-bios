@@ -23,11 +23,22 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - id:   extra-ghc
+      uses: haskell/actions/setup@v1
+      with:
+        ghc-version: '8.10.7'
+
     - uses: haskell/actions/setup@v1
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: '3.6'
         enable-stack: true
+
+    - name: Print extra ghc version
+      run: ${{ steps.extra-ghc.outputs.ghc-exe }} --version
+
+    - name: Print normal ghc version
+      run: ghc --version
 
     - name: Cache Cabal
       uses: actions/cache@v1.2.0
