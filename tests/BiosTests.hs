@@ -111,7 +111,9 @@ main = do
                     _ -> assertFailure "Cradle loaded symlink"
         ]
       , testGroup "Loading tests"
-        [ testGroupWithDependency cabalDep (cabalTestCases extraGhcDep)
+        [ testGroup "bios" biosTestCases
+        , testGroup "direct" directTestCases
+        , testGroupWithDependency cabalDep (cabalTestCases extraGhcDep)
         , ignoreOnGhc9AndNewer $ testGroupWithDependency stackDep stackTestCases
         ]
       ]
@@ -133,29 +135,13 @@ cabalTestCases extraGhcDep =
     (\CradleError {..} -> do
         cradleErrorExitCode @?= ExitFailure 1
         cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
-  , testCaseSteps "failing-bios" $ testDirectoryFail isBiosCradle "./tests/projects/failing-bios" "B.hs"
-    (\CradleError {..} -> do
-        cradleErrorExitCode @?= ExitFailure 1
-        cradleErrorDependencies `shouldMatchList` ["hie.yaml"])
-  , testCaseSteps "failing-bios-ghc" $ testGetGhcVersionFail isBiosCradle "./tests/projects/failing-bios-ghc" "B.hs"
-    (\CradleError {..} -> do
-        cradleErrorExitCode @?= ExitSuccess
-        cradleErrorDependencies `shouldMatchList` []
-        length cradleErrorStderr @?= 1
-        "Couldn't execute myGhc" `isPrefixOf` head cradleErrorStderr @? "Error message should contain basic information" )
-  , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell" "B.hs"
-  , testCaseSteps "simple-bios-shell-deps" $ testLoadCradleDependencies isBiosCradle "./tests/projects/simple-bios-shell" "B.hs" (assertEqual "dependencies" ["hie.yaml"])
   , testCaseSteps "simple-cabal" $ testDirectory isCabalCradle "./tests/projects/simple-cabal" "B.hs"
-  , testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct" "B.hs"
   , testCaseSteps "nested-cabal" $ testLoadCradleDependencies isCabalCradle "./tests/projects/nested-cabal" "sub-comp/Lib.hs"
     (\deps -> deps `shouldMatchList` ["sub-comp" </> "sub-comp.cabal", "cabal.project", "cabal.project.local"]
     )
   , testCaseSteps "nested-cabal2" $ testLoadCradleDependencies isCabalCradle "./tests/projects/nested-cabal" "MyLib.hs"
     (\deps -> deps `shouldMatchList` ["nested-cabal.cabal", "cabal.project", "cabal.project.local"]
     )
-  , testCaseSteps "multi-direct" {- tests if both components can be loaded -}
-                $  testDirectory isMultiCradle "./tests/projects/multi-direct" "A.hs"
-                >> testDirectory isMultiCradle "./tests/projects/multi-direct" "B.hs"
   , testCaseSteps "multi-cabal" {- tests if both components can be loaded -}
                 $  testDirectory isCabalCradle "./tests/projects/multi-cabal" "app/Main.hs"
                 >> testDirectory isCabalCradle "./tests/projects/multi-cabal" "src/Lib.hs"
@@ -221,6 +207,29 @@ stackTestCases =
       ]
   ]
 
+biosTestCases :: [TestTree]
+biosTestCases =
+  [ testCaseSteps "failing-bios" $ testDirectoryFail isBiosCradle "./tests/projects/failing-bios" "B.hs"
+    (\CradleError {..} -> do
+        cradleErrorExitCode @?= ExitFailure 1
+        cradleErrorDependencies `shouldMatchList` ["hie.yaml"])
+  , testCaseSteps "failing-bios-ghc" $ testGetGhcVersionFail isBiosCradle "./tests/projects/failing-bios-ghc" "B.hs"
+    (\CradleError {..} -> do
+        cradleErrorExitCode @?= ExitSuccess
+        cradleErrorDependencies `shouldMatchList` []
+        length cradleErrorStderr @?= 1
+        "Couldn't execute myGhc" `isPrefixOf` head cradleErrorStderr @? "Error message should contain basic information" )
+  , testCaseSteps "simple-bios-shell" $ testDirectory isBiosCradle "./tests/projects/simple-bios-shell" "B.hs"
+  , testCaseSteps "simple-bios-shell-deps" $ testLoadCradleDependencies isBiosCradle "./tests/projects/simple-bios-shell" "B.hs" (assertEqual "dependencies" ["hie.yaml"])
+  ]
+
+directTestCases :: [TestTree]
+directTestCases =
+  [ testCaseSteps "simple-direct" $ testDirectory isDirectCradle "./tests/projects/simple-direct" "B.hs"
+  , testCaseSteps "multi-direct" {- tests if both components can be loaded -}
+      $  testDirectory isMultiCradle "./tests/projects/multi-direct" "A.hs"
+      >> testDirectory isMultiCradle "./tests/projects/multi-direct" "B.hs"
+  ]
 
 testDirectory :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (String -> IO ()) -> IO ()
 testDirectory cradlePred rootDir file step =
