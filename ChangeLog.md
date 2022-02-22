@@ -1,5 +1,9 @@
 # ChangeLog hie-bios
 
+## TBD - 0.9.0
+
+* Drop support for GHC 8.4 [#331](https://github.com/haskell/hie-bios/pull/331)
+
 ## 2022-01-06 - 0.8.1
 
 * Add support for GHC 9.0.2 [#322](https://github.com/haskell/hie-bios/pull/322)

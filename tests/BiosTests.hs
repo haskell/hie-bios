@@ -439,12 +439,6 @@ stackYamlResolver =
   "lts-14.27" -- GHC 8.6.5
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,6,4,0)))
   "lts-13.19" -- GHC 8.6.4
-#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,4,4,0)))
-  "lts-12.26" -- GHC 8.4.4
-#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,4,3,0)))
-  "lts-12.14" -- GHC 8.4.3
-#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,2,2,0)))
-  "lts-11.22" -- GHC 8.2.2
 #endif
 
 -- ------------------------------------------------------------------
