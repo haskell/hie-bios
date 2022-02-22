@@ -17,6 +17,10 @@ Extra-Source-Files:     ChangeLog.md
                         wrappers/cabal
                         wrappers/cabal.hs
                         tests/configs/*.yaml
+                        tests/projects/cabal-with-ghc/cabal-with-ghc.cabal
+                        tests/projects/cabal-with-ghc/cabal.project
+                        tests/projects/cabal-with-ghc/hie.yaml
+                        tests/projects/cabal-with-ghc/src/MyLib.hs
                         tests/projects/symlink-test/a/A.hs
                         tests/projects/symlink-test/hie.yaml
                         tests/projects/deps-bios-new/A.hs
@@ -217,6 +221,7 @@ test-suite bios-tests
       filepath,
       directory,
       temporary,
+      tagged,
       ghc
 
   hs-source-dirs: tests/
