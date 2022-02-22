@@ -50,7 +50,8 @@ jobs:
     - name: Build
       run: cabal build
     - name: Test
-      run: cabal test
+      # Run all tests in the project
+      run: cabal test --test-options="--ignore-tool-deps"
 
   sdist:
     runs-on: ubuntu-latest
