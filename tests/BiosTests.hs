@@ -157,8 +157,7 @@ cabalTestCases extraGhcDep =
             testImplicitCradle "./tests/projects/implicit-cabal-deep-project" "foo/Main.hs" Cabal
         ]
   , testGroupWithDependency extraGhcDep
-    [ expectFailBecause "hie-bios does not honour ghc in cabal.project"
-      $ testCaseSteps "Appropriate ghc and libdir" $ \step -> do
+    [ testCaseSteps "Appropriate ghc and libdir" $ \step -> do
         fp <- canonicalizePath "./tests/projects/cabal-with-ghc/src/MyLib.hs"
         crd <- initialiseCradle isCabalCradle fp step
         step "Get runtime GHC library directory"
