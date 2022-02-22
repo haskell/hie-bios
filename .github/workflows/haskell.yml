@@ -50,10 +50,10 @@ jobs:
     - name: Build
       run: cabal build
     - name: Test Parser
-      run: cabal test parser-tests
+      run: cabal test parser-tests --test-show-details=direct
     - name: Test Bios
       # Run all tests in the project
-      run: cabal test bios-tests --test-options="--ignore-tool-deps"
+      run: cabal test bios-tests --test-show-details=direct --test-options="--ignore-tool-deps"
 
   sdist:
     runs-on: ubuntu-latest
