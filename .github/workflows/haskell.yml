@@ -35,7 +35,7 @@ jobs:
         enable-stack: true
 
     - name: Print extra ghc version
-      run: ${{ steps.extra-ghc.outputs.ghc-exe }} --version
+      run: ghc-8.10.7 --version
 
     - name: Print normal ghc version
       run: ghc --version
