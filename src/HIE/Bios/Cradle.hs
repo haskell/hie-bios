@@ -594,7 +594,7 @@ withGhcWrapperTool (mbGhc, ghcArgs) wdir = do
       if isWindows
       then
         withSystemTempDirectory "hie-bios" $ \ tmpDir -> do
-          let wrapper_hs = wrapper_fp -<.> "hs"
+          let wrapper_hs = tmpDir </> takeFileName wrapper_fp -<.> "hs"
           writeFile wrapper_hs wrapperContents
           let ghc = (proc mbGhc $
                       ghcArgs ++ ["-rtsopts=ignore", "-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs])
