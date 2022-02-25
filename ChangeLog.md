@@ -1,7 +1,9 @@
 # ChangeLog hie-bios
 
-## TBD - 0.9.0
+## 2022-02-25 - 0.9.0
 
+* Use the proper GHC version given by cabal [#282](https://github.com/haskell/hie-bios/pull/282)
+  * In particular, honour the `with-compiler` field in `cabal.project`
 * Drop support for GHC 8.4 [#331](https://github.com/haskell/hie-bios/pull/331)
 
 ## 2022-01-06 - 0.8.1
