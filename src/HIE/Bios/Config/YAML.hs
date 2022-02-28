@@ -22,10 +22,23 @@ module HIE.Bios.Config.YAML
 
 import           Control.Applicative ((<|>))
 import           Data.Aeson
+import           Data.Aeson.KeyMap   (keys)
 import           Data.Aeson.Types    (Object, Parser, Value (Null),
                                       typeMismatch)
 import qualified Data.Char           as C (toLower)
+import           Data.List           ((\\))
 import           GHC.Generics        (Generic)
+
+checkObjectKeys :: [Key] -> Object -> Parser ()
+checkObjectKeys allowedKeys obj =
+  let extraKeys = keys obj \\ allowedKeys
+   in case extraKeys of
+        []          -> pure ()
+        _           -> fail $ mconcat [ "Unexpected keys "
+                                      , show extraKeys
+                                      , ", keys allowed: "
+                                      , show allowedKeys
+                                      ]
 
 data CradleConfigYAML a
   = CradleConfigYAML { cradle       :: CradleComponent a
@@ -73,10 +86,10 @@ data CabalConfig
   = CabalConfig { cabalComponents :: OneOrManyComponents CabalComponent }
 
 instance FromJSON CabalConfig where
-  parseJSON v@(Array _)  = CabalConfig . ManyComponents <$> parseJSON v
-  parseJSON v@(Object _) = CabalConfig <$> parseJSON v
-  parseJSON Null         = pure $ CabalConfig NoComponent
-  parseJSON v            = typeMismatch "CabalConfig" v
+  parseJSON v@(Array _)     = CabalConfig . ManyComponents <$> parseJSON v
+  parseJSON v@(Object obj)  = (checkObjectKeys ["component", "components"] obj) *> (CabalConfig <$> parseJSON v)
+  parseJSON Null            = pure $ CabalConfig NoComponent
+  parseJSON v               = typeMismatch "CabalConfig" v
 
 data CabalComponent
   = CabalComponent { cabalPath      :: FilePath
@@ -85,9 +98,10 @@ data CabalComponent
 
 instance FromJSON CabalComponent where
   parseJSON =
-    let parseCabalComponent obj = CabalComponent
-                                    <$> obj .: "path"
-                                    <*> obj .: "component"
+    let parseCabalComponent obj = checkObjectKeys ["path", "component"] obj
+                                    *> (CabalComponent
+                                          <$> obj .: "path"
+                                          <*> obj .: "component")
      in withObject "CabalComponent" parseCabalComponent
 
 data StackConfig
@@ -103,18 +117,21 @@ data StackComponent
 
 instance FromJSON StackConfig where
   parseJSON v@(Array _)     = StackConfig Nothing . ManyComponents <$> parseJSON v
-  parseJSON v@(Object obj)  = StackConfig
-                                <$> obj .:? "stackYaml"
-                                <*> parseJSON v
+  parseJSON v@(Object obj)  = (checkObjectKeys ["component", "components", "stackYaml"] obj)
+                                *> (StackConfig
+                                      <$> obj .:? "stackYaml"
+                                      <*> parseJSON v
+                                    )
   parseJSON Null            = pure $ StackConfig Nothing NoComponent
   parseJSON v               = typeMismatch "StackConfig" v
 
 instance FromJSON StackComponent where
   parseJSON =
-    let parseStackComponent obj = StackComponent
-                                    <$> obj .: "path"
-                                    <*> obj .: "component"
-                                    <*> obj .:? "stackYaml"
+    let parseStackComponent obj = (checkObjectKeys ["path", "component", "stackYaml"] obj)
+                                    *> (StackComponent
+                                          <$> obj .: "path"
+                                          <*> obj .: "component"
+                                          <*> obj .:? "stackYaml")
      in withObject "StackComponent" parseStackComponent
 
 data OneOrManyComponents component
@@ -124,10 +141,10 @@ data OneOrManyComponents component
 
 instance FromJSON component => FromJSON (OneOrManyComponents component) where
   parseJSON =
-    let parseStackComponents o = parseSingleComponent o <|> parseSubComponents o <|> pure NoComponent
+    let parseComponents o = (parseSingleComponent o <|> parseSubComponents o <|> pure NoComponent)
         parseSingleComponent o = SingleComponent <$> o .: "component"
         parseSubComponents   o = ManyComponents <$> o .: "components"
-     in withObject "StackComponents" parseStackComponents
+     in withObject "Components" parseComponents
 
 data DirectConfig
   = DirectConfig { arguments :: [String] }
@@ -152,6 +169,8 @@ parseBiosConfig obj =
       parseDepsCallable o = (Just . Program <$> o .: "dependency-program")
                             <|> (Just . Shell <$> o .: "dependency-shell")
                             <|> (pure Nothing)
-   in BiosConfig <$> parseCallable obj
-                 <*> parseDepsCallable obj
-                 <*> (obj .:? "with-ghc")
+      parse o = BiosConfig  <$> parseCallable o
+                            <*> parseDepsCallable o
+                            <*> (o .:? "with-ghc")
+      check = checkObjectKeys ["program", "shell", "dependency-program", "dependency-shell", "with-ghc"]
+   in check obj *> parse obj
