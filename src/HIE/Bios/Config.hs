@@ -5,7 +5,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE CPP #-}
 -- | Logic and datatypes for parsing @hie.yaml@ files.
 module HIE.Bios.Config(
     readConfig,
