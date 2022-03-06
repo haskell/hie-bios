@@ -1,0 +1,5 @@
+-- This file is intentional
+--
+-- Issue: https://github.com/haskell/hie-bios/issues/336
+--
+:set +t
