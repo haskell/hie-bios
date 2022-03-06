@@ -65,8 +65,42 @@ import qualified HIE.Bios.Ghc.Gap as Gap
 import GHC.Fingerprint (fingerprintString)
 import GHC.ResponseFile (escapeArgs)
 
+----------------------------------------------------------------
+-- Environment variables used by hie-bios.
+--
+-- If you need more, add a constant here.
+----------------------------------------------------------------
+
+-- | Environment variable containing the filepath to which
+-- cradle actions write their results to.
+-- If the filepath does not exist, cradle actions must create them.
 hie_bios_output :: String
 hie_bios_output = "HIE_BIOS_OUTPUT"
+
+-- | Environment variable pointing to the GHC location used by
+-- cabal's and stack's GHC wrapper.
+--
+-- If not set, will default to sensible defaults.
+hie_bios_ghc :: String
+hie_bios_ghc = "HIE_BIOS_GHC"
+
+-- | Environment variable with extra arguments passed to the GHC location
+-- in cabal's and stack's GHC wrapper.
+--
+-- If not set, assume no extra arguments.
+hie_bios_ghc_args :: String
+hie_bios_ghc_args = "HIE_BIOS_GHC_ARGS"
+
+-- | Environment variable pointing to the source file location that caused
+-- the cradle action to be executed.
+hie_bios_arg :: String
+hie_bios_arg = "HIE_BIOS_ARG"
+
+-- | Environment variable pointing to a filepath to which dependencies
+-- of a cradle can be written to by the cradle action.
+hie_bios_deps :: String
+hie_bios_deps = "HIE_BIOS_DEPS"
+
 ----------------------------------------------------------------
 
 -- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
@@ -399,7 +433,7 @@ biosAction :: FilePath
 biosAction wdir bios bios_deps l fp = do
   bios' <- callableToProcess bios (Just fp)
   (ex, _stdo, std, [(_, res),(_, mb_deps)]) <-
-    readProcessWithOutputs [hie_bios_output, "HIE_BIOS_DEPS"] l wdir bios'
+    readProcessWithOutputs [hie_bios_output, hie_bios_deps] l wdir bios'
 
   deps <- case mb_deps of
     Just x  -> return x
@@ -413,9 +447,7 @@ biosAction wdir bios bios_deps l fp = do
 callableToProcess :: Callable -> Maybe String -> IO CreateProcess
 callableToProcess (Command shellCommand) file = do
   old_env <- getEnvironment
-  return $ (shell shellCommand) { env = (: old_env) . (,) hieBiosArg <$> file }
-    where
-      hieBiosArg = "HIE_BIOS_ARG"
+  return $ (shell shellCommand) { env = (: old_env) . (,) hie_bios_arg <$> file }
 callableToProcess (Program path) file = do
   canon_path <- canonicalizePath path
   return $ proc canon_path (maybeToList file)
@@ -447,7 +479,7 @@ cabalCradle wdir mc =
 --
 -- Invokes the cabal process in the given directory.
 -- Finds the appropriate @ghc@ version as a fallback and provides the path
--- to the custom ghc wrapper via 'HIE_BIOS_GHC' environment variable which
+-- to the custom ghc wrapper via 'hie_bios_ghc' environment variable which
 -- the custom ghc wrapper may use as a fallback if it can not respond to certain
 -- queries, such as ghc version or location of the libdir.
 cabalProcess :: FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
@@ -462,7 +494,7 @@ cabalProcess workDir command args = do
   where
     processEnvironment :: (FilePath, FilePath) -> [(String, String)]
     processEnvironment (ghcBin, libdir) =
-      [("HIE_BIOS_GHC", ghcBin), ("HIE_BIOS_GHC_ARGS",  "-B" ++ libdir)]
+      [(hie_bios_ghc, ghcBin), (hie_bios_ghc_args,  "-B" ++ libdir)]
 
     setupEnvironment :: (FilePath, FilePath) -> IO [(String, String)]
     setupEnvironment ghcDirs = do
@@ -659,7 +691,7 @@ cabalGhcDirs workDir = do
 
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> CradleLoadResultT IO ComponentOptions
 cabalAction workDir mc l fp = do
-  cabalProc <- (cabalProcess workDir "v2-repl" [fromMaybe (fixTargetPath fp) mc]) `modCradleError` \err -> do
+  cabalProc <- cabalProcess workDir "v2-repl" [fromMaybe (fixTargetPath fp) mc] `modCradleError` \err -> do
       deps <- cabalCradleDependencies workDir workDir
       pure $ err { cradleErrorDependencies = cradleErrorDependencies err ++ deps }
 
@@ -672,11 +704,14 @@ cabalAction workDir mc l fp = do
       -- Best effort. Assume the working directory is the
       -- root of the component, so we are right in trivial cases at least.
       deps <- liftIO $ cabalCradleDependencies workDir workDir
-      throwCE (CradleError deps ex
-                ["Failed to parse result of calling cabal"
+      throwCE (CradleError deps ex $
+                [ "Failed to parse result of calling cabal"
+                , "Failed command: " <> prettyCmdSpec (cmdspec cabalProc)
                 , unlines output
                 , unlines stde
-                , unlines $ args])
+                , unlines $ args
+                , "Process Environment:"]
+                <> prettyProcessEnv cabalProc)
     Just (componentDir, final_args) -> do
       deps <- liftIO $ cabalCradleDependencies workDir componentDir
       CradleLoadResultT $ pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
@@ -1048,11 +1083,26 @@ readProcessWithCwd' createdProcess stdin = do
   case mResult of
     Just (ExitSuccess, stdo, _) -> pure stdo
     Just (exitCode, stdo, stde) -> throwCE $
-      CradleError [] exitCode ["Error when calling " <> cmdString, stdo, stde]
+      CradleError [] exitCode $
+        ["Error when calling " <> cmdString, stdo, stde] <> prettyProcessEnv createdProcess
     Nothing -> throwCE $
-      CradleError [] ExitSuccess ["Couldn't execute " <> cmdString]
+      CradleError [] ExitSuccess $
+        ["Couldn't execute " <> cmdString] <> prettyProcessEnv createdProcess
 
 -- | Prettify 'CmdSpec', so we can show the command to a user
 prettyCmdSpec :: CmdSpec -> String
 prettyCmdSpec (ShellCommand s) = s
 prettyCmdSpec (RawCommand cmd args) = cmd ++ " " ++ unwords args
+
+-- | Pretty print hie-bios's relevant environment variables.
+prettyProcessEnv :: CreateProcess -> [String]
+prettyProcessEnv p =
+  [ key <> ": " <> value
+  | (key, value) <- fromMaybe [] (env p)
+  , key `elem` [ hie_bios_output
+               , hie_bios_ghc
+               , hie_bios_ghc_args
+               , hie_bios_arg
+               , hie_bios_deps
+               ]
+  ]
