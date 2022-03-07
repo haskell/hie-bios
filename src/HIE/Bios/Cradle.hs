@@ -646,9 +646,15 @@ cabalBuildDir workDir = do
 -- If cabal can not figure it out, a 'CradleError' is returned.
 cabalGhcDirs :: FilePath -> CradleLoadResultT IO (FilePath, FilePath)
 cabalGhcDirs workDir = do
-  libdir <- readProcessWithCwd_ workDir  "cabal" ["exec", "-v0", "--", "ghc", "--print-libdir"] ""
-  exe <- readProcessWithCwd_ workDir  "cabal"
-      ["exec", "-v0", "--", "ghc", "-package-env=-", "-e", "do e <- System.Environment.getExecutablePath ; System.IO.putStr e"] ""
+  libdir <- readProcessWithCwd_ workDir "cabal" ["exec", "-v0", "--", "ghc", "--print-libdir"] ""
+  exe <- readProcessWithCwd_ workDir "cabal"
+      -- DON'T TOUCH THIS CODE
+      -- This works with 'NoImplicitPrelude', with 'RebindableSyntax' and other shenanigans.
+      -- @-package-env=-@ doesn't work with ghc prior 8.4.x
+      [ "exec", "-v0", "--" , "ghc", "-package-env=-", "-ignore-dot-ghci", "-e"
+      , "Control.Monad.join (Control.Monad.fmap System.IO.putStr System.Environment.getExecutablePath)"
+      ]
+      ""
   pure (trimEnd exe, trimEnd libdir)
 
 cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> CradleLoadResultT IO ComponentOptions
