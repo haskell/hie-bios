@@ -1,5 +1,12 @@
 # ChangeLog hie-bios
 
+## 2022-03-07 - 0.9.1
+
+* Ignore .ghci files while querying project GHC [#337](https://github.com/haskell/hie-bios/pull/337)
+  * Fixes a bug where hie-bios fails to load cabal cradles with `.ghci` files
+* Improve error messages if cabal invocation fails [#338](https://github.com/haskell/hie-bios/pull/338)
+* Allow text-2.0 [#335](https://github.com/haskell/hie-bios/pull/335)
+
 ## 2022-02-25 - 0.9.0
 
 * Use the proper GHC version given by cabal [#282](https://github.com/haskell/hie-bios/pull/282)
@@ -18,7 +25,7 @@
 ## 2021-08-30 - 0.7.6
 
 * Don't look for NIX_GHC_LIBDIR as it is redundant [#294](https://github.com/mpickering/hie-bios/pull/294)
-* Add compatbility for GHC 9.0 and 9.2 [#300](https://github.com/mpickering/hie-bios/pull/300)
+* Add compatibility for GHC 9.0 and 9.2 [#300](https://github.com/mpickering/hie-bios/pull/300)
   * Add CPP statements for IncludeSpecs [#307](https://github.com/mpickering/hie-bios/pull/307)
 * Refactor implicit config discovery [#291](https://github.com/mpickering/hie-bios/pull/291)
 * Log stderr of stack to display more informative error messages to users. [#254](https://github.com/mpickering/hie-bios/pull/254)
