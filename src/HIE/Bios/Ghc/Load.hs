@@ -120,7 +120,7 @@ collectASTs action = do
   Gap.modifySession $ Gap.setFrontEndHooks (Just (astHook ref1))
   res <- action
   tcs <- liftIO $ readIORef ref1
-  -- Unset the hook so that we don't retain the reference ot the IORef so it can be gced.
+  -- Unset the hook so that we don't retain the reference to the IORef so it can be GCed.
   -- This stops the typechecked modules being retained in some cases.
   liftIO $ writeIORef ref1 []
   Gap.modifySession $ Gap.setFrontEndHooks Nothing
