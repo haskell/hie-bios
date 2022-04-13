@@ -1,6 +1,9 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveFoldable #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 {-# LANGUAGE DeriveFoldable #-}
@@ -9,6 +12,12 @@ module HIE.Bios.Types where
 
 import           System.Exit
 import           Control.Exception              ( Exception )
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Class
+#if MIN_VERSION_base(4,9,0)
+import qualified Control.Monad.Fail as Fail
+#endif
 
 data BIOSVerbosity = Silent | Verbose
 
@@ -68,6 +77,10 @@ data CradleLoadResult r
   | CradleNone -- ^ No attempt was made to load the cradle.
  deriving (Functor, Foldable, Traversable, Show, Eq)
 
+cradleLoadResult :: c -> (CradleError -> c) -> (r -> c) -> CradleLoadResult r -> c
+cradleLoadResult c _ _ CradleNone        = c
+cradleLoadResult _ f _ (CradleFail e)    = f e
+cradleLoadResult _ _ f (CradleSuccess r) = f r
 
 instance Applicative CradleLoadResult where
   pure = CradleSuccess
@@ -82,11 +95,65 @@ instance Monad CradleLoadResult where
   CradleFail err >>= _ = CradleFail err
   CradleNone >>= _ = CradleNone
 
-bindIO :: CradleLoadResult a -> (a -> IO (CradleLoadResult b)) -> IO (CradleLoadResult b)
-bindIO  (CradleSuccess r) k = k r
-bindIO (CradleFail err) _ = return $ CradleFail err
-bindIO CradleNone _ = return CradleNone
+newtype CradleLoadResultT m a = CradleLoadResultT { runCradleResultT :: m (CradleLoadResult a) }
 
+instance Functor f => Functor (CradleLoadResultT f) where
+  {-# INLINE fmap #-}
+  fmap f = CradleLoadResultT . (fmap . fmap) f . runCradleResultT
+
+instance (Monad m, Applicative m) => Applicative (CradleLoadResultT m) where
+  {-# INLINE pure #-}
+  pure = CradleLoadResultT . pure . CradleSuccess
+  {-# INLINE (<*>) #-}
+  x <*> f = CradleLoadResultT $ do
+              a <- runCradleResultT x
+              case a of
+                CradleSuccess a' -> do
+                  b <- runCradleResultT f
+                  case b of
+                    CradleSuccess b' -> pure (CradleSuccess (a' b'))
+                    CradleFail err -> pure $ CradleFail err
+                    CradleNone -> pure CradleNone
+                CradleFail err -> pure $ CradleFail err
+                CradleNone -> pure CradleNone
+
+instance Monad m => Monad (CradleLoadResultT m) where
+  {-# INLINE return #-}
+  return = CradleLoadResultT . return . CradleSuccess
+  {-# INLINE (>>=) #-}
+  x >>= f = CradleLoadResultT $ do
+    val <- runCradleResultT x
+    case val of
+      CradleSuccess r -> runCradleResultT . f $ r
+      CradleFail err -> return $ CradleFail err
+      CradleNone -> return $ CradleNone
+#if !(MIN_VERSION_base(4,13,0))
+  fail = CradleLoadResultT . fail
+  {-# INLINE fail #-}
+#endif
+#if MIN_VERSION_base(4,9,0)
+instance Fail.MonadFail m => Fail.MonadFail (CradleLoadResultT m) where
+  fail = CradleLoadResultT . Fail.fail
+  {-# INLINE fail #-}
+#endif
+
+instance MonadTrans CradleLoadResultT where
+    lift = CradleLoadResultT . liftM CradleSuccess
+    {-# INLINE lift #-}
+
+instance (MonadIO m) => MonadIO (CradleLoadResultT m) where
+    liftIO = lift . liftIO
+    {-# INLINE liftIO #-}
+
+modCradleError :: Monad m => CradleLoadResultT m a -> (CradleError -> m CradleError) -> CradleLoadResultT m a
+modCradleError action f = CradleLoadResultT $ do
+  a <- runCradleResultT action
+  case a of
+    CradleFail err -> CradleFail <$> f err
+    _ -> pure a
+
+throwCE :: Monad m => CradleError -> CradleLoadResultT m a
+throwCE = CradleLoadResultT . return . CradleFail
 
 data CradleError = CradleError
   { cradleErrorDependencies :: [FilePath]

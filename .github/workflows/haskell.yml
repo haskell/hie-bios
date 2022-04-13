@@ -15,19 +15,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['9.2.1', '9.0.2', '9.0.1', '8.10.4', '8.8.4', '8.6.5', '8.4.4']
+        ghc: ['9.2.1', '9.0.2', '9.0.1', '8.10.4', '8.8.4', '8.6.5']
         os: [ubuntu-latest, macOS-latest, windows-latest]
-        exclude:
-          - os: macOS-latest
-            ghc: '8.4.4' # fails due to ghc panic
 
     steps:
     - uses: actions/checkout@v2
+    - id:   extra-ghc
+      uses: haskell/actions/setup@v1
+      with:
+        ghc-version: '8.10.7'
+
     - uses: haskell/actions/setup@v1
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: '3.6'
         enable-stack: true
+
+    - name: Print extra ghc version
+      run: ghc-8.10.7 --version
+
+    - name: Print normal ghc version
+      run: ghc --version
 
     - name: Cache Cabal
       uses: actions/cache@v1.2.0
@@ -38,8 +46,11 @@ jobs:
     - run: cabal update
     - name: Build
       run: cabal build
-    - name: Test
-      run: cabal test
+    - name: Test Parser
+      run: cabal test parser-tests --test-show-details=direct
+    - name: Test Bios
+      # Run all tests in the project
+      run: cabal test bios-tests --test-show-details=direct --test-options="--ignore-tool-deps"
 
   sdist:
     runs-on: ubuntu-latest
