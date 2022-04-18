@@ -1,9 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
 import Control.Monad ( forM )
+import qualified Colog.Core as L
 import Data.Version (showVersion)
+import Data.Text.Prettyprint.Doc
 import Options.Applicative
 import System.Directory (getCurrentDirectory)
 import System.IO (stdout, hSetEncoding, utf8)
@@ -66,18 +69,22 @@ main = do
           Just yaml -> loadCradle yaml
           Nothing -> loadImplicitCradle (cwd </> "File.hs")
 
+    let
+      printLog (L.WithSeverity l sev) = "[" ++ show sev ++ "] " ++ show (pretty l)
+      logger :: forall a . Pretty a => L.LogAction IO (L.WithSeverity a)
+      logger = L.cmap printLog L.logStringStderr
 
     res <- case cmd of
-      Check targetFiles -> checkSyntax cradle targetFiles
+      Check targetFiles -> checkSyntax logger cradle targetFiles
       Debug files -> case files of
-        [] -> debugInfo (cradleRootDir cradle) cradle
-        fp -> debugInfo fp cradle
+        [] -> debugInfo logger (cradleRootDir cradle) cradle
+        fp -> debugInfo logger fp cradle
       Flags files -> case files of
         -- TODO force optparse to acquire one
         [] -> error "too few arguments"
         _ -> do
           res <- forM files $ \fp -> do
-                  res <- getCompilerOptions fp cradle
+                  res <- getCompilerOptions logger fp cradle
                   case res of
                       CradleFail (CradleError _deps _ex err) ->
                         return $ "Failed to show flags for \""
