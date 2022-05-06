@@ -11,6 +11,7 @@
 module HIE.Bios.Types where
 
 import           System.Exit
+import qualified Colog.Core as L
 import           Control.Exception              ( Exception )
 import           Control.Monad
 import           Control.Monad.IO.Class
@@ -18,6 +19,8 @@ import           Control.Monad.Trans.Class
 #if MIN_VERSION_base(4,9,0)
 import qualified Control.Monad.Fail as Fail
 #endif
+import Data.Text.Prettyprint.Doc
+
 
 data BIOSVerbosity = Silent | Verbose
 
@@ -40,8 +43,6 @@ data Cradle a = Cradle {
   , cradleOptsProg   :: CradleAction a
   } deriving (Show, Functor)
 
-type LoggingFunction = String -> IO ()
-
 data ActionName a
   = Stack
   | Cabal
@@ -53,10 +54,16 @@ data ActionName a
   | Other a
   deriving (Show, Eq, Ord, Functor)
 
+data Log = LogAny String
+  deriving Show
+
+instance Pretty Log where
+  pretty (LogAny s) = pretty s
+
 data CradleAction a = CradleAction {
                         actionName    :: ActionName a
                       -- ^ Name of the action.
-                      , runCradle     :: LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
+                      , runCradle     :: L.LogAction IO (L.WithSeverity Log) -> FilePath -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
                       , runGhcCmd :: [String] -> IO (CradleLoadResult String)
                       -- ^ Executes the @ghc@ binary that is usually used to

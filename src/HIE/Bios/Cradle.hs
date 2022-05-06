@@ -32,6 +32,7 @@ import Data.Void
 import Data.Char (isSpace)
 import System.Exit
 import System.Directory hiding (findFile)
+import Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&))
 import Control.Monad
 import Control.Monad.Extra (unlessM)
 import Control.Monad.Trans.Cont
@@ -346,13 +347,14 @@ multiCradle buildCustomCradle cur_dir cs =
       None -> True
       _    -> False
 
-multiAction ::  forall b a
-            . (b -> Cradle a)
-            -> FilePath
-            -> [(FilePath, CradleConfig b)]
-            -> LoggingFunction
-            -> FilePath
-            -> IO (CradleLoadResult ComponentOptions)
+multiAction
+  ::  forall b a
+  . (b -> Cradle a)
+  -> FilePath
+  -> [(FilePath, CradleConfig b)]
+  -> LogAction IO (WithSeverity Log)
+  -> FilePath
+  -> IO (CradleLoadResult ComponentOptions)
 multiAction buildCustomCradle cur_dir cs l cur_fp =
     selectCradle =<< canonicalizeCradles
 
@@ -415,7 +417,7 @@ biosCradle wdir biosCall biosDepsCall mbGhc =
 biosWorkDir :: FilePath -> MaybeT IO FilePath
 biosWorkDir = findFileUpwards (".hie-bios" ==)
 
-biosDepsAction :: LoggingFunction -> FilePath -> Maybe Callable -> FilePath -> IO [FilePath]
+biosDepsAction :: LogAction IO (WithSeverity Log) -> FilePath -> Maybe Callable -> FilePath -> IO [FilePath]
 biosDepsAction l wdir (Just biosDepsCall) fp = do
   biosDeps' <- callableToProcess biosDepsCall (Just fp)
   (ex, sout, serr, [(_, args)]) <- readProcessWithOutputs [hie_bios_output] l wdir biosDeps'
@@ -424,12 +426,13 @@ biosDepsAction l wdir (Just biosDepsCall) fp = do
     ExitSuccess -> return $ fromMaybe [] args
 biosDepsAction _ _ Nothing _ = return []
 
-biosAction :: FilePath
-           -> Callable
-           -> Maybe Callable
-           -> LoggingFunction
-           -> FilePath
-           -> IO (CradleLoadResult ComponentOptions)
+biosAction
+  :: FilePath
+  -> Callable
+  -> Maybe Callable
+  -> LogAction IO (WithSeverity Log)
+  -> FilePath
+  -> IO (CradleLoadResult ComponentOptions)
 biosAction wdir bios bios_deps l fp = do
   bios' <- callableToProcess bios (Just fp)
   (ex, _stdo, std, [(_, res),(_, mb_deps)]) <-
@@ -689,7 +692,12 @@ cabalGhcDirs workDir = do
       ""
   pure (trimEnd exe, trimEnd libdir)
 
-cabalAction :: FilePath -> Maybe String -> LoggingFunction -> FilePath -> CradleLoadResultT IO ComponentOptions
+cabalAction
+  :: FilePath
+  -> Maybe String
+  -> LogAction IO (WithSeverity Log)
+  -> FilePath
+  -> CradleLoadResultT IO ComponentOptions
 cabalAction workDir mc l fp = do
   cabalProc <- cabalProcess workDir "v2-repl" [fromMaybe (fixTargetPath fp) mc] `modCradleError` \err -> do
       deps <- cabalCradleDependencies workDir workDir
@@ -822,7 +830,13 @@ stackCradleDependencies wdir componentDir syaml = do
   return $ map normalise $
     cabalFiles ++ [relFp </> "package.yaml", stackYamlLocationOrDefault syaml]
 
-stackAction :: FilePath -> Maybe String -> StackYaml -> LoggingFunction -> FilePath -> IO (CradleLoadResult ComponentOptions)
+stackAction
+  :: FilePath
+  -> Maybe String
+  -> StackYaml
+  -> LogAction IO (WithSeverity Log)
+  -> FilePath
+  -> IO (CradleLoadResult ComponentOptions)
 stackAction workDir mc syaml l _fp = do
   let ghcProcArgs = ("stack", stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
@@ -999,7 +1013,7 @@ type OutputName = String
 -- * The process is executed in the given directory.
 readProcessWithOutputs
   :: Outputs  -- ^ Names of the outputs produced by this process
-  -> LoggingFunction -- ^ Output of the process is streamed into this function.
+  -> LogAction IO (WithSeverity Log) -- ^ Output of the process is emitted as logs.
   -> FilePath -- ^ Working directory. Process is executed in this directory.
   -> CreateProcess -- ^ Parameters for the process to be executed.
   -> IO (ExitCode, [String], [String], [(OutputName, Maybe [String])])
@@ -1013,7 +1027,7 @@ readProcessWithOutputs outputNames l workDir cp = flip runContT return $ do
 
     -- Windows line endings are not converted so you have to filter out `'r` characters
   let loggingConduit = C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')
-        C..| C.map T.unpack C..| C.iterM l C..| C.sinkList
+        C..| C.map T.unpack C..| C.iterM (\msg -> l <& LogAny msg `WithSeverity` Info) C..| C.sinkList
   (ex, stdo, stde) <- liftIO $ sourceProcessWithStreams process mempty loggingConduit loggingConduit
 
   res <- forM output_files $ \(name,path) ->

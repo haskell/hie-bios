@@ -75,7 +75,7 @@ main = do
               crdl <- initialiseCradle isMultiCradle (addTrailingPathSeparator tmpdir) step
               step "Load module A"
               withCurrentDirectory (cradleRootDir crdl) $ do
-                runCradle (cradleOptsProg crdl) (const (pure ())) "./a/A.hs"
+                runCradle (cradleOptsProg crdl) mempty "./a/A.hs"
                 >>= \case
                   CradleSuccess r ->
                     componentOptions r `shouldMatchList` ["a"] <> argDynamic
@@ -90,7 +90,7 @@ main = do
                 unlessM (doesFileExist "./b/A.hs")
                   $ assertFailure "Test invariant broken, this file must exist."
 
-                runCradle (cradleOptsProg crdl) (const (pure ())) "./b/A.hs"
+                runCradle (cradleOptsProg crdl) mempty "./b/A.hs"
                 >>= \case
                   CradleSuccess r ->
                     componentOptions r `shouldMatchList` ["b"] <> argDynamic
@@ -105,7 +105,7 @@ main = do
                 unlessM (doesFileExist "./c/A.hs")
                   $ assertFailure "Test invariant broken, this file must exist."
 
-                runCradle (cradleOptsProg crdl) (const (pure ())) "./c/A.hs"
+                runCradle (cradleOptsProg crdl) mempty "./c/A.hs"
                   >>= \case
                     CradleNone -> pure ()
                     _ -> assertFailure "Cradle loaded symlink"
@@ -308,23 +308,27 @@ testLoadFile crd a_fp step = do
     withCurrentDirectory (cradleRootDir crd) $
       G.runGhc (Just libDir) $ do
         let relFp = makeRelative (cradleRootDir crd) a_fp
-        res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
+        liftIO (step "Cradle load")
+        res <- initializeFlagsWithCradle mempty relFp crd
         handleCradleResult res $ \(ini, _) -> do
           liftIO (step "Initial module load")
           sf <- ini
           case sf of
             -- Test resetting the targets
-            Succeeded -> setTargetFilesWithMessage (Just (\_ n _ _ -> step (show n))) [(a_fp, a_fp)]
+            Succeeded -> do
+              liftIO (step "Set target files")
+              setTargetFiles mempty [(a_fp, a_fp)]
             Failed -> liftIO $ assertFailure "Module loading failed"
 
 testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Assertion) -> (String -> IO ()) -> IO ()
 testLoadFileCradleFail crd a_fp cradleErrorExpectation step = do
+  step "Loading cradle"
   -- don't spin up a ghc session, just run the opts program manually since
   -- we're not guaranteed to be able to get the ghc libdir if the cradle is
   -- failing
   withCurrentDirectory (cradleRootDir crd) $ do
     let relFp = makeRelative (cradleRootDir crd) a_fp
-    res <- runCradle (cradleOptsProg crd) (step . show) relFp
+    res <- runCradle (cradleOptsProg crd) mempty relFp
     case res of
       CradleSuccess _ -> liftIO $ assertFailure "Cradle loaded successfully"
       CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
@@ -341,7 +345,7 @@ testLoadCradleDependencies cradlePred rootDir file dependencyPred step =
       withCurrentDirectory (cradleRootDir crd) $
         G.runGhc (Just libDir) $ do
           let relFp = makeRelative (cradleRootDir crd) a_fp
-          res <- initializeFlagsWithCradleWithMessage (Just (\_ n _ _ -> step (show n))) relFp crd
+          res <- initializeFlagsWithCradleWithMessage mempty (Just (\_ n _ _ -> step (show n))) relFp crd
           handleCradleResult res $ \(_, options) ->
             liftIO $ dependencyPred (componentDependencies options)
 
