@@ -1,4 +1,7 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ExistentialQuantification #-}
 module HIE.Bios.Ghc.Check (
     checkSyntax
   , check
@@ -14,37 +17,49 @@ import qualified DynFlags as G
 #endif
 
 import Control.Exception
+import Control.Monad.IO.Class
+import Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&), cmap)
+import Data.Text.Prettyprint.Doc
 
-import HIE.Bios.Environment
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Logger
-import qualified HIE.Bios.Internal.Log as Log
-import HIE.Bios.Types
-import HIE.Bios.Ghc.Load
-import Control.Monad.IO.Class
+import HIE.Bios.Types hiding (Log (..))
+import qualified HIE.Bios.Types as T
+import qualified HIE.Bios.Ghc.Load as Load
+import HIE.Bios.Environment
 
 import System.IO.Unsafe (unsafePerformIO)
 import qualified HIE.Bios.Ghc.Gap as Gap
 
+data Log =
+  LoadLog Load.Log
+  | LogAny T.Log
+  | forall a . Show a => LogCradle (Cradle a)
+
+instance Pretty Log where
+  pretty (LoadLog l) = pretty l
+  pretty (LogAny l) = pretty l
+  pretty (LogCradle c) = "Cradle:" <+> viaShow c
 
 ----------------------------------------------------------------
 
 -- | Checking syntax of a target file using GHC.
 --   Warnings and errors are returned.
 checkSyntax :: Show a
-            => Cradle a
+            => LogAction IO (WithSeverity Log)
+            -> Cradle a
             -> [FilePath]  -- ^ The target files.
             -> IO String
-checkSyntax _      []    = return ""
-checkSyntax cradle files = do
+checkSyntax _       _     []    = return ""
+checkSyntax logger cradle files = do
     libDirRes <- getRuntimeGhcLibDir cradle
     handleRes libDirRes $ \libDir ->
       G.runGhcT (Just libDir) $ do
-        Log.debugm $ "Cradle: " ++ show cradle
-        res <- initializeFlagsWithCradle (head files) cradle
+        liftIO $ logger <& LogCradle cradle `WithSeverity` Info
+        res <- initializeFlagsWithCradle (cmap (fmap LogAny) logger) (head files) cradle
         handleRes res $ \(ini, _) -> do
           _sf <- ini
-          either id id <$> check files
+          either id id <$> check logger files
   where
     handleRes (CradleSuccess x) f = f x
     handleRes (CradleFail ce) _f = liftIO $ throwIO ce
@@ -55,11 +70,12 @@ checkSyntax cradle files = do
 -- | Checking syntax of a target file using GHC.
 --   Warnings and errors are returned.
 check :: (GhcMonad m)
-      => [FilePath]  -- ^ The target files.
+      => LogAction IO (WithSeverity Log)
+      -> [FilePath]  -- ^ The target files.
       -> m (Either String String)
-check fileNames = do
+check logger fileNames = do
   libDir <- G.topDir <$> G.getDynFlags
-  withLogger (setAllWarningFlags libDir) $ setTargetFiles (map dup fileNames)
+  withLogger (setAllWarningFlags libDir) $ Load.setTargetFiles (cmap (fmap LoadLog) logger) (map dup fileNames)
 
 dup :: a -> (a, a)
 dup x = (x, x)

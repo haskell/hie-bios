@@ -2,6 +2,7 @@
 module HIE.Bios.Internal.Debug (debugInfo, rootInfo, configInfo, cradleInfo) where
 
 import Control.Monad
+import Colog.Core (LogAction (..), WithSeverity (..))
 import Data.Void
 
 import qualified Data.Char as Char
@@ -24,11 +25,12 @@ import System.Directory
 --
 -- Otherwise, shows the error message and exit-code.
 debugInfo :: Show a
-          => FilePath
+          => LogAction IO (WithSeverity Log)
+          -> FilePath
           -> Cradle a
           -> IO String
-debugInfo fp cradle = unlines <$> do
-    res <- getCompilerOptions fp cradle
+debugInfo logger fp cradle = unlines <$> do
+    res <- getCompilerOptions logger fp cradle
     canonFp <- canonicalizePath fp
     conf <- findConfig canonFp
     crdl <- findCradle' canonFp
