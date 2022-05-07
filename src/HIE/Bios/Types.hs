@@ -61,6 +61,7 @@ data Log =
 
 instance Pretty Log where
   pretty (LogAny s) = pretty s
+  pretty (LogProcessOutput s) = pretty s
 
 data CradleAction a = CradleAction {
                         actionName    :: ActionName a
