@@ -1027,7 +1027,7 @@ readProcessWithOutputs outputNames l workDir cp = flip runContT return $ do
 
     -- Windows line endings are not converted so you have to filter out `'r` characters
   let loggingConduit = C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')
-        C..| C.map T.unpack C..| C.iterM (\msg -> l <& LogAny msg `WithSeverity` Debug) C..| C.sinkList
+        C..| C.map T.unpack C..| C.iterM (\msg -> l <& LogProcessOutput msg `WithSeverity` Debug) C..| C.sinkList
   (ex, stdo, stde) <- liftIO $ sourceProcessWithStreams process mempty loggingConduit loggingConduit
 
   res <- forM output_files $ \(name,path) ->

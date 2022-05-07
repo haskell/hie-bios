@@ -54,7 +54,9 @@ data ActionName a
   | Other a
   deriving (Show, Eq, Ord, Functor)
 
-data Log = LogAny String
+data Log = 
+  LogAny String
+  | LogProcessOutput String
   deriving Show
 
 instance Pretty Log where
