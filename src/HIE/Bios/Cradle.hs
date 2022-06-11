@@ -699,13 +699,31 @@ cabalAction
   -> FilePath
   -> CradleLoadResultT IO ComponentOptions
 cabalAction workDir mc l fp = do
-  cabalProc <- cabalProcess workDir "v2-repl" [fromMaybe (fixTargetPath fp) mc] `modCradleError` \err -> do
+  let
+    cabalCommand = "v2-repl"
+    cabalArgs = [fromMaybe (fixTargetPath fp) mc]
+
+  cabalProc <- cabalProcess workDir cabalCommand cabalArgs `modCradleError` \err -> do
       deps <- cabalCradleDependencies workDir workDir
       pure $ err { cradleErrorDependencies = cradleErrorDependencies err ++ deps }
 
   (ex, output, stde, [(_, maybeArgs)]) <- liftIO $ readProcessWithOutputs [hie_bios_output] l workDir cabalProc
-
   let args = fromMaybe [] maybeArgs
+
+  let errorDetails =
+        ["Failed command: " <> prettyCmdSpec (cmdspec cabalProc)
+        , unlines output
+        , unlines stde
+        , unlines $ args
+        , "Process Environment:"]
+        <> prettyProcessEnv cabalProc
+
+  when (ex /= ExitSuccess) $ do
+    deps <- liftIO $ cabalCradleDependencies workDir workDir
+    let cmd = show (["cabal", cabalCommand] <> cabalArgs)
+    let errorMsg = "Failed to run " <> cmd <> " in directory \"" <> workDir <> "\". See below for full command and error."
+    throwCE (CradleError deps ex ([errorMsg] <> errorDetails))
+
   case processCabalWrapperArgs args of
     Nothing -> do
       -- Provide some dependencies an IDE can look for to trigger a reload.
@@ -713,13 +731,7 @@ cabalAction workDir mc l fp = do
       -- root of the component, so we are right in trivial cases at least.
       deps <- liftIO $ cabalCradleDependencies workDir workDir
       throwCE (CradleError deps ex $
-                [ "Failed to parse result of calling cabal"
-                , "Failed command: " <> prettyCmdSpec (cmdspec cabalProc)
-                , unlines output
-                , unlines stde
-                , unlines $ args
-                , "Process Environment:"]
-                <> prettyProcessEnv cabalProc)
+                (["Failed to parse result of calling cabal" ] <> errorDetails))
     Just (componentDir, final_args) -> do
       deps <- liftIO $ cabalCradleDependencies workDir componentDir
       CradleLoadResultT $ pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
