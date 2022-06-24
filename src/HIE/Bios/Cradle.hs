@@ -721,7 +721,7 @@ cabalAction workDir mc l fp = do
   when (ex /= ExitSuccess) $ do
     deps <- liftIO $ cabalCradleDependencies workDir workDir
     let cmd = show (["cabal", cabalCommand] <> cabalArgs)
-    let errorMsg = "Failed to run " <> cmd <> " in directory \"" <> workDir <> "\". See below for full command and error."
+    let errorMsg = "Failed to run " <> cmd <> " in directory \"" <> workDir <> "\". Consult the logs for full command and error."
     throwCE (CradleError deps ex ([errorMsg] <> errorDetails))
 
   case processCabalWrapperArgs args of
