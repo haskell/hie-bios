@@ -93,3 +93,4 @@ allWarningFlags libDir = unsafePerformIO $
         df <- G.getSessionDynFlags
         (df', _) <- addCmdOpts ["-Wall"] df
         return $ G.warningFlags df'
+

@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
 -- | Convenience functions for loading a file into a GHC API session
-module HIE.Bios.Ghc.Load ( loadFileWithMessage, loadFile, setTargetFiles, setTargetFilesWithMessage, Log (..)) where
+module HIE.Bios.Ghc.Load  where
 
 
 import Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&))
@@ -26,6 +26,7 @@ import qualified HscMain as G
 #endif
 
 import qualified HIE.Bios.Ghc.Gap as Gap
+import GHC.Fingerprint
 
 data Log =
   LogLoaded FilePath FilePath
@@ -120,7 +121,12 @@ updateTime :: MonadIO m => [Target] -> ModuleGraph -> m ModuleGraph
 updateTime ts graph = liftIO $ do
   cur_time <- getCurrentTime
   let go ms
-        | any (msTargetIs ms) ts = ms {ms_hs_date = cur_time}
+        | any (msTargetIs ms) ts =
+#if __GLASGOW_HASKELL__ >= 903
+            ms {ms_hs_hash = fingerprint0}
+#else
+            ms {ms_hs_date = cur_time}
+#endif
         | otherwise = ms
   pure $ Gap.mapMG go graph
 
@@ -138,7 +144,7 @@ setTargetFilesWithMessage logger msg files = do
     G.setTargets targets
     mod_graph <- updateTime targets =<< depanal [] False
     liftIO $ logger <& LogModGraph mod_graph `WithSeverity` Debug
-    void $ G.load' LoadAllTargets msg mod_graph
+    void $ Gap.load' Nothing LoadAllTargets msg mod_graph
 
 -- | Add a hook to record the contents of any 'TypecheckedModule's which are produced
 -- during compilation.
@@ -194,7 +200,8 @@ ghcInHsc gm = do
 -- target file to be a temporary file.
 guessTargetMapped :: (GhcMonad m) => (FilePath, FilePath) -> m Target
 guessTargetMapped (orig_file_name, mapped_file_name) = do
-  t <- Gap.guessTarget orig_file_name Nothing
+  df <- Gap.getDynFlags
+  t <- Gap.guessTarget orig_file_name (Just $ Gap.homeUnitId_ df) Nothing
   return (setTargetFilename mapped_file_name t)
 
 setTargetFilename :: FilePath -> Target -> Target

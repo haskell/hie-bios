@@ -64,7 +64,7 @@ initSessionWithMessage msg compOpts = (do
     G.setTargets targets
     -- Get the module graph using the function `getModuleGraph`
     mod_graph <- G.depanal [] True
-    G.load' LoadAllTargets msg mod_graph, compOpts)
+    Gap.load' Nothing LoadAllTargets msg mod_graph, compOpts)
 
 ----------------------------------------------------------------
 

@@ -57,6 +57,9 @@ module HIE.Bios.Ghc.Gap (
   , mapMG
   , mgModSummaries
   , unsetLogAction
+  , load'
+  , homeUnitId_
+  , getDynFlags
   ) where
 
 import Control.Monad.IO.Class
@@ -143,9 +146,36 @@ import qualified GHC.Tc.Types as Tc
 import GHC.Utils.Outputable
 import qualified GHC.Utils.Ppr as Ppr
 #endif
+#if __GLASGOW_HASKELL__ >= 900
+import GHC.Unit.Types (UnitId)
+#endif
+
+#if __GLASGOW_HASKELL__ >= 900
+import qualified GHC.Driver.Main as G
+import qualified GHC.Driver.Make as G
+#else
+import qualified HscMain as G
+import qualified GhcMake as G
+#endif
 
 ghcVersion :: String
 ghcVersion = VERSION_ghc
+
+#if __GLASGOW_HASKELL__ <= 810
+homeUnitId_ :: a -> ()
+homeUnitId_ = const ()
+#elif __GLASGOW_HASKELL__ <= 901
+homeUnitId_ :: DynFlags -> UnitId
+homeUnitId_ = homeUnitId
+#endif
+
+#if __GLASGOW_HASKELL__ >= 904
+load' :: GhcMonad m => Maybe G.ModIfaceCache -> LoadHowMuch -> Maybe Messager -> ModuleGraph -> m SuccessFlag
+load' = G.load'
+#else
+load' :: GhcMonad m => a -> LoadHowMuch -> Maybe G.Messager -> ModuleGraph -> m SuccessFlag
+load' _ a b c = G.load' a b c
+#endif
 
 #if __GLASGOW_HASKELL__ >= 900
 bracket :: E.MonadMask m => m a -> (a -> m c) -> (a -> m b) -> m b
@@ -211,11 +241,12 @@ overPkgDbRef _f db = db
 
 ----------------------------------------------------------------
 
-guessTarget :: GhcMonad m => String -> Maybe G.Phase -> m G.Target
-#if __GLASGOW_HASKELL__ >= 901
-guessTarget a b = G.guessTarget a b
+#if __GLASGOW_HASKELL__ >= 903
+guessTarget :: GhcMonad m => String -> Maybe UnitId -> Maybe G.Phase -> m G.Target
+guessTarget a b c = G.guessTarget a b c
 #else
-guessTarget a b = G.guessTarget a b
+guessTarget :: GhcMonad m => String -> a -> Maybe G.Phase -> m G.Target
+guessTarget a _ b = G.guessTarget a b
 #endif
 
 ----------------------------------------------------------------
@@ -309,7 +340,9 @@ unsetLogAction = do
 #endif
 
 noopLogger :: LogAction
-#if __GLASGOW_HASKELL__ >= 900
+#if __GLASGOW_HASKELL__ >= 903
+noopLogger = (\_wr _s _ss _m -> return ())
+#elif __GLASGOW_HASKELL__ >= 900
 noopLogger = (\_df _wr _s _ss _m -> return ())
 #else
 noopLogger = (\_df _wr _s _ss _pp _m -> return ())
@@ -335,7 +368,9 @@ oneLineMode = Ppr.OneLineMode
 -- --------------------------------------------------------
 
 numLoadedPlugins :: HscEnv -> Int
-#if __GLASGOW_HASKELL__ >= 902
+#if __GLASGOW_HASKELL__ >= 903
+numLoadedPlugins = length . Plugins.pluginsWithArgs . hsc_plugins
+#elif __GLASGOW_HASKELL__ >= 902
 numLoadedPlugins = length . Plugins.plugins
 #elif __GLASGOW_HASKELL__ >= 808
 numLoadedPlugins = length . Plugins.plugins . hsc_dflags
