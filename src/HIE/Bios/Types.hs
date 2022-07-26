@@ -1,12 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
-
-{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 module HIE.Bios.Types where
 
@@ -54,7 +48,7 @@ data ActionName a
   | Other a
   deriving (Show, Eq, Ord, Functor)
 
-data Log = 
+data Log =
   LogAny String
   | LogProcessOutput String
   deriving Show
@@ -148,7 +142,7 @@ instance Fail.MonadFail m => Fail.MonadFail (CradleLoadResultT m) where
 #endif
 
 instance MonadTrans CradleLoadResultT where
-    lift = CradleLoadResultT . liftM CradleSuccess
+    lift = CradleLoadResultT . fmap CradleSuccess
     {-# INLINE lift #-}
 
 instance (MonadIO m) => MonadIO (CradleLoadResultT m) where
