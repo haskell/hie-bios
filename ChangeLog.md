@@ -1,5 +1,15 @@
 # ChangeLog hie-bios
 
+## 2022-07-26 - 0.10.0
+
+* Apply Hlint suggestions [#354](https://github.com/haskell/hie-bios/pull/354)
+* Cabal cradle: change error message on failure [#353](https://github.com/haskell/hie-bios/pull/353)
+* Refactor parsing of hie.yaml files [#329](https://github.com/haskell/hie-bios/pull/329)
+* Make sure we test the same versions as HLS [#346](https://github.com/haskell/hie-bios/pull/346)
+* Move logging from hslogger to co-log  [#347](https://github.com/haskell/hie-bios/pull/347)
+  * Demote process output to Debug severity [#348](https://github.com/haskell/hie-bios/pull/348)
+* Fix typos [#342](https://github.com/haskell/hie-bios/pull/342)
+
 ## 2022-03-07 - 0.9.1
 
 * Ignore .ghci files while querying project GHC [#337](https://github.com/haskell/hie-bios/pull/337)
