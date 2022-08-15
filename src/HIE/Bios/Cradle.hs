@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
 module HIE.Bios.Cradle (
       findCradle
     , loadCradle
@@ -20,6 +21,9 @@ module HIE.Bios.Cradle (
     , readProcessWithOutputs
     , readProcessWithCwd
     , makeCradleResult
+    -- | Cradle project configuration types
+    , CradleProjectConfig(..)
+    ,
   ) where
 
 import Control.Applicative ((<|>), optional)
@@ -133,17 +137,15 @@ loadCradleWithOpts buildCustomCradle wfile = do
 
 getCradle :: (b -> Cradle a) -> (CradleConfig b, FilePath) -> Cradle a
 getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleType cc of
-    Cabal CabalType{ cabalComponent = mc } -> cabalCradle wdir mc
+    Cabal CabalType{ cabalComponent = mc, cabalProjectFile = prjFile } ->
+      cabalCradle wdir mc (projectConfigFromMaybe wdir prjFile)
     CabalMulti dc ms ->
       getCradle buildCustomCradle
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Cabal $ dc <> c)) | (p, c) <- ms])
         , wdir)
     Stack StackType{ stackComponent = mc, stackYaml = syaml} ->
-      let
-        stackYamlConfig = stackYamlFromMaybe wdir syaml
-      in
-        stackCradle wdir mc stackYamlConfig
+      stackCradle wdir mc (projectConfigFromMaybe wdir syaml)
     StackMulti ds ms ->
       getCradle buildCustomCradle
         (CradleConfig cradleDeps
@@ -191,7 +193,7 @@ inferCradleType fp =
 
   maybeItsStack = stackExecutable >> (Stack $ StackType Nothing Nothing,) <$> stackWorkDir fp
 
-  maybeItsCabal = (Cabal $ CabalType Nothing,) <$> cabalWorkDir fp
+  maybeItsCabal = (Cabal $ CabalType Nothing Nothing,) <$> cabalWorkDir fp
 
   -- maybeItsObelisk = (Obelisk,) <$> obeliskWorkDir fp
 
@@ -458,22 +460,32 @@ callableToProcess (Program path) file = do
   return $ proc canon_path (maybeToList file)
 
 ------------------------------------------------------------------------
+
+projectFileProcessArgs :: CradleProjectConfig -> [String]
+projectFileProcessArgs (ExplicitConfig prjFile) = ["--project-file", prjFile]
+projectFileProcessArgs NoExplicitConfig = []
+
+projectLocationOrDefault :: CradleProjectConfig -> [FilePath]
+projectLocationOrDefault = \case
+  NoExplicitConfig -> ["cabal.project", "cabal.project.local"]
+  (ExplicitConfig prjFile) -> [prjFile, prjFile <.> "local"]
+
 -- |Cabal Cradle
 -- Works for new-build by invoking `v2-repl`.
-cabalCradle :: FilePath -> Maybe String -> Cradle a
-cabalCradle wdir mc =
+cabalCradle :: FilePath -> Maybe String -> CradleProjectConfig -> Cradle a
+cabalCradle wdir mc projectFile =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = Types.Cabal
-        , runCradle = \l f -> runCradleResultT . cabalAction wdir mc l $ f
+        , runCradle = \l -> runCradleResultT . cabalAction wdir mc l projectFile
         , runGhcCmd = \l args -> runCradleResultT $ do
             buildDir <- liftIO $ cabalBuildDir wdir
             -- Workaround for a cabal-install bug on 3.0.0.0:
             -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
             liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
             -- Need to pass -v0 otherwise we get "resolving dependencies..."
-            cabalProc <- cabalProcess l wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
+            cabalProc <- cabalProcess l projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
             readProcessWithCwd' cabalProc ""
         }
     }
@@ -487,9 +499,9 @@ cabalCradle wdir mc =
 -- to the custom ghc wrapper via 'hie_bios_ghc' environment variable which
 -- the custom ghc wrapper may use as a fallback if it can not respond to certain
 -- queries, such as ghc version or location of the libdir.
-cabalProcess :: LogAction IO (WithSeverity Log) -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
-cabalProcess l workDir command args = do
-  ghcDirs <- cabalGhcDirs l workDir
+cabalProcess :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
+cabalProcess l cabalProject workDir command args = do
+  ghcDirs <- cabalGhcDirs l cabalProject workDir
   newEnvironment <- liftIO $ setupEnvironment ghcDirs
   cabalProc <- liftIO $ setupCabalCommand ghcDirs
   pure $ (cabalProc
@@ -516,7 +528,7 @@ cabalProcess l workDir command args = do
             , command
             , "--with-compiler", wrapper_fp
             , "--with-hc-pkg", ghcPkgPath
-            ]
+            ] <> projectFileProcessArgs cabalProject
       loggedProc l "cabal" (extraCabalArgs ++ args)
 
 -- | Discovers the location of 'ghc-pkg' given the absolute path to 'ghc'
@@ -578,20 +590,23 @@ withGhcPkgTool ghcPathAbs libdir = do
     -- Escape the filepath and trim excess newlines added by 'escapeArgs'
     escapeFilePath fp = trimEnd $ escapeArgs [fp]
 
--- | @'cabalCradleDependencies' rootDir componentDir@.
+-- | @'cabalCradleDependencies' projectFile rootDir componentDir@.
 -- Compute the dependencies of the cabal cradle based
--- on the cradle root and the component directory.
+-- on cabal project configuration, the cradle root and the component directory.
+--
+-- The @projectFile@ and @projectFile <> ".local"@ are always added to the list
+-- of dependencies.
 --
 -- Directory 'componentDir' is a sub-directory where we look for
 -- package specific cradle dependencies, such as a '.cabal' file.
 --
 -- Found dependencies are relative to 'rootDir'.
-cabalCradleDependencies :: FilePath -> FilePath -> IO [FilePath]
-cabalCradleDependencies rootDir componentDir = do
+cabalCradleDependencies :: CradleProjectConfig -> FilePath -> FilePath -> IO [FilePath]
+cabalCradleDependencies projectFile rootDir componentDir = do
     let relFp = makeRelative rootDir componentDir
     cabalFiles' <- findCabalFiles componentDir
     let cabalFiles = map (relFp </>) cabalFiles'
-    return $ map normalise $ cabalFiles ++ ["cabal.project", "cabal.project.local"]
+    return $ map normalise $ cabalFiles ++ projectLocationOrDefault projectFile
 
 -- |Find .cabal files in the given directory.
 --
@@ -681,32 +696,44 @@ cabalBuildDir workDir = do
 -- 'withGhcWrapperTool'.
 --
 -- If cabal can not figure it out, a 'CradleError' is returned.
-cabalGhcDirs :: LogAction IO (WithSeverity Log) -> FilePath -> CradleLoadResultT IO (FilePath, FilePath)
-cabalGhcDirs l workDir = do
-  libdir <- readProcessWithCwd_ l workDir "cabal" ["exec", "-v0", "--", "ghc", "--print-libdir"] ""
+cabalGhcDirs :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> CradleLoadResultT IO (FilePath, FilePath)
+cabalGhcDirs l cabalProject workDir = do
+  libdir <- readProcessWithCwd_ l workDir "cabal"
+      (["exec"] ++
+       projectFileArgs ++
+       ["-v0", "--", "ghc", "--print-libdir"]
+      )
+      ""
   exe <- readProcessWithCwd_ l workDir "cabal"
       -- DON'T TOUCH THIS CODE
       -- This works with 'NoImplicitPrelude', with 'RebindableSyntax' and other shenanigans.
       -- @-package-env=-@ doesn't work with ghc prior 8.4.x
-      [ "exec", "-v0", "--" , "ghc", "-package-env=-", "-ignore-dot-ghci", "-e"
-      , "Control.Monad.join (Control.Monad.fmap System.IO.putStr System.Environment.getExecutablePath)"
-      ]
+      ([ "exec"] ++
+       projectFileArgs ++
+       [ "-v0", "--" , "ghc", "-package-env=-", "-ignore-dot-ghci", "-e"
+       , "Control.Monad.join (Control.Monad.fmap System.IO.putStr System.Environment.getExecutablePath)"
+       ]
+      )
       ""
   pure (trimEnd exe, trimEnd libdir)
+  where
+    projectFileArgs = projectFileProcessArgs cabalProject
+
 
 cabalAction
   :: FilePath
   -> Maybe String
   -> LogAction IO (WithSeverity Log)
+  -> CradleProjectConfig
   -> FilePath
   -> CradleLoadResultT IO ComponentOptions
-cabalAction workDir mc l fp = do
+cabalAction workDir mc l projectFile fp = do
   let
     cabalCommand = "v2-repl"
     cabalArgs = [fromMaybe (fixTargetPath fp) mc]
 
-  cabalProc <- cabalProcess l workDir cabalCommand cabalArgs `modCradleError` \err -> do
-      deps <- cabalCradleDependencies workDir workDir
+  cabalProc <- cabalProcess l projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
+      deps <- cabalCradleDependencies projectFile workDir workDir
       pure $ err { cradleErrorDependencies = cradleErrorDependencies err ++ deps }
 
   (ex, output, stde, [(_, maybeArgs)]) <- liftIO $ readProcessWithOutputs [hie_bios_output] l workDir cabalProc
@@ -721,7 +748,7 @@ cabalAction workDir mc l fp = do
         <> prettyProcessEnv cabalProc
 
   when (ex /= ExitSuccess) $ do
-    deps <- liftIO $ cabalCradleDependencies workDir workDir
+    deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
     let cmd = show (["cabal", cabalCommand] <> cabalArgs)
     let errorMsg = "Failed to run " <> cmd <> " in directory \"" <> workDir <> "\". Consult the logs for full command and error."
     throwCE (CradleError deps ex ([errorMsg] <> errorDetails))
@@ -731,11 +758,11 @@ cabalAction workDir mc l fp = do
       -- Provide some dependencies an IDE can look for to trigger a reload.
       -- Best effort. Assume the working directory is the
       -- root of the component, so we are right in trivial cases at least.
-      deps <- liftIO $ cabalCradleDependencies workDir workDir
+      deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
       throwCE (CradleError deps ex $
                 (["Failed to parse result of calling cabal" ] <> errorDetails))
     Just (componentDir, final_args) -> do
-      deps <- liftIO $ cabalCradleDependencies workDir componentDir
+      deps <- liftIO $ cabalCradleDependencies projectFile workDir componentDir
       CradleLoadResultT $ pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
   where
     -- Need to make relative on Windows, due to a Cabal bug with how it
@@ -786,31 +813,35 @@ cabalWorkDir wdir =
       findFileUpwards (== "cabal.project") wdir
   <|> findFileUpwards (\fp -> takeExtension fp == ".cabal") wdir
 
+
 ------------------------------------------------------------------------
 
--- | Explicit data-type for stack.yaml configuration location.
+-- | Explicit data-type for project configuration location.
 -- It is basically a 'Maybe' type, but helps to document the API
 -- and helps to avoid incorrect usage.
-data StackYaml
-  = NoExplicitYaml
-  | ExplicitYaml FilePath
+data CradleProjectConfig
+  = NoExplicitConfig
+  | ExplicitConfig FilePath
 
--- | Create an explicit StackYaml configuration from the
-stackYamlFromMaybe :: FilePath -> Maybe FilePath -> StackYaml
-stackYamlFromMaybe _wdir Nothing = NoExplicitYaml
-stackYamlFromMaybe wdir (Just fp) = ExplicitYaml (wdir </> fp)
+-- | Create an explicit project configuration. Expects a working directory
+-- followed by an optional name of the project configuration.
+projectConfigFromMaybe :: FilePath -> Maybe FilePath -> CradleProjectConfig
+projectConfigFromMaybe _wdir Nothing = NoExplicitConfig
+projectConfigFromMaybe wdir (Just fp) = ExplicitConfig (wdir </> fp)
 
-stackYamlProcessArgs :: StackYaml -> [String]
-stackYamlProcessArgs (ExplicitYaml yaml) = ["--stack-yaml", yaml]
-stackYamlProcessArgs NoExplicitYaml = []
+------------------------------------------------------------------------
 
-stackYamlLocationOrDefault :: StackYaml -> FilePath
-stackYamlLocationOrDefault NoExplicitYaml = "stack.yaml"
-stackYamlLocationOrDefault (ExplicitYaml yaml) = yaml
+stackYamlProcessArgs :: CradleProjectConfig -> [String]
+stackYamlProcessArgs (ExplicitConfig yaml) = ["--stack-yaml", yaml]
+stackYamlProcessArgs NoExplicitConfig = []
+
+stackYamlLocationOrDefault :: CradleProjectConfig -> FilePath
+stackYamlLocationOrDefault NoExplicitConfig = "stack.yaml"
+stackYamlLocationOrDefault (ExplicitConfig yaml) = yaml
 
 -- | Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
-stackCradle :: FilePath -> Maybe String -> StackYaml -> Cradle a
+stackCradle :: FilePath -> Maybe String -> CradleProjectConfig -> Cradle a
 stackCradle wdir mc syaml =
   Cradle
     { cradleRootDir    = wdir
@@ -836,7 +867,7 @@ stackCradle wdir mc syaml =
 -- a '.cabal' file.
 --
 -- Found dependencies are relative to 'rootDir'.
-stackCradleDependencies :: FilePath -> FilePath -> StackYaml -> IO [FilePath]
+stackCradleDependencies :: FilePath -> FilePath -> CradleProjectConfig -> IO [FilePath]
 stackCradleDependencies wdir componentDir syaml = do
   let relFp = makeRelative wdir componentDir
   cabalFiles' <- findCabalFiles componentDir
@@ -847,7 +878,7 @@ stackCradleDependencies wdir componentDir syaml = do
 stackAction
   :: FilePath
   -> Maybe String
-  -> StackYaml
+  -> CradleProjectConfig
   -> LogAction IO (WithSeverity Log)
   -> FilePath
   -> IO (CradleLoadResult ComponentOptions)
@@ -859,7 +890,7 @@ stackAction workDir mc syaml l _fp = do
     stackProcess l syaml
                 (["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
                     <> [ comp | Just comp <- [mc] ]) >>=
-      readProcessWithOutputs [hie_bios_output] l workDir 
+      readProcessWithOutputs [hie_bios_output] l workDir
   (ex2, pkg_args, stdr, _) <-
     stackProcess l syaml ["path", "--ghc-package-path"] >>=
       readProcessWithOutputs [hie_bios_output] l workDir
@@ -887,7 +918,7 @@ stackAction workDir mc syaml l _fp = do
                   )
                   deps
 
-stackProcess :: LogAction IO (WithSeverity Log) -> StackYaml -> [String] -> IO CreateProcess
+stackProcess :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> [String] -> IO CreateProcess
 stackProcess l syaml args = loggedProc l "stack" $ stackYamlProcessArgs syaml <> args
 
 combineExitCodes :: [ExitCode] -> ExitCode
@@ -1140,4 +1171,4 @@ loggedProc :: LogAction IO (WithSeverity Log) -> FilePath -> [String] -> IO Crea
 loggedProc l command args = do
   l <& LogProcessOutput (unwords $ "executing command:":command:args) `WithSeverity` Debug
   pure $ proc command args
- 
+

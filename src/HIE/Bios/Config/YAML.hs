@@ -29,8 +29,7 @@ import           Data.Aeson.KeyMap   (keys)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Text           as T
 #endif
-import           Data.Aeson.Types    (Object, Parser, Value (Null),
-                                      typeMismatch)
+import           Data.Aeson.Types    (Parser, typeMismatch)
 import qualified Data.Char           as C (toLower)
 import           Data.List           ((\\))
 import           GHC.Generics        (Generic)
@@ -44,7 +43,7 @@ type Key = T.Text
 -- This used to be just a HashMap, but since aeson >= 2
 -- this is an opaque datatype.
 type KeyMap v = Map.HashMap T.Text v
- 
+
 keys :: KeyMap v -> [Key]
 keys = Map.keys
 #endif
@@ -103,25 +102,33 @@ data MultiSubComponent a
                       } deriving (Generic, FromJSON)
 
 data CabalConfig
-  = CabalConfig { cabalComponents :: OneOrManyComponents CabalComponent }
+  = CabalConfig { cabalProject    :: Maybe FilePath
+                , cabalComponents :: OneOrManyComponents CabalComponent
+                }
 
 instance FromJSON CabalConfig where
-  parseJSON v@(Array _)     = CabalConfig . ManyComponents <$> parseJSON v
-  parseJSON v@(Object obj)  = (checkObjectKeys ["component", "components"] obj) *> (CabalConfig <$> parseJSON v)
-  parseJSON Null            = pure $ CabalConfig NoComponent
+  parseJSON v@(Array _)     = CabalConfig Nothing . ManyComponents <$> parseJSON v
+  parseJSON v@(Object obj)  = (checkObjectKeys ["project-file", "component", "components"] obj)
+                                *> (CabalConfig
+                                  <$> obj .:? "project-file"
+                                  <*> parseJSON v)
+  parseJSON Null            = pure $ CabalConfig Nothing NoComponent
   parseJSON v               = typeMismatch "CabalConfig" v
 
 data CabalComponent
   = CabalComponent { cabalPath      :: FilePath
                    , cabalComponent :: String
+                   , cabalComponentProject :: Maybe FilePath
                    }
 
 instance FromJSON CabalComponent where
   parseJSON =
-    let parseCabalComponent obj = checkObjectKeys ["path", "component"] obj
+    let parseCabalComponent obj = checkObjectKeys ["path", "component", "project-file"] obj
                                     *> (CabalComponent
                                           <$> obj .: "path"
-                                          <*> obj .: "component")
+                                          <*> obj .: "component"
+                                          <*> obj .:? "project-file"
+                                        )
      in withObject "CabalComponent" parseCabalComponent
 
 data StackConfig
@@ -132,7 +139,7 @@ data StackConfig
 data StackComponent
   = StackComponent { stackPath          :: FilePath
                    , stackComponent     :: String
-                   , stackComponentYAML :: Maybe String
+                   , stackComponentYAML :: Maybe FilePath
                    }
 
 instance FromJSON StackConfig where

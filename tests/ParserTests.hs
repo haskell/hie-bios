@@ -26,7 +26,7 @@ configDir = "tests/configs"
 main :: IO ()
 main = defaultMain $
   testCase "Parser Tests" $ do
-    assertParser "cabal-1.yaml" (noDeps (Cabal $ CabalType (Just "lib:hie-bios")))
+    assertParser "cabal-1.yaml" (noDeps (Cabal $ CabalType (Just "lib:hie-bios") Nothing))
     assertParser "stack-config.yaml" (noDeps (Stack $ StackType Nothing Nothing))
     --assertParser "bazel.yaml" (noDeps Bazel)
     assertParser "bios-1.yaml" (noDeps (Bios (Program "program") Nothing Nothing))
@@ -34,16 +34,16 @@ main = defaultMain $
     assertParser "bios-3.yaml" (noDeps (Bios (Command "shellcommand") Nothing Nothing))
     assertParser "bios-4.yaml" (noDeps (Bios (Command "shellcommand") (Just (Command "dep-shellcommand")) Nothing))
     assertParser "bios-5.yaml" (noDeps (Bios (Command "shellcommand") (Just (Program "dep-program")) Nothing))
-    assertParser "dependencies.yaml" (Config (CradleConfig ["depFile"] (Cabal $ CabalType (Just "lib:hie-bios"))))
+    assertParser "dependencies.yaml" (Config (CradleConfig ["depFile"] (Cabal $ CabalType (Just "lib:hie-bios") Nothing)))
     assertParser "direct.yaml" (noDeps (Direct ["list", "of", "arguments"]))
     assertParser "none.yaml" (noDeps None)
     --assertParser "obelisk.yaml" (noDeps Obelisk)
-    assertParser "multi.yaml" (noDeps (Multi [("./src", CradleConfig [] (Cabal $ CabalType (Just "lib:hie-bios")))
-                                             ,("./test", CradleConfig [] (Cabal $ CabalType (Just "test")) ) ]))
+    assertParser "multi.yaml" (noDeps (Multi [("./src", CradleConfig [] (Cabal $ CabalType (Just "lib:hie-bios") Nothing))
+                                             ,("./test", CradleConfig [] (Cabal $ CabalType (Just "test") Nothing))]))
 
-    assertParser "cabal-multi.yaml" (noDeps (CabalMulti (CabalType Nothing)
-                                                        [("./src", CabalType $ Just "lib:hie-bios")
-                                                        ,("./", CabalType $ Just "lib:hie-bios")]))
+    assertParser "cabal-multi.yaml" (noDeps (CabalMulti (CabalType Nothing Nothing)
+                                                        [("./src", CabalType (Just "lib:hie-bios") Nothing)
+                                                        ,("./", CabalType (Just "lib:hie-bios") Nothing)]))
 
     assertParser "stack-multi.yaml" (noDeps (StackMulti (StackType Nothing Nothing)
                                                         [("./src", StackType (Just "lib:hie-bios") Nothing)
@@ -51,15 +51,25 @@ main = defaultMain $
 
     assertParser "nested-cabal-multi.yaml" (noDeps (Multi [("./test/testdata", CradleConfig [] None)
                                                           ,("./", CradleConfig [] (
-                                                                    CabalMulti (CabalType Nothing)
-                                                                               [("./src", CabalType $ Just "lib:hie-bios")
-                                                                               ,("./tests", CabalType $ Just "parser-tests")]))]))
+                                                                    CabalMulti (CabalType Nothing Nothing)
+                                                                               [("./src", CabalType (Just "lib:hie-bios") Nothing)
+                                                                               ,("./tests", CabalType (Just "parser-tests") Nothing)]))]))
 
     assertParser "nested-stack-multi.yaml" (noDeps (Multi [("./test/testdata", CradleConfig [] None)
                                                           ,("./", CradleConfig [] (
                                                                     StackMulti (StackType Nothing Nothing)
                                                                                [("./src", StackType (Just "lib:hie-bios") Nothing)
                                                                                ,("./tests", StackType (Just "parser-tests") Nothing)]))]))
+    -- Assertions for cabal.project files
+    assertParser "cabal-with-project.yaml"
+      (noDeps (Cabal $ CabalType Nothing (Just "cabal.project.8.10.7")))
+    assertParser "cabal-with-both.yaml"
+      (noDeps (Cabal $ CabalType (Just "hie-bios:hie") (Just "cabal.project.8.10.7")))
+    assertParser "multi-cabal-with-project.yaml"
+      (noDeps (CabalMulti (CabalType Nothing (Just "cabal.project.8.10.7"))
+                          [("./src", CabalType (Just "lib:hie-bios") Nothing)
+                          ,("./vendor", CabalType (Just "parser-tests") Nothing)]))
+    -- Assertions for stack.yaml files
     assertParser "stack-with-yaml.yaml"
       (noDeps (Stack $ StackType Nothing (Just "stack-8.8.3.yaml")))
     assertParser "stack-with-both.yaml"
@@ -77,11 +87,11 @@ main = defaultMain $
       (noDeps (Multi
         [ ("./src", CradleConfig [] (Other CabalHelperStack $ simpleCabalHelperYaml "stack"))
         , ("./input", CradleConfig [] (Other CabalHelperCabal $ simpleCabalHelperYaml "cabal"))
-        , ("./test", CradleConfig [] (Cabal $ CabalType (Just "test")))
+        , ("./test", CradleConfig [] (Cabal $ CabalType (Just "test") Nothing))
         , (".", CradleConfig [] None)
         ]))
     assertParserFails "keys-not-unique-fails.yaml" invalidYamlException
-    assertParser "cabal-empty-config.yaml" (noDeps (Cabal $ CabalType Nothing))
+    assertParser "cabal-empty-config.yaml" (noDeps (Cabal $ CabalType Nothing Nothing))
 
 assertParser :: FilePath -> Config Void -> Assertion
 assertParser fp cc = do

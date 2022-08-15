@@ -196,6 +196,36 @@ cabalTestCases extraGhcDep =
         loadRuntimeGhcVersion
         assertGhcVersionIs extraGhcVersion
     ]
+  , testGroup "Cabal project-file"
+    [ testCaseSteps "cabal-with-project, options propagated" $ runTestEnv "cabal-with-project" $ do
+        opts <- cabalLoadOptions "src/MyLib.hs"
+        liftIO $ do
+          "-O2" `elem` componentOptions opts
+            @? "Options must contain '-O2'"
+    , testCaseSteps "cabal-with-project, load" $ runTestEnv "cabal-with-project" $ do
+        testDirectoryM isCabalCradle "src/MyLib.hs"
+    , testCaseSteps "multi-cabal-with-project, options propagated" $ runTestEnv "multi-cabal-with-project" $ do
+        optsAppA <- cabalLoadOptions "appA/src/Lib.hs"
+        liftIO $ do
+          "-O2" `elem` componentOptions optsAppA
+            @? "Options must contain '-O2'"
+        optsAppB <- cabalLoadOptions "appB/src/Lib.hs"
+        liftIO $ do
+          "-O2" `notElem` componentOptions optsAppB
+            @? "Options must not contain '-O2'"
+    , testCaseSteps "multi-cabal-with-project, load" $ runTestEnv "multi-cabal-with-project" $ do
+        testDirectoryM isCabalCradle "appB/src/Lib.hs"
+        testDirectoryM isCabalCradle "appB/src/Lib.hs"
+    , testGroupWithDependency extraGhcDep
+      [ testCaseSteps "Honours extra ghc setting" $ runTestEnv "cabal-with-ghc-and-project" $ do
+          initCradle "src/MyLib.hs"
+          assertCradle isCabalCradle
+          loadRuntimeGhcLibDir
+          assertLibDirVersionIs extraGhcVersion
+          loadRuntimeGhcVersion
+          assertGhcVersionIs extraGhcVersion
+      ]
+    ]
   ]
   where
     cabalAttemptLoad :: FilePath -> TestM ()
@@ -203,6 +233,13 @@ cabalTestCases extraGhcDep =
       initCradle fp
       assertCradle isCabalCradle
       loadComponentOptions fp
+
+    cabalLoadOptions :: FilePath -> TestM ComponentOptions
+    cabalLoadOptions fp = do
+      initCradle fp
+      assertCradle isCabalCradle
+      loadComponentOptions fp
+      assertLoadSuccess
 
 stackTestCases :: [TestTree]
 stackTestCases =

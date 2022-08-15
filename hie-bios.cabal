@@ -21,6 +21,14 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/cabal-with-ghc/cabal.project
                         tests/projects/cabal-with-ghc/hie.yaml
                         tests/projects/cabal-with-ghc/src/MyLib.hs
+                        tests/projects/cabal-with-ghc-and-project/cabal-with-ghc.cabal
+                        tests/projects/cabal-with-ghc-and-project/cabal.project.8.10.7
+                        tests/projects/cabal-with-ghc-and-project/hie.yaml
+                        tests/projects/cabal-with-ghc-and-project/src/MyLib.hs
+                        tests/projects/cabal-with-project/cabal-with-project.cabal
+                        tests/projects/cabal-with-project/cabal.project.8.10.7
+                        tests/projects/cabal-with-project/hie.yaml
+                        tests/projects/cabal-with-project/src/MyLib.hs
                         tests/projects/symlink-test/a/A.hs
                         tests/projects/symlink-test/hie.yaml
                         tests/projects/deps-bios-new/A.hs
@@ -35,6 +43,12 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/multi-cabal/hie.yaml
                         tests/projects/multi-cabal/multi-cabal.cabal
                         tests/projects/multi-cabal/src/Lib.hs
+                        tests/projects/multi-cabal-with-project/appA/appA.cabal
+                        tests/projects/multi-cabal-with-project/appA/src/Lib.hs
+                        tests/projects/multi-cabal-with-project/appB/appB.cabal
+                        tests/projects/multi-cabal-with-project/appB/src/Lib.hs
+                        tests/projects/multi-cabal-with-project/cabal.project.8.10.7
+                        tests/projects/multi-cabal-with-project/hie.yaml
                         tests/projects/monorepo-cabal/cabal.project
                         tests/projects/monorepo-cabal/hie.yaml
                         tests/projects/monorepo-cabal/A/Main.hs
