@@ -3,7 +3,68 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Utils where
+module Utils (
+  -- * Test Environment
+  TestM,
+  TestEnv,
+  TestConfig (..),
+  defConfig,
+
+  -- * Run Tests
+  runTestEnv,
+  runTestEnv',
+  runTestEnvLocal,
+
+  -- * Low-level test-env modification helpers
+  setCradle,
+  unsetCradle,
+  setLoadResult,
+  unsetLoadResult,
+  setLibDirResult,
+  setGhcVersionResult,
+
+  -- * Ask for test environment
+  askRoot,
+  askStep,
+  askCradle,
+  askLoadResult,
+  askOrLoadLibDir,
+  askLibDir,
+  askLibDirResult,
+  askGhcVersion,
+  askGhcVersionResult,
+
+  -- * Test setup helpers
+  step,
+  normFile,
+  findCradleLoc,
+  initCradle,
+  initImplicitCradle,
+  loadComponentOptions,
+  loadRuntimeGhcLibDir,
+  loadRuntimeGhcVersion,
+  inCradleRootDir,
+  loadFileGhc,
+
+  -- * Assertion helpers
+  assertCradle,
+  assertLibDirVersion,
+  assertGhcVersion,
+  assertLibDirVersionIs,
+  assertGhcVersionIs,
+  assertComponentOptions,
+  assertCradleError,
+  assertLoadSuccess,
+  assertLoadFailure,
+  assertLoadNone,
+  assertCradleLoadSuccess,
+  assertCradleLoadError,
+
+  -- * High-level test helpers
+  testDirectoryM,
+  testImplicitDirectoryM,
+  findCradleForModuleM,
+) where
 
 import Control.Monad
 import Control.Monad.IO.Class
@@ -261,7 +322,8 @@ assertLibDirVersionIs :: String -> TestM ()
 assertLibDirVersionIs ghcVersion = do
   step $ "Verify runtime GHC library directory is: " ++ ghcVersion
   libdir <- askLibDir
-  liftIO $ ghcVersion `isInfixOf` libdir @? "Expected \"" ++ ghcVersion
+  liftIO $
+    ghcVersion `isInfixOf` libdir @? "Expected \"" ++ ghcVersion
       ++ "\" to be infix of: "
       ++ libdir
 
@@ -366,158 +428,3 @@ copyDir src dst = do
         else copyFile srcFp dstFp
  where
   ignored = ["dist", "dist-newstyle", ".stack-work"]
-
--- ---------------------------------------------------------------------------
--- Old test-helpers. To be removed
--- ---------------------------------------------------------------------------
-
-testDirectory :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (String -> IO ()) -> IO ()
-testDirectory cradlePred rootDir file step =
-  -- We need to copy over the directory to somewhere outside the source tree
-  -- when we test, since the cabal.project/stack.yaml/hie.yaml file in the root
-  -- of this repository interferes with the test cradles!
-  withTempCopy rootDir $ \rootDir' -> do
-    fp <- canonicalizePath (rootDir' </> file)
-    crd <- initialiseCradle cradlePred fp step
-    step "Get runtime GHC library directory"
-    testGetGhcLibDir crd VERSION_ghc
-    step "Get runtime GHC version"
-    testGetGhcVersion crd VERSION_ghc
-    step "Initialise Flags"
-    testLoadFile crd fp step
-
-{- | Here we are testing that the cradle's method of obtaining the ghcLibDir
- always works.
--}
-testGetGhcLibDir :: Cradle a -> String -> IO ()
-testGetGhcLibDir crd ghcVersion = do
-  libDirRes <- getRuntimeGhcLibDir crd
-  isSuccess libDirRes
- where
-  -- heuristically test that the produced $libdir makes sense.
-  isSuccess (CradleSuccess path) =
-    ghcVersion `isInfixOf` path @? "Expected \"" ++ ghcVersion
-      ++ "\" to be infix of: "
-      ++ path
-  isSuccess _ =
-    assertFailure "Must succeed loading ghc lib directory"
-
-{- | Here we are testing that the cradle's method of getting the runtime ghc
- version is correct - which while testing, should be the version that we have
- built the tests with. This will fail if you compiled the tests with a ghc
- that doesn't equal the ghc on your path though :(
--}
-testGetGhcVersion :: Cradle a -> String -> IO ()
-testGetGhcVersion crd ghcVersion = do
-  version <- getRuntimeGhcVersion crd
-  version @?= CradleSuccess ghcVersion
-
-testGetGhcVersionFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Assertion) -> (String -> IO ()) -> IO ()
-testGetGhcVersionFail cradlePred rootDir file cradleFailPred step =
-  testCradle cradlePred rootDir file step $ \crd _ -> do
-    res <- getRuntimeGhcVersion crd
-
-    case res of
-      CradleSuccess _ -> liftIO $ assertFailure "Cradle loaded successfully"
-      CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
-      CradleFail crdFail -> liftIO $ cradleFailPred crdFail
-
-testDirectoryFail :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (CradleError -> Assertion) -> (String -> IO ()) -> IO ()
-testDirectoryFail cradlePred rootDir file cradleFailPred step =
-  testCradle cradlePred rootDir file step $ \crd fp ->
-    testLoadFileCradleFail crd fp cradleFailPred step
-
-testCradle :: (Cradle Void -> Bool) -> FilePath -> FilePath -> (String -> IO ()) -> (Cradle Void -> FilePath -> IO a) -> IO a
-testCradle cradlePred rootDir file step cont = withTempCopy rootDir $ \rootDir' -> do
-  fp <- canonicalizePath (rootDir' </> file)
-  crd <- initialiseCradle cradlePred fp step
-  step "Initialise Flags"
-  cont crd fp
-
-initialiseCradle :: (Cradle Void -> Bool) -> FilePath -> (String -> IO ()) -> IO (Cradle Void)
-initialiseCradle cradlePred a_fp step = do
-  step $ "Finding Cradle for: " ++ a_fp
-  mcfg <- findCradle a_fp
-  step $ "Loading Cradle: " ++ show mcfg
-  crd <- case mcfg of
-    Just cfg -> loadCradle cfg
-    Nothing -> loadImplicitCradle a_fp
-  cradlePred crd @? "Must be the correct kind of cradle"
-  pure crd
-
-testLoadFile :: Cradle a -> FilePath -> (String -> IO ()) -> IO ()
-testLoadFile crd a_fp step = do
-  libDirRes <- getRuntimeGhcLibDir crd
-  handleCradleResult libDirRes $ \libDir ->
-    withCurrentDirectory (cradleRootDir crd) $
-      G.runGhc (Just libDir) $ do
-        let relFp = makeRelative (cradleRootDir crd) a_fp
-        liftIO (step "Cradle load")
-        res <- initializeFlagsWithCradle mempty relFp crd
-        handleCradleResult res $ \(ini, _) -> do
-          liftIO (step "Initial module load")
-          sf <- ini
-          case sf of
-            -- Test resetting the targets
-            Succeeded -> do
-              liftIO (step "Set target files")
-              setTargetFiles mempty [(a_fp, a_fp)]
-            Failed -> liftIO $ assertFailure "Module loading failed"
-
-testLoadFileCradleFail :: Cradle a -> FilePath -> (CradleError -> Assertion) -> (String -> IO ()) -> IO ()
-testLoadFileCradleFail crd a_fp cradleErrorExpectation step = do
-  step "Loading cradle"
-  -- don't spin up a ghc session, just run the opts program manually since
-  -- we're not guaranteed to be able to get the ghc libdir if the cradle is
-  -- failing
-  withCurrentDirectory (cradleRootDir crd) $ do
-    let relFp = makeRelative (cradleRootDir crd) a_fp
-    res <- runCradle (cradleOptsProg crd) mempty relFp
-    case res of
-      CradleSuccess _ -> liftIO $ assertFailure "Cradle loaded successfully"
-      CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
-      CradleFail crdFail -> liftIO $ cradleErrorExpectation crdFail
-
-testLoadCradleDependencies :: (Cradle Void -> Bool) -> FilePath -> FilePath -> ([FilePath] -> Assertion) -> (String -> IO ()) -> IO ()
-testLoadCradleDependencies cradlePred rootDir file dependencyPred step =
-  withTempCopy rootDir $ \rootDir' -> do
-    a_fp <- canonicalizePath (rootDir' </> file)
-    crd <- initialiseCradle cradlePred a_fp step
-    libDirRes <- getRuntimeGhcLibDir crd
-    handleCradleResult libDirRes $ \libDir -> do
-      step "Initialise Flags"
-      withCurrentDirectory (cradleRootDir crd) $
-        G.runGhc (Just libDir) $ do
-          let relFp = makeRelative (cradleRootDir crd) a_fp
-          res <- initializeFlagsWithCradleWithMessage mempty (Just (\_ n _ _ -> step (show n))) relFp crd
-          handleCradleResult res $ \(_, options) ->
-            liftIO $ dependencyPred (componentDependencies options)
-
-handleCradleResult :: MonadIO m => CradleLoadResult a -> (a -> m ()) -> m ()
-handleCradleResult (CradleSuccess x) f = f x
-handleCradleResult CradleNone _ = liftIO $ assertFailure "Unexpected none-Cradle"
-handleCradleResult (CradleFail (CradleError _deps _ex stde)) _ =
-  liftIO $ assertFailure ("Unexpected cradle fail" ++ unlines stde)
-
-findCradleForModule :: FilePath -> Maybe FilePath -> (String -> IO ()) -> IO ()
-findCradleForModule fp expected' step = do
-  expected <- maybe (return Nothing) (fmap Just . canonicalizePath) expected'
-  a_fp <- canonicalizePath fp
-  step "Finding cradle"
-  crd <- findCradle a_fp
-  crd @?= expected
-
-testImplicitCradle :: FilePath -> FilePath -> ActionName Void -> (String -> IO ()) -> IO ()
-testImplicitCradle rootDir file expectedActionName step =
-  withTempCopy rootDir $ \rootDir' -> do
-    fp <- makeAbsolute (rootDir' </> file)
-    step "Inferring implicit cradle"
-    crd <- loadImplicitCradle fp :: IO (Cradle Void)
-
-    actionName (cradleOptsProg crd) @?= expectedActionName
-
-    expectedCradleRootDir <- makeAbsolute rootDir'
-    cradleRootDir crd @?= expectedCradleRootDir
-
-    step "Initialize flags"
-    testLoadFile crd fp step
