@@ -37,6 +37,7 @@ module Utils (
   -- * Test setup helpers
   step,
   normFile,
+  relFile,
   findCradleLoc,
   initCradle,
   initImplicitCradle,
@@ -92,6 +93,7 @@ type TestM a = StateT (TestEnv Void) IO a
 
 data TestConfig = TestConfig
   { useTemporaryDirectory :: Bool
+  , testProjectRoots :: FilePath
   }
   deriving (Eq, Show, Ord)
 
@@ -105,7 +107,7 @@ data TestEnv ext = TestEnv
   }
 
 defConfig :: TestConfig
-defConfig = TestConfig True
+defConfig = TestConfig True "./tests/projects"
 
 runTestEnv :: FilePath -> TestM a -> (String -> IO ()) -> IO a
 runTestEnv = runTestEnv' defConfig
@@ -131,7 +133,10 @@ runTestEnv' config root act stepF = do
           , testRootDir = root'
           , testStepFunction = stepF
           }
-  wrapper root (\root' -> evalStateT act (mkEnv root'))
+      realRoot = testProjectRoots config </> root
+  wrapper realRoot $ \root' -> flip evalStateT (mkEnv root') $ do
+    step $ "Run test in: " <> root'
+    act
 
 -- ---------------------------------------------------------------------------
 -- Modification helpers
@@ -230,6 +235,9 @@ step msg = do
 normFile :: FilePath -> TestM FilePath
 normFile fp = (</> fp) <$> gets testRootDir
 
+relFile :: FilePath -> TestM FilePath
+relFile fp = (`makeRelative` fp) <$> gets testRootDir
+
 findCradleLoc :: FilePath -> TestM (Maybe FilePath)
 findCradleLoc fp = do
   a_fp <- normFile fp
@@ -238,9 +246,10 @@ findCradleLoc fp = do
 initCradle :: FilePath -> TestM ()
 initCradle fp = do
   a_fp <- normFile fp
-  step $ "Finding Cradle for: " ++ a_fp
+  step $ "Finding Cradle for: " <> fp
   mcfg <- findCradleLoc a_fp
-  step $ "Loading Cradle: " ++ show mcfg
+  relMcfg <- traverse relFile mcfg
+  step $ "Loading Cradle: " <> show relMcfg
   crd <- case mcfg of
     Just cfg -> liftIO $ loadCradle cfg
     Nothing -> liftIO $ loadImplicitCradle a_fp
@@ -320,12 +329,12 @@ assertGhcVersion = assertGhcVersionIs VERSION_ghc
 
 assertLibDirVersionIs :: String -> TestM ()
 assertLibDirVersionIs ghcVersion = do
-  step $ "Verify runtime GHC library directory is: " ++ ghcVersion
+  step $ "Verify runtime GHC library directory is: " <> ghcVersion
   libdir <- askLibDir
   liftIO $
-    ghcVersion `isInfixOf` libdir @? "Expected \"" ++ ghcVersion
-      ++ "\" to be infix of: "
-      ++ libdir
+    ghcVersion `isInfixOf` libdir @? "Expected \"" <> ghcVersion
+      <> "\" to be infix of: "
+      <> libdir
 
 assertGhcVersionIs :: String -> TestM ()
 assertGhcVersionIs expectedVersion = do
@@ -366,7 +375,7 @@ assertCradleLoadSuccess = \case
   (CradleSuccess x) -> pure x
   CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
   (CradleFail (CradleError _deps _ex stde)) ->
-    liftIO $ assertFailure ("Unexpected cradle fail" ++ unlines stde)
+    liftIO $ assertFailure ("Unexpected cradle fail" <> unlines stde)
 
 assertCradleLoadError :: CradleLoadResult a -> TestM CradleError
 assertCradleLoadError = \case

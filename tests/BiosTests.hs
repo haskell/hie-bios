@@ -50,13 +50,13 @@ main = do
     testGroup "Bios-tests"
       [ testGroup "Find cradle"
         [ testCaseSteps "simple-cabal" $
-            runTestEnvLocal "./tests/projects/simple-cabal" $ do
+            runTestEnvLocal "./simple-cabal" $ do
               findCradleForModuleM "B.hs" (Just "hie.yaml")
 
         -- Checks if we can find a hie.yaml even when the given filepath
         -- is unknown. This functionality is required by Haskell IDE Engine.
         , testCaseSteps "simple-cabal-unknown-path" $
-            runTestEnvLocal "./tests/projects/simple-cabal" $ do
+            runTestEnvLocal "./simple-cabal" $ do
               findCradleForModuleM "Foo.hs" (Just "hie.yaml")
         ]
       , testGroup "Symlink" symbolicLinkTests
@@ -70,7 +70,7 @@ main = do
 
 symbolicLinkTests :: [TestTree]
 symbolicLinkTests =
-  [ testCaseSteps "Can load base module" $ runTestEnv "./tests/projects/symlink-test" $ do
+  [ testCaseSteps "Can load base module" $ runTestEnv "./symlink-test" $ do
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
@@ -79,7 +79,7 @@ symbolicLinkTests =
         assertComponentOptions $ \opts ->
           componentOptions opts `shouldMatchList` ["a"] <> argDynamic
 
-  , testCaseSteps "Can load symlinked module" $ runTestEnv "./tests/projects/symlink-test" $ do
+  , testCaseSteps "Can load symlinked module" $ runTestEnv "./symlink-test" $ do
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
@@ -90,7 +90,7 @@ symbolicLinkTests =
         loadComponentOptions "./b/A.hs"
         assertComponentOptions $ \opts ->
           componentOptions opts `shouldMatchList` ["b"] <> argDynamic
-  , testCaseSteps "Can not load symlinked module that is ignored" $ runTestEnv "./tests/projects/symlink-test" $ do
+  , testCaseSteps "Can not load symlinked module that is ignored" $ runTestEnv "./symlink-test" $ do
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
@@ -104,14 +104,14 @@ symbolicLinkTests =
 
 biosTestCases :: [TestTree]
 biosTestCases =
-  [ testCaseSteps "failing-bios" $ runTestEnv "./tests/projects/failing-bios" $ do
+  [ testCaseSteps "failing-bios" $ runTestEnv "./failing-bios" $ do
       initCradle "B.hs"
       assertCradle isBiosCradle
       loadComponentOptions "B.hs"
       assertCradleError $ \CradleError {..} -> do
         cradleErrorExitCode @?= ExitFailure 1
         cradleErrorDependencies `shouldMatchList` ["hie.yaml"]
-  , testCaseSteps "failing-bios-ghc" $ runTestEnv "./tests/projects/failing-bios-ghc" $ do
+  , testCaseSteps "failing-bios-ghc" $ runTestEnv "./failing-bios-ghc" $ do
       initCradle "B.hs"
       assertCradle isBiosCradle
       loadRuntimeGhcVersion
@@ -121,9 +121,9 @@ biosTestCases =
         cradleErrorDependencies `shouldMatchList` []
         length cradleErrorStderr @?= 1
         "Couldn't execute myGhc" `isPrefixOf` head cradleErrorStderr @? "Error message should contain basic information"
-  , testCaseSteps "simple-bios-shell" $ runTestEnv "./tests/projects/simple-bios-shell" $ do
+  , testCaseSteps "simple-bios-shell" $ runTestEnv "./simple-bios-shell" $ do
       testDirectoryM isBiosCradle "B.hs"
-  , testCaseSteps "simple-bios-shell-deps" $ runTestEnv "./tests/projects/simple-bios-shell" $ do
+  , testCaseSteps "simple-bios-shell-deps" $ runTestEnv "./simple-bios-shell" $ do
       biosCradleDeps "B.hs" ["hie.yaml"]
   ] <> concat [linuxTestCases | False] -- TODO(fendor), enable again
   where
@@ -136,26 +136,26 @@ biosTestCases =
         deps @?= componentDependencies opts
 
     linuxTestCases =
-      [ testCaseSteps "simple-bios" $ runTestEnv "./tests/projects/simple-bios" $
+      [ testCaseSteps "simple-bios" $ runTestEnv "./simple-bios" $
           testDirectoryM isBiosCradle "B.hs"
-      , testCaseSteps "simple-bios-ghc" $ runTestEnv "./tests/projects/simple-bios-ghc" $
+      , testCaseSteps "simple-bios-ghc" $ runTestEnv "./simple-bios-ghc" $
           testDirectoryM isBiosCradle  "B.hs"
-      , testCaseSteps "simple-bios-deps" $ runTestEnv "./tests/projects/simple-bios" $ do
+      , testCaseSteps "simple-bios-deps" $ runTestEnv "./simple-bios" $ do
           biosCradleDeps "B.hs" ["hie-bios.sh", "hie.yaml"]
-      , testCaseSteps "simple-bios-deps-new" $ runTestEnv "./tests/projects/deps-bios-new" $ do
+      , testCaseSteps "simple-bios-deps-new" $ runTestEnv "./deps-bios-new" $ do
           biosCradleDeps "B.hs" ["hie-bios.sh", "hie.yaml"]
       ]
 
 cabalTestCases :: ToolDependency -> [TestTree]
 cabalTestCases extraGhcDep =
-  [ testCaseSteps "failing-cabal" $ runTestEnv "./tests/projects/failing-cabal" $ do
+  [ testCaseSteps "failing-cabal" $ runTestEnv "./failing-cabal" $ do
       cabalAttemptLoad "MyLib.hs"
       assertCradleError (\CradleError {..} -> do
         cradleErrorExitCode @?= ExitFailure 1
         cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
-  , testCaseSteps "simple-cabal" $ runTestEnv "./tests/projects/simple-cabal" $ do
+  , testCaseSteps "simple-cabal" $ runTestEnv "./simple-cabal" $ do
       testDirectoryM isCabalCradle "B.hs"
-  , testCaseSteps "nested-cabal" $ runTestEnv "./tests/projects/nested-cabal" $ do
+  , testCaseSteps "nested-cabal" $ runTestEnv "./nested-cabal" $ do
       cabalAttemptLoad "sub-comp/Lib.hs"
       assertComponentOptions $ \opts -> do
         componentDependencies opts `shouldMatchList`
@@ -163,7 +163,7 @@ cabalTestCases extraGhcDep =
           , "cabal.project"
           , "cabal.project.local"
           ]
-  , testCaseSteps "nested-cabal2" $ runTestEnv "./tests/projects/nested-cabal" $ do
+  , testCaseSteps "nested-cabal2" $ runTestEnv "./nested-cabal" $ do
       cabalAttemptLoad "MyLib.hs"
       assertComponentOptions $ \opts -> do
         componentDependencies opts `shouldMatchList`
@@ -171,24 +171,24 @@ cabalTestCases extraGhcDep =
           , "cabal.project"
           , "cabal.project.local"
           ]
-  , testCaseSteps "multi-cabal" $ runTestEnv "./tests/projects/multi-cabal" $ do
+  , testCaseSteps "multi-cabal" $ runTestEnv "./multi-cabal" $ do
       {- tests if both components can be loaded -}
       testDirectoryM isCabalCradle "app/Main.hs"
       testDirectoryM isCabalCradle "src/Lib.hs"
   , {- issue https://github.com/mpickering/hie-bios/issues/200 -}
-    testCaseSteps "monorepo-cabal" $ runTestEnv "./tests/projects/monorepo-cabal" $ do
+    testCaseSteps "monorepo-cabal" $ runTestEnv "./monorepo-cabal" $ do
       testDirectoryM isCabalCradle "A/Main.hs"
       testDirectoryM isCabalCradle "B/MyLib.hs"
   , testGroup "Implicit cradle tests" $
-      [ testCaseSteps "implicit-cabal" $ runTestEnv "./tests/projects/implicit-cabal" $ do
+      [ testCaseSteps "implicit-cabal" $ runTestEnv "./implicit-cabal" $ do
           testImplicitDirectoryM isCabalCradle "Main.hs"
-      , testCaseSteps "implicit-cabal-no-project" $ runTestEnv "./tests/projects/implicit-cabal-no-project" $ do
+      , testCaseSteps "implicit-cabal-no-project" $ runTestEnv "./implicit-cabal-no-project" $ do
           testImplicitDirectoryM isCabalCradle "Main.hs"
-      , testCaseSteps "implicit-cabal-deep-project" $ runTestEnv "./tests/projects/implicit-cabal-deep-project" $ do
+      , testCaseSteps "implicit-cabal-deep-project" $ runTestEnv "./implicit-cabal-deep-project" $ do
           testImplicitDirectoryM isCabalCradle "foo/Main.hs"
       ]
   , testGroupWithDependency extraGhcDep
-    [ testCaseSteps "Appropriate ghc and libdir" $ runTestEnvLocal "./tests/projects/cabal-with-ghc" $ do
+    [ testCaseSteps "Appropriate ghc and libdir" $ runTestEnvLocal "./cabal-with-ghc" $ do
         initCradle "src/MyLib.hs"
         assertCradle isCabalCradle
         loadRuntimeGhcLibDir
@@ -207,42 +207,42 @@ cabalTestCases extraGhcDep =
 stackTestCases :: [TestTree]
 stackTestCases =
   [ expectFailBecause "stack repl does not fail on an invalid cabal file" $
-      testCaseSteps "failing-stack" $ runTestEnv "./tests/projects/failing-stack" $ do
+      testCaseSteps "failing-stack" $ runTestEnv "./failing-stack" $ do
         stackAttemptLoad "src/Lib.hs"
         assertCradleError $ \CradleError {..} -> do
             cradleErrorExitCode @?= ExitFailure 1
             cradleErrorDependencies `shouldMatchList` ["failing-stack.cabal", "stack.yaml", "package.yaml"]
-  , testCaseSteps "simple-stack" $ runTestEnv "./tests/projects/simple-stack" $ do
+  , testCaseSteps "simple-stack" $ runTestEnv "./simple-stack" $ do
       testDirectoryM isStackCradle "B.hs"
-  , testCaseSteps "multi-stack" $ runTestEnv "./tests/projects/multi-stack" $ do {- tests if both components can be loaded -}
+  , testCaseSteps "multi-stack" $ runTestEnv "./multi-stack" $ do {- tests if both components can be loaded -}
       testDirectoryM isStackCradle "app/Main.hs"
       testDirectoryM isStackCradle "src/Lib.hs"
-  , testCaseSteps "nested-stack" $ runTestEnv "./tests/projects/nested-stack" $ do
+  , testCaseSteps "nested-stack" $ runTestEnv "./nested-stack" $ do
       stackAttemptLoad "sub-comp/Lib.hs"
       assertComponentOptions $ \opts ->
         componentDependencies opts `shouldMatchList` ["sub-comp" </> "sub-comp.cabal", "sub-comp" </> "package.yaml", "stack.yaml"]
-  , testCaseSteps "nested-stack2" $ runTestEnv "./tests/projects/nested-stack" $ do
+  , testCaseSteps "nested-stack2" $ runTestEnv "./nested-stack" $ do
       stackAttemptLoad "MyLib.hs"
       assertComponentOptions $ \opts ->
         componentDependencies opts `shouldMatchList` ["nested-stack.cabal", "package.yaml", "stack.yaml"]
-  , testCaseSteps "stack-with-yaml" $ runTestEnv "./tests/projects/stack-with-yaml" $ do
+  , testCaseSteps "stack-with-yaml" $ runTestEnv "./stack-with-yaml" $ do
       {- tests if both components can be loaded -}
       testDirectoryM isStackCradle "app/Main.hs"
       testDirectoryM isStackCradle "src/Lib.hs"
-  , testCaseSteps "multi-stack-with-yaml" $ runTestEnv "./tests/projects/multi-stack-with-yaml" $ do
+  , testCaseSteps "multi-stack-with-yaml" $ runTestEnv "./multi-stack-with-yaml" $ do
       {- tests if both components can be loaded -}
       testDirectoryM isStackCradle "appA/src/Lib.hs"
       testDirectoryM isStackCradle "appB/src/Lib.hs"
   ,
     -- Test for special characters in the path for parsing of the ghci-scripts.
     -- Issue https://github.com/mpickering/hie-bios/issues/162
-    testCaseSteps "space stack" $ runTestEnv "./tests/projects/space stack" $ do
+    testCaseSteps "space stack" $ runTestEnv "./space stack" $ do
       testDirectoryM isStackCradle "A.hs"
       testDirectoryM isStackCradle "B.hs"
   , testGroup "Implicit cradle tests"
-      [ testCaseSteps "implicit-stack" $ runTestEnv "./tests/projects/implicit-stack" $
+      [ testCaseSteps "implicit-stack" $ runTestEnv "./implicit-stack" $
           testImplicitDirectoryM isStackCradle "Main.hs"
-      , testCaseSteps "implicit-stack-multi" $ runTestEnv "./tests/projects/implicit-stack-multi" $ do
+      , testCaseSteps "implicit-stack-multi" $ runTestEnv "./implicit-stack-multi" $ do
           testImplicitDirectoryM isStackCradle "Main.hs"
           testImplicitDirectoryM isStackCradle "other-package/Main.hs"
       ]
@@ -256,9 +256,9 @@ stackTestCases =
 
 directTestCases :: [TestTree]
 directTestCases =
-  [ testCaseSteps "simple-direct" $ runTestEnv  "./tests/projects/simple-direct" $ do
+  [ testCaseSteps "simple-direct" $ runTestEnv  "./simple-direct" $ do
       testDirectoryM isDirectCradle "B.hs"
-  , testCaseSteps "multi-direct" $ runTestEnv "./tests/projects/multi-direct" $ do
+  , testCaseSteps "multi-direct" $ runTestEnv "./multi-direct" $ do
       {- tests if both components can be loaded -}
       testDirectoryM isMultiCradle "A.hs"
       testDirectoryM isMultiCradle "B.hs"
