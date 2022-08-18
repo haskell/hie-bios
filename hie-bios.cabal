@@ -216,6 +216,7 @@ test-suite bios-tests
   build-depends:
       base,
       extra,
+      transformers,
       tasty,
       tasty-hunit,
       tasty-expected-failure,
@@ -229,6 +230,7 @@ test-suite bios-tests
   hs-source-dirs: tests/
   ghc-options: -threaded -Wall
   main-is: BiosTests.hs
+  other-modules: Utils
 
 Source-Repository head
   Type:                 git

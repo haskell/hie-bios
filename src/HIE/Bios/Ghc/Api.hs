@@ -5,6 +5,8 @@ module HIE.Bios.Ghc.Api (
   , initializeFlagsWithCradleWithMessage
   , G.SuccessFlag(..)
   , withDynFlags
+  -- For test purposes
+  , initSessionWithMessage
   ) where
 
 import GHC (LoadHowMuch(..), DynFlags, GhcMonad)
