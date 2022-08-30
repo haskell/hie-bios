@@ -367,13 +367,10 @@ instance Tasty.IsOption IgnoreToolDeps where
   optionHelp = pure "Run tests whether their tool dependencies exist or not"
   optionCLParser = Tasty.flagCLParser Nothing (IgnoreToolDeps True)
 
--- | The ingredient that provides the test listing functionality
+-- | The ingredient that provides the "ignore missing run-time dependencies" functionality
 ignoreToolTests :: Tasty.Ingredient
 ignoreToolTests = Tasty.TestManager [Tasty.Option (Proxy :: Proxy IgnoreToolDeps)] $
-  \opts _tree ->
-    case Tasty.lookupOption opts of
-      IgnoreToolDeps False -> Nothing
-      IgnoreToolDeps True -> Just $ pure True
+  \_opts _tree -> Nothing
 
 -- ------------------------------------------------------------------
 -- Ignore test group if built with GHC 9 or newer
