@@ -38,7 +38,7 @@ jobs:
       run: ghc --version
 
     - name: Cache Cabal
-      uses: actions/cache@v1.2.0
+      uses: actions/cache@v3.0.8
       with:
         path: ~/.cabal
         key: ${{ runner.OS }}-${{ matrix.ghc }}-cabal-0
