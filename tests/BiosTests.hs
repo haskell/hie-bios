@@ -251,7 +251,7 @@ stackTestCases =
     stackAttemptLoad :: FilePath -> TestM ()
     stackAttemptLoad fp = do
       initCradle fp
-      assertCradle isCabalCradle
+      assertCradle isStackCradle
       loadComponentOptions fp
 
 directTestCases :: [TestTree]
