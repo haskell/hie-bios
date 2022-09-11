@@ -125,7 +125,7 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/stack-with-yaml/stack-with-yaml.cabal
                         tests/projects/stack-with-yaml/src/Lib.hs
 
-tested-with: GHC ==8.6.5 || ==8.8.4 || ==8.10.7 || ==9.0.1 || ==9.0.2 || ==9.2.1 || ==9.2.1
+tested-with: GHC ==8.6.5 || ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.1 || ==9.2.4
 
 Library
   Default-Language:     Haskell2010
