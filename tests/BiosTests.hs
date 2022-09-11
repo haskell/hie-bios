@@ -64,7 +64,7 @@ main = do
         [ testGroup "bios" biosTestCases
         , testGroup "direct" directTestCases
         , testGroupWithDependency cabalDep (cabalTestCases extraGhcDep)
-        , ignoreOnGhc9AndNewer $ testGroupWithDependency stackDep stackTestCases
+        , testGroupWithDependency stackDep stackTestCases
         ]
       ]
 
@@ -303,8 +303,10 @@ stackYaml resolver pkgs = unlines
 
 stackYamlResolver :: String
 stackYamlResolver =
-#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)))
-  "nightly-2021-08-22" -- GHC 9.0.1
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,1,0)))
+  "nightly-2022-09-11" -- GHC 9.2.4
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)))
+  "lts-19.22" -- GHC 9.0.2
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,10,7,0)))
   "lts-18.28" -- GHC 8.10.7
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,10,1,0)))
