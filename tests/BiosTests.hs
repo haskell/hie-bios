@@ -64,7 +64,7 @@ main = do
         [ testGroup "bios" biosTestCases
         , testGroup "direct" directTestCases
         , testGroupWithDependency cabalDep (cabalTestCases extraGhcDep)
-        , ignoreOnGhc9AndNewer $ testGroupWithDependency stackDep stackTestCases
+        , ignoreOnGhc921 $ testGroupWithDependency stackDep stackTestCases
         ]
       ]
 
@@ -251,7 +251,7 @@ stackTestCases =
     stackAttemptLoad :: FilePath -> TestM ()
     stackAttemptLoad fp = do
       initCradle fp
-      assertCradle isCabalCradle
+      assertCradle isStackCradle
       loadComponentOptions fp
 
 directTestCases :: [TestTree]
@@ -303,8 +303,12 @@ stackYaml resolver pkgs = unlines
 
 stackYamlResolver :: String
 stackYamlResolver =
-#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)))
-  "nightly-2021-08-22" -- GHC 9.0.1
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,1,0)))
+  "nightly-2022-09-11" -- GHC 9.2.4
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)))
+  "lts-19.22" -- GHC 9.0.2
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,10,7,0)))
+  "lts-18.28" -- GHC 8.10.7
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,10,1,0)))
   "lts-18.6" -- GHC 8.10.4
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)))
@@ -367,22 +371,19 @@ instance Tasty.IsOption IgnoreToolDeps where
   optionHelp = pure "Run tests whether their tool dependencies exist or not"
   optionCLParser = Tasty.flagCLParser Nothing (IgnoreToolDeps True)
 
--- | The ingredient that provides the test listing functionality
+-- | The ingredient that provides the "ignore missing run-time dependencies" functionality
 ignoreToolTests :: Tasty.Ingredient
 ignoreToolTests = Tasty.TestManager [Tasty.Option (Proxy :: Proxy IgnoreToolDeps)] $
-  \opts _tree ->
-    case Tasty.lookupOption opts of
-      IgnoreToolDeps False -> Nothing
-      IgnoreToolDeps True -> Just $ pure True
+  \_opts _tree -> Nothing
 
 -- ------------------------------------------------------------------
--- Ignore test group if built with GHC 9 or newer
+-- Ignore test group if built with GHC 9.2.1 until GHC 9.2.4
 -- ------------------------------------------------------------------
 
-ignoreOnGhc9AndNewer :: TestTree -> TestTree
-ignoreOnGhc9AndNewer tt =
-#if (defined(MIN_VERSION_GLASGOW_HASKELL) && MIN_VERSION_GLASGOW_HASKELL(9,0,0,0))
-  ignoreTestBecause "Not supported on GHC >= 9"
+ignoreOnGhc921 :: TestTree -> TestTree
+ignoreOnGhc921 tt =
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && MIN_VERSION_GLASGOW_HASKELL(9,2,1,0) && !MIN_VERSION_GLASGOW_HASKELL(9,2,4,0))
+  ignoreTestBecause "Not supported on GHC >= 9.2.1 && < 9.2.4"
 #endif
   tt
 

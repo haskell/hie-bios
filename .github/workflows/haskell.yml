@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['9.2.2', '9.2.1', '9.0.2', '9.0.1', '8.10.7', '8.8.4', '8.6.5']
+        ghc: ['9.2.4', '9.2.1', '9.0.2', '8.10.7', '8.8.4', '8.6.5']
         os: [ubuntu-latest, macOS-latest, windows-latest]
 
     steps:
@@ -36,6 +36,9 @@ jobs:
 
     - name: Print normal ghc version
       run: ghc --version
+
+    - name: Instruct stack to use system ghc if possible
+      run: stack config set system-ghc --global true
 
     - name: Cache Cabal
       uses: actions/cache@v3.0.8
