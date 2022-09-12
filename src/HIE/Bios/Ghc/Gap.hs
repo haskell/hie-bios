@@ -72,7 +72,7 @@ import qualified GHC as G
 import Data.List
 import System.FilePath
 
-import DynFlags (LogAction, WarningFlag, updOptLevel, Way(WayDyn), updateWays, addWay')
+import DynFlags (LogAction, WarningFlag, updOptLevel, Way(WayDyn), updateWays, addWay', getDynFlags)
 import qualified DynFlags as G
 import qualified Exception as G
 
