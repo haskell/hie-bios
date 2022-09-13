@@ -164,7 +164,7 @@ Library
                         extra                >= 1.6.14 && < 1.8,
                         prettyprinter        ^>= 1.7.0,
                         process              >= 1.6.1 && < 1.7,
-                        ghc                  >= 8.6.1 && < 9.3,
+                        ghc                  >= 8.6.1 && < 9.5,
                         transformers         >= 0.5.2 && < 0.7,
                         temporary            >= 1.2 && < 1.4,
                         text                 >= 1.2.3 && < 2.1,

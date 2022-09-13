@@ -64,7 +64,7 @@ main = do
         [ testGroup "bios" biosTestCases
         , testGroup "direct" directTestCases
         , testGroupWithDependency cabalDep (cabalTestCases extraGhcDep)
-        , ignoreOnGhc921 $ testGroupWithDependency stackDep stackTestCases
+        , ignoreOnUnsupportedGhc $ testGroupWithDependency stackDep stackTestCases
         ]
       ]
 
@@ -380,9 +380,11 @@ ignoreToolTests = Tasty.TestManager [Tasty.Option (Proxy :: Proxy IgnoreToolDeps
 -- Ignore test group if built with GHC 9.2.1 until GHC 9.2.4
 -- ------------------------------------------------------------------
 
-ignoreOnGhc921 :: TestTree -> TestTree
-ignoreOnGhc921 tt =
-#if (defined(MIN_VERSION_GLASGOW_HASKELL) && MIN_VERSION_GLASGOW_HASKELL(9,2,1,0) && !MIN_VERSION_GLASGOW_HASKELL(9,2,4,0))
+ignoreOnUnsupportedGhc :: TestTree -> TestTree
+ignoreOnUnsupportedGhc tt =
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && MIN_VERSION_GLASGOW_HASKELL(9,4,0,0))
+  ignoreTestBecause "Not supported on GHC >= 9.4"
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && MIN_VERSION_GLASGOW_HASKELL(9,2,1,0) && !MIN_VERSION_GLASGOW_HASKELL(9,2,4,0))
   ignoreTestBecause "Not supported on GHC >= 9.2.1 && < 9.2.4"
 #endif
   tt

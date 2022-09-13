@@ -40,6 +40,11 @@ import HIE.Bios.Ghc.Doc (showPage, getStyle)
 import HIE.Bios.Ghc.Api (withDynFlags)
 import qualified HIE.Bios.Ghc.Gap as Gap
 
+#if __GLASGOW_HASKELL__ >= 903
+import GHC.Types.Error
+import GHC.Driver.Errors.Types
+#endif
+
 ----------------------------------------------------------------
 
 type Builder = [String] -> [String]
@@ -56,7 +61,12 @@ readAndClearLogRef (LogRef ref) = do
     return $! unlines (b [])
 
 appendLogRef :: DynFlags -> Gap.PprStyle -> LogRef -> LogAction
-appendLogRef df style (LogRef ref) _ _ sev src
+appendLogRef df style (LogRef ref)
+#if __GLASGOW_HASKELL__ < 903
+    _ _ sev src
+#else
+    _ (MCDiagnostic sev _) src
+#endif
 #if __GLASGOW_HASKELL__ < 900
   _style
 #endif
@@ -101,10 +111,25 @@ sourceError ::
 sourceError err = do
     dflag <- getSessionDynFlags
     style <- getStyle dflag
+#if __GLASGOW_HASKELL__ >= 903
+    let ret = unlines . errBagToStrList dflag style . getMessages . srcErrorMessages $ err
+#else
     let ret = unlines . errBagToStrList dflag style . srcErrorMessages $ err
+#endif
     return (Left ret)
 
-#if __GLASGOW_HASKELL__ >= 902
+#if __GLASGOW_HASKELL__ >= 903
+errBagToStrList :: DynFlags -> Gap.PprStyle -> Bag (MsgEnvelope GhcMessage) -> [String]
+errBagToStrList dflag style = map (ppErrMsg dflag style) . reverse . bagToList
+
+
+ppErrMsg :: DynFlags -> Gap.PprStyle -> MsgEnvelope GhcMessage -> String
+ppErrMsg dflag style err = ppMsg spn SevError dflag style msg -- ++ ext
+   where
+     spn = errMsgSpan err
+     msg = pprLocMsgEnvelope err
+     -- fixme
+#elif __GLASGOW_HASKELL__ >= 902
 errBagToStrList :: DynFlags -> Gap.PprStyle -> Bag (MsgEnvelope DecoratedSDoc) -> [String]
 errBagToStrList dflag style = map (ppErrMsg dflag style) . reverse . bagToList
 
