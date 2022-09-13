@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE CPP                   #-}
 
 -- | Datatypes for parsing @hie.yaml@ files
 module HIE.Bios.Config.YAML
@@ -22,12 +23,31 @@ module HIE.Bios.Config.YAML
 
 import           Control.Applicative ((<|>))
 import           Data.Aeson
+#if MIN_VERSION_aeson(2,0,0)
 import           Data.Aeson.KeyMap   (keys)
+#else
+import qualified Data.HashMap.Strict as Map
+import qualified Data.Text           as T
+#endif
 import           Data.Aeson.Types    (Object, Parser, Value (Null),
                                       typeMismatch)
 import qualified Data.Char           as C (toLower)
 import           Data.List           ((\\))
 import           GHC.Generics        (Generic)
+
+#if !MIN_VERSION_aeson(2,0,0)
+-- | Backwards compatible type-def for Key
+-- This used to be just a Text, but since aeson >= 2
+-- this is an opaque datatype.
+type Key = T.Text
+-- | Backwards compatible type-def for KeyMap
+-- This used to be just a HashMap, but since aeson >= 2
+-- this is an opaque datatype.
+type KeyMap v = Map.HashMap T.Text v
+ 
+keys :: KeyMap v -> [Key]
+keys = Map.keys
+#endif
 
 checkObjectKeys :: [Key] -> Object -> Parser ()
 checkObjectKeys allowedKeys obj =
