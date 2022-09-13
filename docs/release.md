@@ -12,3 +12,6 @@ This document described the release process for `hie-bios`.
 * [ ] Manually verify the docs render correctly
 * [ ] Upload release
   * `cabal upload --publish dist-newstyle/sdist/hie-bios-<version>.tar.gz; cabal upload --publish --documentation dist-newstyle/hie-bios-<version>-docs.tar.gz`
+* [ ] Create release tag for GitHub
+  * [ ] `git tag -a release-<version>`
+  * [ ] `git push --tags`

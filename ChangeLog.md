@@ -1,5 +1,13 @@
 # ChangeLog hie-bios
 
+## 2022-09-13 - 0.11.0
+
+* Compatibility with aeson 1.5 [#368](https://github.com/haskell/hie-bios/pull/368)
+* Add GHC 9.4 support [#366](https://github.com/haskell/hie-bios/pull/366)
+* Actually run the bios-tests when tool-deps are ignored [#365](https://github.com/haskell/hie-bios/pull/365)
+  * They have been accidentally disabled since 0.9.0.
+* Completely overhaul test-suite [#356](https://github.com/haskell/hie-bios/pull/356)
+
 ## 2022-07-26 - 0.10.0
 
 * Apply Hlint suggestions [#354](https://github.com/haskell/hie-bios/pull/354)
