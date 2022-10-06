@@ -818,6 +818,10 @@ stackWorkDirProcessArgs :: StackWorkDir -> [String]
 stackWorkDirProcessArgs (ExplicitWorkDir swdir) = ["--work-dir", swdir]
 stackWorkDirProcessArgs NoExplicitWorkDir = []
 
+stackProcessArgs :: StackYaml -> StackWorkDir -> [String]
+stackProcessArgs syaml swdir =
+  stackWorkDirProcessArgs swdir <> stackYamlProcessArgs syaml
+
 -- | Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
 stackCradle :: FilePath -> Maybe String -> StackYaml -> StackWorkDir -> Cradle a
@@ -831,10 +835,10 @@ stackCradle wdir mc syaml swdir =
             -- Setup stack silently, since stack might print stuff to stdout in some cases (e.g. on Win)
             -- Issue 242 from HLS: https://github.com/haskell/haskell-language-server/issues/242
             _ <- readProcessWithCwd_ wdir "stack"
-              (stackWorkDirProcessArgs swdir <> stackYamlProcessArgs syaml <> ["setup", "--silent"])
+              (stackProcessArgs syaml swdir <> ["setup", "--silent"])
               ""
             readProcessWithCwd_ wdir "stack"
-              (stackWorkDirProcessArgs swdir <> stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
+              (stackProcessArgs syaml swdir <> ["exec", "ghc", "--"] <> args)
               ""
         }
     }
@@ -865,7 +869,7 @@ stackAction
   -> FilePath
   -> IO (CradleLoadResult ComponentOptions)
 stackAction workDir mc syaml swdir l _fp = do
-  let ghcProcArgs = ("stack", stackWorkDirProcessArgs swdir <> stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
+  let ghcProcArgs = ("stack", stackProcessArgs syaml swdir <> ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
   wrapper_fp <- withGhcWrapperTool ghcProcArgs workDir
   (ex1, _stdo, stde, [(_, maybeArgs)]) <-
@@ -901,7 +905,7 @@ stackAction workDir mc syaml swdir l _fp = do
                   deps
 
 stackProcess :: StackYaml -> StackWorkDir -> [String] -> CreateProcess
-stackProcess syaml swdir args = proc "stack" $ stackWorkDirProcessArgs swdir <> stackYamlProcessArgs syaml <> args
+stackProcess syaml swdir args = proc "stack" $ stackProcessArgs syaml swdir <> args
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess
