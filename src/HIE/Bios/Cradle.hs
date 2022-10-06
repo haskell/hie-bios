@@ -139,11 +139,12 @@ getCradle buildCustomCradle (cc, wdir) = addCradleDeps cradleDeps $ case cradleT
         (CradleConfig cradleDeps
           (Multi [(p, CradleConfig [] (Cabal $ dc <> c)) | (p, c) <- ms])
         , wdir)
-    Stack StackType{ stackComponent = mc, stackYaml = syaml} ->
+    Stack StackType{ stackComponent = mc, stackYaml = syaml, stackStackWork = swdir } ->
       let
         stackYamlConfig = stackYamlFromMaybe wdir syaml
+        stackWorkDirConfig = stackWorkDirFromMaybe swdir
       in
-        stackCradle wdir mc stackYamlConfig
+        stackCradle wdir mc stackYamlConfig stackWorkDirConfig
     StackMulti ds ms ->
       getCradle buildCustomCradle
         (CradleConfig cradleDeps
@@ -189,7 +190,7 @@ inferCradleType fp =
   where
   maybeItsBios = (\wdir -> (Bios (Program $ wdir </> ".hie-bios") Nothing Nothing, wdir)) <$> biosWorkDir fp
 
-  maybeItsStack = stackExecutable >> (Stack $ StackType Nothing Nothing,) <$> stackWorkDir fp
+  maybeItsStack = stackExecutable >> (Stack $ StackType Nothing Nothing Nothing,) <$> stackWorkDir fp
 
   maybeItsCabal = (Cabal $ CabalType Nothing,) <$> cabalWorkDir fp
 
@@ -805,21 +806,35 @@ stackYamlLocationOrDefault :: StackYaml -> FilePath
 stackYamlLocationOrDefault NoExplicitYaml = "stack.yaml"
 stackYamlLocationOrDefault (ExplicitYaml yaml) = yaml
 
+data StackWorkDir
+  = NoExplicitWorkDir
+  | ExplicitWorkDir String
+
+stackWorkDirFromMaybe :: Maybe String -> StackWorkDir
+stackWorkDirFromMaybe Nothing = NoExplicitWorkDir
+stackWorkDirFromMaybe (Just swdir) = ExplicitWorkDir swdir
+
+stackWorkDirProcessArgs :: StackWorkDir -> [String]
+stackWorkDirProcessArgs (ExplicitWorkDir swdir) = ["--work-dir", swdir]
+stackWorkDirProcessArgs NoExplicitWorkDir = []
+
 -- | Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
-stackCradle :: FilePath -> Maybe String -> StackYaml -> Cradle a
-stackCradle wdir mc syaml =
+stackCradle :: FilePath -> Maybe String -> StackYaml -> StackWorkDir -> Cradle a
+stackCradle wdir mc syaml swdir =
   Cradle
     { cradleRootDir    = wdir
     , cradleOptsProg   = CradleAction
         { actionName = Types.Stack
-        , runCradle = stackAction wdir mc syaml
+        , runCradle = stackAction wdir mc syaml swdir
         , runGhcCmd = \args -> runCradleResultT $ do
             -- Setup stack silently, since stack might print stuff to stdout in some cases (e.g. on Win)
             -- Issue 242 from HLS: https://github.com/haskell/haskell-language-server/issues/242
-            _ <- readProcessWithCwd_ wdir "stack" (stackYamlProcessArgs syaml <> ["setup", "--silent"]) ""
+            _ <- readProcessWithCwd_ wdir "stack"
+              (stackWorkDirProcessArgs swdir <> stackYamlProcessArgs syaml <> ["setup", "--silent"])
+              ""
             readProcessWithCwd_ wdir "stack"
-              (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
+              (stackWorkDirProcessArgs swdir <> stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
               ""
         }
     }
@@ -845,21 +860,22 @@ stackAction
   :: FilePath
   -> Maybe String
   -> StackYaml
+  -> StackWorkDir
   -> LogAction IO (WithSeverity Log)
   -> FilePath
   -> IO (CradleLoadResult ComponentOptions)
-stackAction workDir mc syaml l _fp = do
-  let ghcProcArgs = ("stack", stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
+stackAction workDir mc syaml swdir l _fp = do
+  let ghcProcArgs = ("stack", stackWorkDirProcessArgs swdir <> stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
   wrapper_fp <- withGhcWrapperTool ghcProcArgs workDir
   (ex1, _stdo, stde, [(_, maybeArgs)]) <-
     readProcessWithOutputs [hie_bios_output] l workDir $
-    stackProcess syaml
+    stackProcess syaml swdir
                 $  ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
                     <> [ comp | Just comp <- [mc] ]
   (ex2, pkg_args, stdr, _) <-
     readProcessWithOutputs [hie_bios_output] l workDir $
-      stackProcess syaml ["path", "--ghc-package-path"]
+      stackProcess syaml swdir ["path", "--ghc-package-path"]
   let split_pkgs = concatMap splitSearchPath pkg_args
       pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
       args = fromMaybe [] maybeArgs
@@ -884,8 +900,8 @@ stackAction workDir mc syaml l _fp = do
                   )
                   deps
 
-stackProcess :: StackYaml -> [String] -> CreateProcess
-stackProcess syaml args = proc "stack" $ stackYamlProcessArgs syaml <> args
+stackProcess :: StackYaml -> StackWorkDir -> [String] -> CreateProcess
+stackProcess syaml swdir args = proc "stack" $ stackWorkDirProcessArgs swdir <> stackYamlProcessArgs syaml <> args
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess

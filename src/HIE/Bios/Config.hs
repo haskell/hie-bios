@@ -14,6 +14,7 @@ module HIE.Bios.Config(
     pattern StackType,
     stackComponent,
     stackYaml,
+    stackStackWork,
     CradleType(..),
     Callable(..)
     ) where
@@ -72,18 +73,23 @@ pattern CabalType { cabalComponent } = CabalType_ (Last cabalComponent)
 instance Show CabalType where
   show = show . Cabal
 
-data StackType
-    = StackType_ { _stackComponent :: !(Last String) , _stackYaml :: !(Last String) }
-    deriving (Eq)
+data StackType =
+    StackType_
+        { _stackComponent :: !(Last String)
+        , _stackYaml :: !(Last String)
+        , _stackWorkDir :: !(Last String)
+        }
+        deriving (Eq)
 
 instance Semigroup StackType where
-    StackType_ cr yr <> StackType_ cl yl = StackType_ (cr <> cl) (yr <> yl)
+    StackType_ cr yr wr <> StackType_ cl yl wl = StackType_ (cr <> cl) (yr <> yl) (wr <> wl)
 
 instance Monoid StackType where
-    mempty = StackType_ mempty mempty
+    mempty = StackType_ mempty mempty mempty
 
-pattern StackType :: Maybe String -> Maybe String -> StackType
-pattern StackType { stackComponent, stackYaml } = StackType_ (Last stackComponent) (Last stackYaml)
+pattern StackType :: Maybe String -> Maybe String -> Maybe String -> StackType
+pattern StackType { stackComponent, stackYaml, stackStackWork } =
+    StackType_ (Last stackComponent) (Last stackYaml) (Last stackStackWork)
 {-# COMPLETE StackType #-}
 
 instance Show StackType where
@@ -117,7 +123,7 @@ data CradleType a
 instance Show (CradleType a) where
     show (Cabal comp) = "Cabal {component = " ++ show (cabalComponent comp) ++ "}"
     show (CabalMulti d a) = "CabalMulti {defaultCabal = " ++ show d ++ ", subCabalComponents = " ++ show a ++ "}"
-    show (Stack comp) = "Stack {component = " ++ show (stackComponent comp) ++ ", stackYaml = " ++ show (stackYaml comp) ++ "}"
+    show (Stack comp) = "Stack {component = " ++ show (stackComponent comp) ++ ", stackYaml = " ++ show (stackYaml comp) ++", stackWorkDir = " ++ show (stackStackWork comp) ++ "}"
     show (StackMulti d a) = "StackMulti {defaultStack = " ++ show d ++ ", subStackComponents = "  ++ show a ++ "}"
     show Bios { call, depsCall } = "Bios {call = " ++ show call ++ ", depsCall = " ++ show depsCall ++ "}"
     show (Direct args) = "Direct {arguments = " ++ show args ++ "}"
@@ -148,13 +154,13 @@ fromYAMLConfig cradleYAML = Config $ CradleConfig (fromMaybe [] $ YAML.dependenc
 toCradleType :: YAML.CradleComponent a -> CradleType a
 toCradleType (YAML.Multi cpts)  =
   Multi $ (\(YAML.MultiSubComponent fp' cfg) -> (fp', cradle $ fromYAMLConfig cfg)) <$> cpts
-toCradleType (YAML.Stack (YAML.StackConfig yaml cpts)) =
+toCradleType (YAML.Stack (YAML.StackConfig yaml wdir cpts)) =
   case cpts of
-    YAML.NoComponent          -> Stack $ StackType Nothing yaml
-    (YAML.SingleComponent c)  -> Stack $ StackType (Just c) yaml
-    (YAML.ManyComponents cs)  -> StackMulti (StackType Nothing yaml)
-                                            ((\(YAML.StackComponent fp' c cYAML) ->
-                                              (fp', StackType (Just c) cYAML)) <$> cs)
+    YAML.NoComponent          -> Stack $ StackType Nothing yaml wdir
+    (YAML.SingleComponent c)  -> Stack $ StackType (Just c) yaml wdir
+    (YAML.ManyComponents cs)  -> StackMulti (StackType Nothing yaml wdir)
+                                            ((\(YAML.StackComponent fp' c cYAML cwdir) ->
+                                              (fp', StackType (Just c) cYAML cwdir)) <$> cs)
 toCradleType (YAML.Cabal (YAML.CabalConfig cpts)) =
   case cpts of
     YAML.NoComponent          -> Cabal $ CabalType Nothing

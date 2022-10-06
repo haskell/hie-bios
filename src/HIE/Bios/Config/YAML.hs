@@ -126,6 +126,7 @@ instance FromJSON CabalComponent where
 
 data StackConfig
   = StackConfig { stackYaml       :: Maybe FilePath
+                , stackStackWork  :: Maybe String
                 , stackComponents :: OneOrManyComponents StackComponent
                 }
 
@@ -133,25 +134,28 @@ data StackComponent
   = StackComponent { stackPath          :: FilePath
                    , stackComponent     :: String
                    , stackComponentYAML :: Maybe String
+                   , stackComponentStackWork :: Maybe String
                    }
 
 instance FromJSON StackConfig where
-  parseJSON v@(Array _)     = StackConfig Nothing . ManyComponents <$> parseJSON v
-  parseJSON v@(Object obj)  = (checkObjectKeys ["component", "components", "stackYaml"] obj)
+  parseJSON v@(Array _)     = StackConfig Nothing Nothing . ManyComponents <$> parseJSON v
+  parseJSON v@(Object obj)  = (checkObjectKeys ["component", "components", "stackYaml", "stackWork"] obj)
                                 *> (StackConfig
                                       <$> obj .:? "stackYaml"
+                                      <*> obj .:? "stackWork"
                                       <*> parseJSON v
                                     )
-  parseJSON Null            = pure $ StackConfig Nothing NoComponent
+  parseJSON Null            = pure $ StackConfig Nothing Nothing NoComponent
   parseJSON v               = typeMismatch "StackConfig" v
 
 instance FromJSON StackComponent where
   parseJSON =
-    let parseStackComponent obj = (checkObjectKeys ["path", "component", "stackYaml"] obj)
+    let parseStackComponent obj = (checkObjectKeys ["path", "component", "stackYaml", "stackWork"] obj)
                                     *> (StackComponent
                                           <$> obj .: "path"
                                           <*> obj .: "component"
-                                          <*> obj .:? "stackYaml")
+                                          <*> obj .:? "stackYaml"
+                                          <*> obj .:? "stackWork")
      in withObject "StackComponent" parseStackComponent
 
 data OneOrManyComponents component
