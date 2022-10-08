@@ -33,7 +33,7 @@ debugInfo logger fp cradle = unlines <$> do
     res <- getCompilerOptions logger fp cradle
     canonFp <- canonicalizePath fp
     conf <- findConfig canonFp
-    crdl <- findCradle' canonFp
+    crdl <- findCradle' logger canonFp
     ghcLibDir <- getRuntimeGhcLibDir cradle
     ghcVer <- getRuntimeGhcVersion cradle
     case res of
@@ -84,19 +84,19 @@ findConfig fp = findCradle fp >>= \case
 
 ----------------------------------------------------------------
 
-cradleInfo :: [FilePath] -> IO String
-cradleInfo [] = return "No files given"
-cradleInfo args =
+cradleInfo :: LogAction IO (WithSeverity Log) -> [FilePath] -> IO String
+cradleInfo _ [] = return "No files given"
+cradleInfo l args =
   fmap unlines $ forM args $ \fp -> do
     fp' <- canonicalizePath fp
-    (("Cradle for \"" ++ fp' ++ "\": ") ++)  <$> findCradle' fp'
+    (("Cradle for \"" ++ fp' ++ "\": ") ++)  <$> findCradle' l fp'
 
-findCradle' :: FilePath -> IO String
-findCradle' fp =
+findCradle' :: LogAction IO (WithSeverity Log) -> FilePath -> IO String
+findCradle' l fp =
   findCradle fp >>= \case
     Just yaml -> do
-      crdl <- loadCradle yaml
+      crdl <- loadCradle l yaml
       return $ show crdl
     Nothing -> do
-      crdl <- loadImplicitCradle fp :: IO (Cradle Void)
+      crdl <- loadImplicitCradle l fp :: IO (Cradle Void)
       return $ show crdl
