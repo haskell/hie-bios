@@ -41,7 +41,7 @@ jobs:
       run: stack config set system-ghc --global true
 
     - name: Cache Cabal
-      uses: actions/cache@v3.0.10
+      uses: actions/cache@v3.0.11
       with:
         path: ~/.cabal
         key: ${{ runner.OS }}-${{ matrix.ghc }}-cabal-0
