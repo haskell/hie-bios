@@ -67,6 +67,7 @@ module Utils (
   findCradleForModuleM,
 ) where
 
+import qualified Colog.Core as L
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State
@@ -274,15 +275,19 @@ loadRuntimeGhcLibDir :: TestM ()
 loadRuntimeGhcLibDir = do
   crd <- askCradle
   step "Load run-time ghc libdir"
-  libdirRes <- liftIO $ getRuntimeGhcLibDir crd
+  libdirRes <- liftIO $ getRuntimeGhcLibDir testLogger crd
   setLibDirResult libdirRes
 
 loadRuntimeGhcVersion :: TestM ()
 loadRuntimeGhcVersion = do
   crd <- askCradle
   step "Load run-time ghc version"
-  ghcVersionRes <- liftIO $ getRuntimeGhcVersion crd
+  ghcVersionRes <- liftIO $ getRuntimeGhcVersion testLogger crd
   setGhcVersionResult ghcVersionRes
+
+testLogger :: forall a . Pretty a => L.LogAction IO (L.WithSeverity a)
+testLogger = L.cmap printLog L.logStringStderr
+  where printLog (L.WithSeverity l sev) = "[" ++ show sev ++ "] " ++ show (pretty l)
 
 inCradleRootDir :: TestM a -> TestM a
 inCradleRootDir act = do
