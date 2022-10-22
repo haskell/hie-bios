@@ -75,7 +75,7 @@ main = do
       logger = L.cmap printLog L.logStringStderr
 
     res <- case cmd of
-      Check targetFiles -> checkSyntax logger cradle targetFiles
+      Check targetFiles -> checkSyntax logger logger cradle targetFiles
       Debug files -> case files of
         [] -> debugInfo logger (cradleRootDir cradle) cradle
         fp -> debugInfo logger fp cradle
