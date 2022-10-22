@@ -46,20 +46,21 @@ instance Pretty Log where
 -- | Checking syntax of a target file using GHC.
 --   Warnings and errors are returned.
 checkSyntax :: Show a
-            => LogAction IO (WithSeverity Log)
+            => LogAction IO (WithSeverity T.Log)
+            -> LogAction IO (WithSeverity Log)
             -> Cradle a
             -> [FilePath]  -- ^ The target files.
             -> IO String
-checkSyntax _       _     []    = return ""
-checkSyntax logger cradle files = do
-    libDirRes <- getRuntimeGhcLibDir cradle
+checkSyntax _       _          _      []    = return ""
+checkSyntax logger checkLogger cradle files = do
+    libDirRes <- getRuntimeGhcLibDir logger cradle
     handleRes libDirRes $ \libDir ->
       G.runGhcT (Just libDir) $ do
-        liftIO $ logger <& LogCradle cradle `WithSeverity` Info
-        res <- initializeFlagsWithCradle (cmap (fmap LogAny) logger) (head files) cradle
+        liftIO $ checkLogger <& LogCradle cradle `WithSeverity` Info
+        res <- initializeFlagsWithCradle (cmap (fmap LogAny) checkLogger) (head files) cradle
         handleRes res $ \(ini, _) -> do
           _sf <- ini
-          either id id <$> check logger files
+          either id id <$> check checkLogger files
   where
     handleRes (CradleSuccess x) f = f x
     handleRes (CradleFail ce) _f = liftIO $ throwIO ce

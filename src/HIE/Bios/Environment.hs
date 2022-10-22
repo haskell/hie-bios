@@ -13,6 +13,7 @@ import System.FilePath
 import System.Environment (lookupEnv)
 
 import qualified Crypto.Hash.SHA1 as H
+import Colog.Core (LogAction, WithSeverity)
 import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Base16
 import Data.List
@@ -67,18 +68,20 @@ makeTargetIdAbsolute _ tid = tid
 --
 --
 -- Obtains libdir by calling 'runCradleGhc' on the provided cradle.
-getRuntimeGhcLibDir :: Cradle a
+getRuntimeGhcLibDir :: LogAction IO (WithSeverity Log)
+                    -> Cradle a
                     -> IO (CradleLoadResult FilePath)
-getRuntimeGhcLibDir cradle = fmap (fmap trim) $
-      runGhcCmd (cradleOptsProg cradle) ["--print-libdir"]
+getRuntimeGhcLibDir l cradle = fmap (fmap trim) $
+      runGhcCmd (cradleOptsProg cradle) l ["--print-libdir"]
 
 -- | Gets the version of ghc used when compiling the cradle. It is based off of
 -- 'getRuntimeGhcLibDir'. If it can't work out the verison reliably, it will
 -- return a 'CradleError'
-getRuntimeGhcVersion :: Cradle a
+getRuntimeGhcVersion :: LogAction IO (WithSeverity Log)
+                     -> Cradle a
                      -> IO (CradleLoadResult String)
-getRuntimeGhcVersion cradle =
-  fmap (fmap trim) $ runGhcCmd (cradleOptsProg cradle) ["--numeric-version"]
+getRuntimeGhcVersion l cradle =
+  fmap (fmap trim) $ runGhcCmd (cradleOptsProg cradle) l ["--numeric-version"]
 
 ----------------------------------------------------------------
 
