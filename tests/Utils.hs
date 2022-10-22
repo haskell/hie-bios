@@ -81,6 +81,7 @@ import HIE.Bios.Ghc.Api
 import qualified HIE.Bios.Ghc.Gap as G
 import HIE.Bios.Ghc.Load
 import HIE.Bios.Types
+import Prettyprinter
 import System.Directory
 import System.FilePath
 import System.IO.Temp
