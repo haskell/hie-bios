@@ -215,6 +215,7 @@ test-suite bios-tests
   default-language: Haskell2010
   build-depends:
       base,
+      co-log-core,
       extra,
       transformers,
       tasty,
@@ -223,6 +224,7 @@ test-suite bios-tests
       hie-bios,
       filepath,
       directory,
+      prettyprinter,
       temporary,
       tagged,
       ghc

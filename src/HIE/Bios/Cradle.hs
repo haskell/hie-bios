@@ -283,7 +283,7 @@ defaultCradle cur_dir =
         { actionName = Types.Default
         , runCradle = \_ _ ->
             return (CradleSuccess (ComponentOptions argDynamic cur_dir []))
-        , runGhcCmd = runGhcCmdOnPath cur_dir
+        , runGhcCmd = \l -> runGhcCmdOnPath l cur_dir
         }
     }
 
@@ -297,7 +297,7 @@ noneCradle cur_dir =
     , cradleOptsProg = CradleAction
         { actionName = Types.None
         , runCradle = \_ _ -> return CradleNone
-        , runGhcCmd = \_   -> return CradleNone
+        , runGhcCmd = \_ _ -> return CradleNone
         }
     }
 
@@ -311,14 +311,17 @@ multiCradle buildCustomCradle cur_dir cs =
     , cradleOptsProg = CradleAction
         { actionName = multiActionName
         , runCradle  = \l fp -> makeAbsolute fp >>= multiAction buildCustomCradle cur_dir cs l
-        , runGhcCmd = \args ->
+        , runGhcCmd = \l args ->
             -- We're being lazy here and just returning the ghc path for the
             -- first non-none cradle. This shouldn't matter in practice: all
             -- sub cradles should be using the same ghc version!
             case filter (not . isNoneCradleConfig) $ map snd cs of
               [] -> return CradleNone
-              (cfg:_) -> flip runGhcCmd args $ cradleOptsProg $
-                getCradle buildCustomCradle (cfg, cur_dir)
+              (cfg:_) ->
+                runGhcCmd
+                  (cradleOptsProg $ getCradle buildCustomCradle (cfg, cur_dir))
+                  l
+                  args
         }
     }
   where
@@ -393,7 +396,7 @@ directCradle wdir args =
         { actionName = Types.Direct
         , runCradle = \_ _ ->
             return (CradleSuccess (ComponentOptions (args ++ argDynamic) wdir []))
-        , runGhcCmd = runGhcCmdOnPath wdir
+        , runGhcCmd = \l -> runGhcCmdOnPath l wdir
         }
     }
 
@@ -409,7 +412,7 @@ biosCradle wdir biosCall biosDepsCall mbGhc =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Bios
         , runCradle = biosAction wdir biosCall biosDepsCall
-        , runGhcCmd = \args -> readProcessWithCwd wdir (fromMaybe "ghc" mbGhc) args ""
+        , runGhcCmd = \l args -> readProcessWithCwd l wdir (fromMaybe "ghc" mbGhc) args ""
         }
     }
 
@@ -464,13 +467,13 @@ cabalCradle wdir mc =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Cabal
         , runCradle = \l f -> runCradleResultT . cabalAction wdir mc l $ f
-        , runGhcCmd = \args -> runCradleResultT $ do
+        , runGhcCmd = \l args -> runCradleResultT $ do
             buildDir <- liftIO $ cabalBuildDir wdir
             -- Workaround for a cabal-install bug on 3.0.0.0:
             -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
             liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
             -- Need to pass -v0 otherwise we get "resolving dependencies..."
-            cabalProc <- cabalProcess wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
+            cabalProc <- cabalProcess l wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
             readProcessWithCwd' cabalProc ""
         }
     }
@@ -484,9 +487,9 @@ cabalCradle wdir mc =
 -- to the custom ghc wrapper via 'hie_bios_ghc' environment variable which
 -- the custom ghc wrapper may use as a fallback if it can not respond to certain
 -- queries, such as ghc version or location of the libdir.
-cabalProcess :: FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
-cabalProcess workDir command args = do
-  ghcDirs <- cabalGhcDirs workDir
+cabalProcess :: LogAction IO (WithSeverity Log) -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
+cabalProcess l workDir command args = do
+  ghcDirs <- cabalGhcDirs l workDir
   newEnvironment <- liftIO $ setupEnvironment ghcDirs
   cabalProc <- liftIO $ setupCabalCommand ghcDirs
   pure $ (cabalProc
@@ -505,7 +508,7 @@ cabalProcess workDir command args = do
 
     setupCabalCommand :: (FilePath, FilePath) -> IO CreateProcess
     setupCabalCommand (ghcBin, libdir) = do
-      wrapper_fp <- withGhcWrapperTool ("ghc", []) workDir
+      wrapper_fp <- withGhcWrapperTool l ("ghc", []) workDir
       buildDir <- cabalBuildDir workDir
       ghcPkgPath <- withGhcPkgTool ghcBin libdir
       let extraCabalArgs =
@@ -514,7 +517,7 @@ cabalProcess workDir command args = do
             , "--with-compiler", wrapper_fp
             , "--with-hc-pkg", ghcPkgPath
             ]
-      pure $ proc "cabal" (extraCabalArgs ++ args)
+      loggedProc l "cabal" (extraCabalArgs ++ args)
 
 -- | Discovers the location of 'ghc-pkg' given the absolute path to 'ghc'
 -- and its '$libdir' (obtainable by running @ghc --print-libdir@).
@@ -619,8 +622,8 @@ type GhcProc = (FilePath, [String])
 -- | Generate a fake GHC that can be passed to cabal or stack
 -- when run with --interactive, it will print out its
 -- command-line arguments and exit
-withGhcWrapperTool :: GhcProc -> FilePath -> IO FilePath
-withGhcWrapperTool (mbGhc, ghcArgs) wdir = do
+withGhcWrapperTool :: LogAction IO (WithSeverity Log) -> GhcProc -> FilePath -> IO FilePath
+withGhcWrapperTool l (mbGhc, ghcArgs) wdir = do
     let wrapperContents = if isWindows then cabalWrapperHs else cabalWrapper
         withExtension fp = if isWindows then fp <.> "exe" else fp
         srcHash = show (fingerprintString wrapperContents)
@@ -630,10 +633,10 @@ withGhcWrapperTool (mbGhc, ghcArgs) wdir = do
         withSystemTempDirectory "hie-bios" $ \ tmpDir -> do
           let wrapper_hs = wrapper_fp -<.> "hs"
           writeFile wrapper_hs wrapperContents
-          let ghc = (proc mbGhc $
-                      ghcArgs ++ ["-rtsopts=ignore", "-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs])
-                      { cwd = Just wdir }
-          readCreateProcess ghc "" >>= putStr
+          ghc <- loggedProc l mbGhc $
+                      ghcArgs ++ ["-rtsopts=ignore", "-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs]
+          let ghc' = ghc { cwd = Just wdir }
+          readCreateProcess ghc' "" >>= putStr
       else writeFile wrapper_fp wrapperContents
 
 -- | Create and cache a file in hie-bios's cache directory.
@@ -678,10 +681,10 @@ cabalBuildDir workDir = do
 -- 'withGhcWrapperTool'.
 --
 -- If cabal can not figure it out, a 'CradleError' is returned.
-cabalGhcDirs :: FilePath -> CradleLoadResultT IO (FilePath, FilePath)
-cabalGhcDirs workDir = do
-  libdir <- readProcessWithCwd_ workDir "cabal" ["exec", "-v0", "--", "ghc", "--print-libdir"] ""
-  exe <- readProcessWithCwd_ workDir "cabal"
+cabalGhcDirs :: LogAction IO (WithSeverity Log) -> FilePath -> CradleLoadResultT IO (FilePath, FilePath)
+cabalGhcDirs l workDir = do
+  libdir <- readProcessWithCwd_ l workDir "cabal" ["exec", "-v0", "--", "ghc", "--print-libdir"] ""
+  exe <- readProcessWithCwd_ l workDir "cabal"
       -- DON'T TOUCH THIS CODE
       -- This works with 'NoImplicitPrelude', with 'RebindableSyntax' and other shenanigans.
       -- @-package-env=-@ doesn't work with ghc prior 8.4.x
@@ -702,7 +705,7 @@ cabalAction workDir mc l fp = do
     cabalCommand = "v2-repl"
     cabalArgs = [fromMaybe (fixTargetPath fp) mc]
 
-  cabalProc <- cabalProcess workDir cabalCommand cabalArgs `modCradleError` \err -> do
+  cabalProc <- cabalProcess l workDir cabalCommand cabalArgs `modCradleError` \err -> do
       deps <- cabalCradleDependencies workDir workDir
       pure $ err { cradleErrorDependencies = cradleErrorDependencies err ++ deps }
 
@@ -814,11 +817,11 @@ stackCradle wdir mc syaml =
     , cradleOptsProg   = CradleAction
         { actionName = Types.Stack
         , runCradle = stackAction wdir mc syaml
-        , runGhcCmd = \args -> runCradleResultT $ do
+        , runGhcCmd = \l args -> runCradleResultT $ do
             -- Setup stack silently, since stack might print stuff to stdout in some cases (e.g. on Win)
             -- Issue 242 from HLS: https://github.com/haskell/haskell-language-server/issues/242
-            _ <- readProcessWithCwd_ wdir "stack" (stackYamlProcessArgs syaml <> ["setup", "--silent"]) ""
-            readProcessWithCwd_ wdir "stack"
+            _ <- readProcessWithCwd_ l wdir "stack" (stackYamlProcessArgs syaml <> ["setup", "--silent"]) ""
+            readProcessWithCwd_ l wdir "stack"
               (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
               ""
         }
@@ -851,15 +854,15 @@ stackAction
 stackAction workDir mc syaml l _fp = do
   let ghcProcArgs = ("stack", stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
-  wrapper_fp <- withGhcWrapperTool ghcProcArgs workDir
+  wrapper_fp <- withGhcWrapperTool l ghcProcArgs workDir
   (ex1, _stdo, stde, [(_, maybeArgs)]) <-
-    readProcessWithOutputs [hie_bios_output] l workDir $
-    stackProcess syaml
-                $  ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
-                    <> [ comp | Just comp <- [mc] ]
+    stackProcess l syaml
+                (["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
+                    <> [ comp | Just comp <- [mc] ]) >>=
+      readProcessWithOutputs [hie_bios_output] l workDir 
   (ex2, pkg_args, stdr, _) <-
-    readProcessWithOutputs [hie_bios_output] l workDir $
-      stackProcess syaml ["path", "--ghc-package-path"]
+    stackProcess l syaml ["path", "--ghc-package-path"] >>=
+      readProcessWithOutputs [hie_bios_output] l workDir
   let split_pkgs = concatMap splitSearchPath pkg_args
       pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
       args = fromMaybe [] maybeArgs
@@ -884,8 +887,8 @@ stackAction workDir mc syaml l _fp = do
                   )
                   deps
 
-stackProcess :: StackYaml -> [String] -> CreateProcess
-stackProcess syaml args = proc "stack" $ stackYamlProcessArgs syaml <> args
+stackProcess :: LogAction IO (WithSeverity Log) -> StackYaml -> [String] -> IO CreateProcess
+stackProcess l syaml args = loggedProc l "stack" $ stackYamlProcessArgs syaml <> args
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess
@@ -1083,21 +1086,22 @@ makeCradleResult (ex, err, componentDir, gopts) deps =
         in CradleSuccess compOpts
 
 -- | Calls @ghc --print-libdir@, with just whatever's on the PATH.
-runGhcCmdOnPath :: FilePath -> [String] -> IO (CradleLoadResult String)
-runGhcCmdOnPath wdir args = readProcessWithCwd wdir "ghc" args ""
+runGhcCmdOnPath :: LogAction IO (WithSeverity Log) -> FilePath -> [String] -> IO (CradleLoadResult String)
+runGhcCmdOnPath l wdir args = readProcessWithCwd l wdir "ghc" args ""
   -- case mResult of
   --   Nothing
 
 -- | Wrapper around 'readCreateProcess' that sets the working directory and
 -- clears the environment, suitable for invoking cabal/stack and raw ghc commands.
-readProcessWithCwd :: FilePath -> FilePath -> [String] -> String -> IO (CradleLoadResult String)
-readProcessWithCwd dir cmd args stdin = runCradleResultT $ readProcessWithCwd_ dir cmd args stdin
+readProcessWithCwd :: LogAction IO (WithSeverity Log) -> FilePath -> FilePath -> [String] -> String -> IO (CradleLoadResult String)
+readProcessWithCwd l dir cmd args stdin = runCradleResultT $ readProcessWithCwd_ l dir cmd args stdin
 
-readProcessWithCwd_ :: FilePath -> FilePath -> [String] -> String -> CradleLoadResultT IO String
-readProcessWithCwd_ dir cmd args stdin = do
+readProcessWithCwd_ :: LogAction IO (WithSeverity Log) -> FilePath -> FilePath -> [String] -> String -> CradleLoadResultT IO String
+readProcessWithCwd_ l dir cmd args stdin = do
   cleanEnv <- liftIO getCleanEnvironment
-  let createProc = (proc cmd args) { cwd = Just dir, env = Just cleanEnv }
-  readProcessWithCwd' createProc stdin
+  createdProc <- liftIO $ loggedProc l cmd args
+  let createdProc' = createdProc { cwd = Just dir, env = Just cleanEnv }
+  readProcessWithCwd' createdProc' stdin
 
 -- | Wrapper around 'readCreateProcessWithExitCode', wrapping the result in
 -- a 'CradleLoadResult'. Provides better error messages than raw 'readCreateProcess'.
@@ -1131,3 +1135,9 @@ prettyProcessEnv p =
                , hie_bios_deps
                ]
   ]
+
+loggedProc :: LogAction IO (WithSeverity Log) -> FilePath -> [String] -> IO CreateProcess
+loggedProc l command args = do
+  l <& LogProcessOutput (unwords $ "executing command:":command:args) `WithSeverity` Debug
+  pure $ proc command args
+ 

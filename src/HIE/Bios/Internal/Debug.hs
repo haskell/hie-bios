@@ -34,8 +34,8 @@ debugInfo logger fp cradle = unlines <$> do
     canonFp <- canonicalizePath fp
     conf <- findConfig canonFp
     crdl <- findCradle' canonFp
-    ghcLibDir <- getRuntimeGhcLibDir cradle
-    ghcVer <- getRuntimeGhcVersion cradle
+    ghcLibDir <- getRuntimeGhcLibDir logger cradle
+    ghcVer <- getRuntimeGhcVersion logger cradle
     case res of
       CradleSuccess (ComponentOptions gopts croot deps) -> do
         return [

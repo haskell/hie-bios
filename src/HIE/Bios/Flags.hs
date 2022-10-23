@@ -2,14 +2,15 @@ module HIE.Bios.Flags (getCompilerOptions) where
 
 import HIE.Bios.Types
 
-import qualified Colog.Core as L
-import Data.Text.Prettyprint.Doc
+import Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&))
 
 -- | Initialize the 'DynFlags' relating to the compilation of a single
 -- file or GHC session according to the provided 'Cradle'.
 getCompilerOptions
-  :: L.LogAction IO (L.WithSeverity Log)
+  :: LogAction IO (WithSeverity Log)
   -> FilePath -- The file we are loading it because of
   -> Cradle a
   -> IO (CradleLoadResult ComponentOptions)
-getCompilerOptions l fp cradle = runCradle (cradleOptsProg cradle) l fp
+getCompilerOptions l fp cradle = do
+  l <& LogProcessOutput "invoking build tool to determine build flags (this may take some time depending on the cache)" `WithSeverity` Info
+  runCradle (cradleOptsProg cradle) l fp

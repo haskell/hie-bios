@@ -62,7 +62,7 @@ data CradleAction a = CradleAction {
                       -- ^ Name of the action.
                       , runCradle     :: L.LogAction IO (L.WithSeverity Log) -> FilePath -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
-                      , runGhcCmd :: [String] -> IO (CradleLoadResult String)
+                      , runGhcCmd     :: L.LogAction IO (L.WithSeverity Log) -> [String] -> IO (CradleLoadResult String)
                       -- ^ Executes the @ghc@ binary that is usually used to
                       -- build the cradle. E.g. for a cabal cradle this should be
                       -- equivalent to @cabal exec ghc -- args@
