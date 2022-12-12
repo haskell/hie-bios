@@ -168,7 +168,7 @@ Library
                         transformers         >= 0.5.2 && < 0.7,
                         temporary            >= 1.2 && < 1.4,
                         text                 >= 1.2.3 && < 2.1,
-                        unix-compat          >= 0.5.1 && < 0.6,
+                        unix-compat          >= 0.5.1 && < 0.7,
                         unordered-containers >= 0.2.9 && < 0.3,
                         vector               >= 0.12.0 && < 0.13,
                         yaml                 >= 0.10.0 && < 0.12,
