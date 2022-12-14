@@ -156,21 +156,18 @@ Library
                         co-log-core          ^>= 0.3.0,
                         deepseq              >= 1.4.3 && < 1.5,
                         exceptions           ^>= 0.10,
-                        containers           >= 0.5.10 && < 0.7,
                         cryptohash-sha1      >= 0.11.100 && < 0.12,
                         directory            >= 1.3.0 && < 1.4,
                         filepath             >= 1.4.1 && < 1.5,
                         time                 >= 1.8.0 && < 1.13,
                         extra                >= 1.6.14 && < 1.8,
                         prettyprinter        ^>= 1.6 || ^>= 1.7.0,
-                        process              >= 1.6.1 && < 1.7,
                         ghc                  >= 8.6.1 && < 9.5,
                         transformers         >= 0.5.2 && < 0.7,
                         temporary            >= 1.2 && < 1.4,
                         text                 >= 1.2.3 && < 2.1,
                         unix-compat          >= 0.5.1 && < 0.7,
                         unordered-containers >= 0.2.9 && < 0.3,
-                        vector               >= 0.12.0 && < 0.14,
                         yaml                 >= 0.10.0 && < 0.12,
                         file-embed           >= 0.0.11 && < 1,
                         conduit              >= 1.3 && < 2,
@@ -187,7 +184,6 @@ Executable hie-bios
                       , co-log-core
                       , directory
                       , filepath
-                      , ghc
                       , hie-bios
                       , optparse-applicative
                       , prettyprinter
@@ -202,8 +198,6 @@ test-suite parser-tests
       hie-bios,
       tasty,
       tasty-hunit,
-      text,
-      unordered-containers,
       yaml
 
   hs-source-dirs: tests/
@@ -226,7 +220,6 @@ test-suite bios-tests
       directory,
       prettyprinter,
       temporary,
-      tagged,
       ghc
 
   hs-source-dirs: tests/
