@@ -29,8 +29,7 @@ import           Data.Aeson.KeyMap   (keys)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Text           as T
 #endif
-import           Data.Aeson.Types    (Object, Parser, Value (Null),
-                                      typeMismatch)
+import           Data.Aeson.Types    (Parser, typeMismatch)
 import qualified Data.Char           as C (toLower)
 import           Data.List           ((\\))
 import           GHC.Generics        (Generic)

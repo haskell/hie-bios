@@ -11,7 +11,6 @@ import Control.Monad.IO.Class
 
 import Data.List
 import Data.Time.Clock
-import Data.Text.Prettyprint.Doc
 import Data.IORef
 
 import GHC
@@ -19,14 +18,14 @@ import qualified GHC as G
 
 #if __GLASGOW_HASKELL__ >= 900
 import qualified GHC.Driver.Main as G
-import qualified GHC.Driver.Make as G
 #else
 import qualified GhcMake as G
 import qualified HscMain as G
 #endif
 
 import qualified HIE.Bios.Ghc.Gap as Gap
-import GHC.Fingerprint
+
+import Prettyprinter
 
 data Log =
   LogLoaded FilePath FilePath

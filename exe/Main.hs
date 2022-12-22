@@ -6,7 +6,7 @@ module Main where
 import Control.Monad ( forM )
 import qualified Colog.Core as L
 import Data.Version (showVersion)
-import Data.Text.Prettyprint.Doc
+import Prettyprinter
 import Options.Applicative
 import System.Directory (getCurrentDirectory)
 import System.IO (stdout, hSetEncoding, utf8)

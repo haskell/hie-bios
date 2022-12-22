@@ -146,9 +146,6 @@ import qualified GHC.Tc.Types as Tc
 import GHC.Utils.Outputable
 import qualified GHC.Utils.Ppr as Ppr
 #endif
-#if __GLASGOW_HASKELL__ >= 900
-import GHC.Unit.Types (UnitId)
-#endif
 
 #if __GLASGOW_HASKELL__ >= 900
 import qualified GHC.Driver.Main as G

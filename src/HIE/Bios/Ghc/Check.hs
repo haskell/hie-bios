@@ -19,7 +19,6 @@ import qualified DynFlags as G
 import Control.Exception
 import Control.Monad.IO.Class
 import Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&), cmap)
-import Data.Text.Prettyprint.Doc
 
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Logger
@@ -27,6 +26,8 @@ import HIE.Bios.Types hiding (Log (..))
 import qualified HIE.Bios.Types as T
 import qualified HIE.Bios.Ghc.Load as Load
 import HIE.Bios.Environment
+
+import Prettyprinter
 
 import System.IO.Unsafe (unsafePerformIO)
 import qualified HIE.Bios.Ghc.Gap as Gap

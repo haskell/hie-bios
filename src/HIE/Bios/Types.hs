@@ -7,13 +7,13 @@ module HIE.Bios.Types where
 import           System.Exit
 import qualified Colog.Core as L
 import           Control.Exception              ( Exception )
-import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Class
 #if MIN_VERSION_base(4,9,0)
 import qualified Control.Monad.Fail as Fail
 #endif
-import Data.Text.Prettyprint.Doc
+
+import Prettyprinter
 
 
 data BIOSVerbosity = Silent | Verbose
@@ -122,19 +122,24 @@ instance (Monad m, Applicative m) => Applicative (CradleLoadResultT m) where
                 CradleNone -> pure CradleNone
 
 instance Monad m => Monad (CradleLoadResultT m) where
-  {-# INLINE return #-}
+#if !(MIN_VERSION_base(4,8,0))
   return = CradleLoadResultT . return . CradleSuccess
-  {-# INLINE (>>=) #-}
+  {-# INLINE return #-}
+#endif 
+
   x >>= f = CradleLoadResultT $ do
     val <- runCradleResultT x
     case val of
       CradleSuccess r -> runCradleResultT . f $ r
       CradleFail err -> return $ CradleFail err
       CradleNone -> return $ CradleNone
+  {-# INLINE (>>=) #-}
+
 #if !(MIN_VERSION_base(4,13,0))
   fail = CradleLoadResultT . fail
   {-# INLINE fail #-}
 #endif
+
 #if MIN_VERSION_base(4,9,0)
 instance Fail.MonadFail m => Fail.MonadFail (CradleLoadResultT m) where
   fail = CradleLoadResultT . Fail.fail
