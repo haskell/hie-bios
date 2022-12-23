@@ -155,6 +155,10 @@ import qualified HscMain as G
 import qualified GhcMake as G
 #endif
 
+#if (__GLASGOW_HASKELL__ == 901) || __GLASGOW_HASKELL__ >= 941
+import GHC.Unit.Types (UnitId)
+#endif 
+
 ghcVersion :: String
 ghcVersion = VERSION_ghc
 
