@@ -122,11 +122,6 @@ instance (Monad m, Applicative m) => Applicative (CradleLoadResultT m) where
                 CradleNone -> pure CradleNone
 
 instance Monad m => Monad (CradleLoadResultT m) where
-#if !(MIN_VERSION_base(4,8,0))
-  return = CradleLoadResultT . return . CradleSuccess
-  {-# INLINE return #-}
-#endif 
-
   x >>= f = CradleLoadResultT $ do
     val <- runCradleResultT x
     case val of
