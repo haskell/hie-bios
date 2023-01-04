@@ -2,11 +2,12 @@
 {-# LANGUAGE QuasiQuotes #-}
 module HIE.Bios.Wrappers (cabalWrapper, cabalWrapperHs) where
 
-import Data.FileEmbed
+import Data.FileEmbed hiding (makeRelativeToProject)
+import Language.Haskell.TH.Syntax
 
 cabalWrapper :: String
-cabalWrapper = $(embedStringFile "wrappers/cabal")
+cabalWrapper = $(makeRelativeToProject "wrappers/cabal" >>= embedStringFile)
 
 cabalWrapperHs :: String
-cabalWrapperHs = $(embedStringFile "wrappers/cabal.hs")
+cabalWrapperHs = $(makeRelativeToProject "wrappers/cabal.hs" >>= embedStringFile)
 
