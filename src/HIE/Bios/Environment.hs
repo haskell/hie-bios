@@ -159,7 +159,7 @@ addCmdOpts cmdOpts df1 = do
 -- | Make filepaths in the given 'DynFlags' absolute.
 -- This makes the 'DynFlags' independent of the current working directory.
 makeDynFlagsAbsolute :: FilePath -> G.DynFlags -> G.DynFlags
-makeDynFlagsAbsolute work_dir df =
+makeDynFlagsAbsolute root df =
   Gap.mapOverIncludePaths makeAbs
   $ df
     { G.importPaths = map makeAbs (G.importPaths df)
@@ -167,7 +167,13 @@ makeDynFlagsAbsolute work_dir df =
         map (Gap.overPkgDbRef makeAbs) (G.packageDBFlags df)
     }
   where
-    makeAbs = (work_dir </>)
+    makeAbs =
+#if __GLASGOW_HASKELL__ >= 903
+      case G.workingDirectory df of
+        Just fp -> ((root </> fp) </>)
+        Nothing ->
+#endif
+          (root </>)
 
 -- --------------------------------------------------------
 
