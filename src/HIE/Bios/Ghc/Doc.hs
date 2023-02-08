@@ -3,7 +3,14 @@
 module HIE.Bios.Ghc.Doc where
 
 
-import GHC (DynFlags, getPrintUnqual, pprCols, GhcMonad)
+import GHC (DynFlags
+#if __GLASGOW_HASKELL__ < 905
+           , getPrintUnqual
+#endif
+           , pprCols, GhcMonad)
+#if __GLASGOW_HASKELL__ >= 905
+import GHC.Utils.Outputable
+#endif
 
 #if __GLASGOW_HASKELL__ >= 900
 import GHC.Driver.Session (initSDocContext)
@@ -15,6 +22,11 @@ import Pretty (Mode(..), Doc, Style(..), renderStyle, style)
 #endif
 
 import HIE.Bios.Ghc.Gap (makeUserStyle, pageMode, oneLineMode)
+
+#if __GLASGOW_HASKELL__ >= 905
+getPrintUnqual :: Monad m => m NamePprCtx
+getPrintUnqual = pure neverQualify
+#endif
 
 showPage :: DynFlags -> PprStyle -> SDoc -> String
 showPage dflag stl sdoc = showDocWith dflag pageMode $ runSDoc sdoc scontext

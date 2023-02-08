@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, CPP #-}
+{-# LANGUAGE BangPatterns, CPP, TypeApplications #-}
 
 module HIE.Bios.Ghc.Logger (
     withLogger
@@ -64,8 +64,10 @@ appendLogRef :: DynFlags -> Gap.PprStyle -> LogRef -> LogAction
 appendLogRef df style (LogRef ref)
 #if __GLASGOW_HASKELL__ < 903
     _ _ sev src
-#else
+#elif __GLASGOW_HASKELL__ < 905
     _ (MCDiagnostic sev _) src
+#else
+    _ (MCDiagnostic sev _ _) src
 #endif
 #if __GLASGOW_HASKELL__ < 900
   _style
@@ -127,7 +129,11 @@ ppErrMsg :: DynFlags -> Gap.PprStyle -> MsgEnvelope GhcMessage -> String
 ppErrMsg dflag style err = ppMsg spn SevError dflag style msg -- ++ ext
    where
      spn = errMsgSpan err
+#if __GLASGOW_HASKELL__ >= 905
+     msg = pprLocMsgEnvelope (defaultDiagnosticOpts @GhcMessage) err
+#else
      msg = pprLocMsgEnvelope err
+#endif
      -- fixme
 #elif __GLASGOW_HASKELL__ >= 902
 errBagToStrList :: DynFlags -> Gap.PprStyle -> Bag (MsgEnvelope DecoratedSDoc) -> [String]
