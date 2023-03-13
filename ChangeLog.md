@@ -1,5 +1,12 @@
 # ChangeLog hie-bios
 
+## 2023-03-13 - 0.12.0
+
+* 9.6 support [#392](https://github.com/haskell/hie-bios/pull/392)
+* Better support for multi component projects [#387](https://github.com/haskell/hie-bios/pull/387)
+* Remove unused dependencies from hie-bios [#381](https://github.com/haskell/hie-bios/pull/381)
+* Add logs over commands [#375](https://github.com/haskell/hie-bios/pull/375)
+
 ## 2022-09-13 - 0.11.0
 
 * Compatibility with aeson 1.5 [#368](https://github.com/haskell/hie-bios/pull/368)
