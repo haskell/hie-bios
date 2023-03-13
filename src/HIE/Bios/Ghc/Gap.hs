@@ -217,7 +217,9 @@ pattern RealSrcSpan t <- G.RealSrcSpan t
 ----------------------------------------------------------------
 
 setNoCode :: DynFlags -> DynFlags
-#if __GLASGOW_HASKELL__ >= 901
+#if __GLASGOW_HASKELL__ >= 905
+setNoCode d = d { G.backend = G.noBackend }
+#elif __GLASGOW_HASKELL__ >= 901
 setNoCode d = d { G.backend = G.NoBackend }
 #else
 setNoCode d = d { G.hscTarget = G.HscNothing }
@@ -251,7 +253,11 @@ guessTarget a _ b = G.guessTarget a b
 
 ----------------------------------------------------------------
 
+#if __GLASGOW_HASKELL__ >= 905
+makeUserStyle :: DynFlags -> NamePprCtx -> PprStyle
+#else
 makeUserStyle :: DynFlags -> PrintUnqualified -> PprStyle
+#endif
 #if __GLASGOW_HASKELL__ >= 900
 makeUserStyle _dflags style = mkUserStyle style AllTheWay
 #elif __GLASGOW_HASKELL__ >= 804
