@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['9.4.4', '9.2.7', '9.0.2', '8.10.7', '8.8.4', '8.6.5']
+        ghc: ['9.6.1', '9.4.5', '9.2.7', '9.0.2', '8.10.7', '8.8.4', '8.6.5']
         os: [ubuntu-latest, macOS-latest, windows-latest]
 
     steps:
