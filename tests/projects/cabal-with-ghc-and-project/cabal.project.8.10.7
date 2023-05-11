@@ -1,0 +1,12 @@
+packages: .
+
+-- It is intended that this ghc version is different to at least one ghc version
+-- that is tested in CI.
+--
+-- Project validates that hie-bios honours this field.
+--
+-- If you change this, make sure to also change the 'extraGhc' constant in
+-- 'tests/BiosTests.hs'.
+--
+-- Additionally, CI needs a proper setup to execute this test-case.
+with-compiler: ghc-8.10.7
