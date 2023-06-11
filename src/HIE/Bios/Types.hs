@@ -2,21 +2,56 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE OverloadedStrings #-}
 module HIE.Bios.Types where
 
 import           System.Exit
 import qualified Colog.Core as L
 import           Control.Exception              ( Exception )
-import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Class
 #if MIN_VERSION_base(4,9,0)
 import qualified Control.Monad.Fail as Fail
 #endif
 import Data.Text.Prettyprint.Doc
+import System.Process.Extra (CreateProcess (env, cmdspec), CmdSpec (..))
+import Data.Maybe (fromMaybe)
 
+----------------------------------------------------------------
+-- Environment variables used by hie-bios.
+--
+-- If you need more, add a constant here.
+----------------------------------------------------------------
 
-data BIOSVerbosity = Silent | Verbose
+-- | Environment variable containing the filepath to which
+-- cradle actions write their results to.
+-- If the filepath does not exist, cradle actions must create them.
+hie_bios_output :: String
+hie_bios_output = "HIE_BIOS_OUTPUT"
+
+-- | Environment variable pointing to the GHC location used by
+-- cabal's and stack's GHC wrapper.
+--
+-- If not set, will default to sensible defaults.
+hie_bios_ghc :: String
+hie_bios_ghc = "HIE_BIOS_GHC"
+
+-- | Environment variable with extra arguments passed to the GHC location
+-- in cabal's and stack's GHC wrapper.
+--
+-- If not set, assume no extra arguments.
+hie_bios_ghc_args :: String
+hie_bios_ghc_args = "HIE_BIOS_GHC_ARGS"
+
+-- | Environment variable pointing to the source file location that caused
+-- the cradle action to be executed.
+hie_bios_arg :: String
+hie_bios_arg = "HIE_BIOS_ARG"
+
+-- | Environment variable pointing to a filepath to which dependencies
+-- of a cradle can be written to by the cradle action.
+hie_bios_deps :: String
+hie_bios_deps = "HIE_BIOS_DEPS"
 
 ----------------------------------------------------------------
 
@@ -48,14 +83,32 @@ data ActionName a
   | Other a
   deriving (Show, Eq, Ord, Functor)
 
-data Log =
-  LogAny String
+data Log 
+  = LogAny String
   | LogProcessOutput String
+  | LogCreateProcessRun CreateProcess
+  | LogProcessRun FilePath [FilePath]
   deriving Show
 
 instance Pretty Log where
   pretty (LogAny s) = pretty s
   pretty (LogProcessOutput s) = pretty s
+  pretty (LogProcessRun fp args) = pretty fp <+> pretty (unwords args)
+  pretty (LogCreateProcessRun cp) =   
+    vcat $ 
+      [ case cmdspec cp of
+          ShellCommand sh -> pretty sh
+          RawCommand cmd args -> pretty cmd <+> pretty (unwords args)
+      ]
+      <>
+      if null envText
+        then []
+        else
+          [ indent 2 $ "Environment Variables"
+          , indent 2 $ vcat envText
+          ]
+    where
+      envText = map (indent 2 . pretty) $ prettyProcessEnv cp
 
 data CradleAction a = CradleAction {
                         actionName    :: ActionName a
@@ -191,3 +244,24 @@ data ComponentOptions = ComponentOptions {
   -- changes the options that a Cradle may return, thus, needs reload
   -- as soon as these files are created.
   } deriving (Eq, Ord, Show)
+
+
+-- ------------------------------------------------
+
+-- | Prettify 'CmdSpec', so we can show the command to a user
+prettyCmdSpec :: CmdSpec -> String
+prettyCmdSpec (ShellCommand s) = s
+prettyCmdSpec (RawCommand cmd args) = cmd ++ " " ++ unwords args
+
+-- | Pretty print hie-bios's relevant environment variables.
+prettyProcessEnv :: CreateProcess -> [String]
+prettyProcessEnv p =
+  [ key <> ": " <> value
+  | (key, value) <- fromMaybe [] (env p)
+  , key `elem` [ hie_bios_output
+               , hie_bios_ghc
+               , hie_bios_ghc_args
+               , hie_bios_arg
+               , hie_bios_deps
+               ]
+  ]

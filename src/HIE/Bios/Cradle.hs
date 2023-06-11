@@ -70,42 +70,6 @@ import GHC.Fingerprint (fingerprintString)
 import GHC.ResponseFile (escapeArgs)
 
 ----------------------------------------------------------------
--- Environment variables used by hie-bios.
---
--- If you need more, add a constant here.
-----------------------------------------------------------------
-
--- | Environment variable containing the filepath to which
--- cradle actions write their results to.
--- If the filepath does not exist, cradle actions must create them.
-hie_bios_output :: String
-hie_bios_output = "HIE_BIOS_OUTPUT"
-
--- | Environment variable pointing to the GHC location used by
--- cabal's and stack's GHC wrapper.
---
--- If not set, will default to sensible defaults.
-hie_bios_ghc :: String
-hie_bios_ghc = "HIE_BIOS_GHC"
-
--- | Environment variable with extra arguments passed to the GHC location
--- in cabal's and stack's GHC wrapper.
---
--- If not set, assume no extra arguments.
-hie_bios_ghc_args :: String
-hie_bios_ghc_args = "HIE_BIOS_GHC_ARGS"
-
--- | Environment variable pointing to the source file location that caused
--- the cradle action to be executed.
-hie_bios_arg :: String
-hie_bios_arg = "HIE_BIOS_ARG"
-
--- | Environment variable pointing to a filepath to which dependencies
--- of a cradle can be written to by the cradle action.
-hie_bios_deps :: String
-hie_bios_deps = "HIE_BIOS_DEPS"
-
-----------------------------------------------------------------
 
 -- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
 findCradle :: FilePath -> IO (Maybe FilePath)
@@ -486,7 +450,7 @@ cabalCradle wdir mc projectFile =
             liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
             -- Need to pass -v0 otherwise we get "resolving dependencies..."
             cabalProc <- cabalProcess l projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
-            readProcessWithCwd' cabalProc ""
+            readProcessWithCwd' l cabalProc ""
         }
     }
 
@@ -529,7 +493,7 @@ cabalProcess l cabalProject workDir command args = do
             , "--with-compiler", wrapper_fp
             , "--with-hc-pkg", ghcPkgPath
             ] <> projectFileProcessArgs cabalProject
-      loggedProc l "cabal" (extraCabalArgs ++ args)
+      pure $ proc "cabal" (extraCabalArgs ++ args)
 
 -- | Discovers the location of 'ghc-pkg' given the absolute path to 'ghc'
 -- and its '$libdir' (obtainable by running @ghc --print-libdir@).
@@ -610,7 +574,7 @@ cabalCradleDependencies projectFile rootDir componentDir = do
 
 -- |Find .cabal files in the given directory.
 --
--- Might return multiple results, as we can not know in advance
+-- Might return multiple results,biosAction as we can not know in advance
 -- which one is important to the user.
 findCabalFiles :: FilePath -> IO [FilePath]
 findCabalFiles wdir = do
@@ -648,10 +612,12 @@ withGhcWrapperTool l (mbGhc, ghcArgs) wdir = do
         withSystemTempDirectory "hie-bios" $ \ tmpDir -> do
           let wrapper_hs = wrapper_fp -<.> "hs"
           writeFile wrapper_hs wrapperContents
-          ghc <- loggedProc l mbGhc $
-                      ghcArgs ++ ["-rtsopts=ignore", "-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs]
-          let ghc' = ghc { cwd = Just wdir }
-          readCreateProcess ghc' "" >>= putStr
+          let ghcArgsWithExtras = ghcArgs ++ ["-rtsopts=ignore", "-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs]
+          let ghcProc = (proc mbGhc ghcArgsWithExtras)
+                      { cwd = Just wdir
+                      }
+          l <& LogCreateProcessRun ghcProc `WithSeverity` Debug
+          readCreateProcess ghcProc "" >>= putStr
       else writeFile wrapper_fp wrapperContents
 
 -- | Create and cache a file in hie-bios's cache directory.
@@ -887,13 +853,15 @@ stackAction workDir mc syaml l _fp = do
   -- Same wrapper works as with cabal
   wrapper_fp <- withGhcWrapperTool l ghcProcArgs workDir
   (ex1, _stdo, stde, [(_, maybeArgs)]) <-
-    stackProcess l syaml
-                (["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
-                    <> [ comp | Just comp <- [mc] ]) >>=
-      readProcessWithOutputs [hie_bios_output] l workDir
+    readProcessWithOutputs [hie_bios_output] l workDir 
+      $ stackProcess syaml
+          $  ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
+          <> [ comp | Just comp <- [mc] ]
+                      
   (ex2, pkg_args, stdr, _) <-
-    stackProcess l syaml ["path", "--ghc-package-path"] >>=
-      readProcessWithOutputs [hie_bios_output] l workDir
+    readProcessWithOutputs [hie_bios_output] l workDir
+      $ stackProcess syaml ["path", "--ghc-package-path"]
+
   let split_pkgs = concatMap splitSearchPath pkg_args
       pkg_ghc_args = concatMap (\p -> ["-package-db", p] ) split_pkgs
       args = fromMaybe [] maybeArgs
@@ -918,8 +886,8 @@ stackAction workDir mc syaml l _fp = do
                   )
                   deps
 
-stackProcess :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> [String] -> IO CreateProcess
-stackProcess l syaml args = loggedProc l "stack" $ stackYamlProcessArgs syaml <> args
+stackProcess :: CradleProjectConfig -> [String] -> CreateProcess
+stackProcess syaml args = proc "stack" $ stackYamlProcessArgs syaml <> args
 
 combineExitCodes :: [ExitCode] -> ExitCode
 combineExitCodes = foldr go ExitSuccess
@@ -1073,6 +1041,7 @@ readProcessWithOutputs outputNames l workDir cp = flip runContT return $ do
     -- Windows line endings are not converted so you have to filter out `'r` characters
   let loggingConduit = C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')
         C..| C.map T.unpack C..| C.iterM (\msg -> l <& LogProcessOutput msg `WithSeverity` Debug) C..| C.sinkList
+  liftIO $ l <& LogCreateProcessRun process `WithSeverity` Info
   (ex, stdo, stde) <- liftIO $ sourceProcessWithStreams process mempty loggingConduit loggingConduit
 
   res <- forM output_files $ \(name,path) ->
@@ -1130,15 +1099,15 @@ readProcessWithCwd l dir cmd args stdin = runCradleResultT $ readProcessWithCwd_
 readProcessWithCwd_ :: LogAction IO (WithSeverity Log) -> FilePath -> FilePath -> [String] -> String -> CradleLoadResultT IO String
 readProcessWithCwd_ l dir cmd args stdin = do
   cleanEnv <- liftIO getCleanEnvironment
-  createdProc <- liftIO $ loggedProc l cmd args
-  let createdProc' = createdProc { cwd = Just dir, env = Just cleanEnv }
-  readProcessWithCwd' createdProc' stdin
+  let createdProc' = (proc cmd args) { cwd = Just dir, env = Just cleanEnv }
+  readProcessWithCwd' l createdProc' stdin
 
 -- | Wrapper around 'readCreateProcessWithExitCode', wrapping the result in
 -- a 'CradleLoadResult'. Provides better error messages than raw 'readCreateProcess'.
-readProcessWithCwd' :: CreateProcess -> String -> CradleLoadResultT IO String
-readProcessWithCwd' createdProcess stdin = do
+readProcessWithCwd' :: LogAction IO (WithSeverity Log) -> CreateProcess -> String -> CradleLoadResultT IO String
+readProcessWithCwd' l createdProcess stdin = do
   mResult <- liftIO $ optional $ readCreateProcessWithExitCode createdProcess stdin
+  liftIO $ l <& LogCreateProcessRun createdProcess `WithSeverity` Debug
   let cmdString = prettyCmdSpec $ cmdspec createdProcess
   case mResult of
     Just (ExitSuccess, stdo, _) -> pure stdo
@@ -1148,27 +1117,3 @@ readProcessWithCwd' createdProcess stdin = do
     Nothing -> throwCE $
       CradleError [] ExitSuccess $
         ["Couldn't execute " <> cmdString] <> prettyProcessEnv createdProcess
-
--- | Prettify 'CmdSpec', so we can show the command to a user
-prettyCmdSpec :: CmdSpec -> String
-prettyCmdSpec (ShellCommand s) = s
-prettyCmdSpec (RawCommand cmd args) = cmd ++ " " ++ unwords args
-
--- | Pretty print hie-bios's relevant environment variables.
-prettyProcessEnv :: CreateProcess -> [String]
-prettyProcessEnv p =
-  [ key <> ": " <> value
-  | (key, value) <- fromMaybe [] (env p)
-  , key `elem` [ hie_bios_output
-               , hie_bios_ghc
-               , hie_bios_ghc_args
-               , hie_bios_arg
-               , hie_bios_deps
-               ]
-  ]
-
-loggedProc :: LogAction IO (WithSeverity Log) -> FilePath -> [String] -> IO CreateProcess
-loggedProc l command args = do
-  l <& LogProcessOutput (unwords $ "executing command:":command:args) `WithSeverity` Debug
-  pure $ proc command args
-
