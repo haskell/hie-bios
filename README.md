@@ -317,7 +317,7 @@ This way we specified which component needs to be compiled given a certain sourc
 
 Some projects have multiple `cabal.project` files for multiple versions of ghc or development options. In this case you
 can specify an alternate relative file to use by using the `project-file` option. The path is relative to the
-configuration file.
+`hie.yaml`.
 
 ```yaml
 cradle:
