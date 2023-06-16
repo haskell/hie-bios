@@ -316,21 +316,21 @@ cradle:
 This way we specified which component needs to be compiled given a certain source file for our whole project.
 
 Some projects have multiple `cabal.project` files for multiple versions of ghc or development options. In this case you
-can specify an alternate relative file to use by using the `project-file` option. The path is relative to the
+can specify an alternate relative file to use by using the `cabalProject` option. The path is relative to the
 `hie.yaml`.
 
 ```yaml
 cradle:
   cabal:
-    project-file: "./cabal.project.dev"
+    cabalProject: "./cabal.project.dev"
 ```
 
-We can combine the `project-file` field with `components`:
+We can combine the `cabalProject` field with `components`:
 
 ```yaml
 cradle:
   cabal:
-    project-file: "./cabal.project.dev"
+    cabalProject: "./cabal.project.dev"
     components:
     - path: "./src"
       component: "lib:hie-bios"

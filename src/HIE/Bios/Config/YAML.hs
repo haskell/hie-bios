@@ -108,9 +108,9 @@ data CabalConfig
 
 instance FromJSON CabalConfig where
   parseJSON v@(Array _)     = CabalConfig Nothing . ManyComponents <$> parseJSON v
-  parseJSON v@(Object obj)  = (checkObjectKeys ["project-file", "component", "components"] obj)
+  parseJSON v@(Object obj)  = (checkObjectKeys ["cabalProject", "component", "components"] obj)
                                 *> (CabalConfig
-                                  <$> obj .:? "project-file"
+                                  <$> obj .:? "cabalProject"
                                   <*> parseJSON v)
   parseJSON Null            = pure $ CabalConfig Nothing NoComponent
   parseJSON v               = typeMismatch "CabalConfig" v
@@ -123,11 +123,11 @@ data CabalComponent
 
 instance FromJSON CabalComponent where
   parseJSON =
-    let parseCabalComponent obj = checkObjectKeys ["path", "component", "project-file"] obj
+    let parseCabalComponent obj = checkObjectKeys ["path", "component", "cabalProject"] obj
                                     *> (CabalComponent
                                           <$> obj .: "path"
                                           <*> obj .: "component"
-                                          <*> obj .:? "project-file"
+                                          <*> obj .:? "cabalProject"
                                         )
      in withObject "CabalComponent" parseCabalComponent
 

@@ -853,11 +853,11 @@ stackAction workDir mc syaml l _fp = do
   -- Same wrapper works as with cabal
   wrapper_fp <- withGhcWrapperTool l ghcProcArgs workDir
   (ex1, _stdo, stde, [(_, maybeArgs)]) <-
-    readProcessWithOutputs [hie_bios_output] l workDir 
+    readProcessWithOutputs [hie_bios_output] l workDir
       $ stackProcess syaml
           $  ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
           <> [ comp | Just comp <- [mc] ]
-                      
+
   (ex2, pkg_args, stdr, _) <-
     readProcessWithOutputs [hie_bios_output] l workDir
       $ stackProcess syaml ["path", "--ghc-package-path"]
