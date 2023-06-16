@@ -298,13 +298,10 @@ Here you can see two important features:
     * This is convenient if components are overlapping.
 
 Similarly to `multi-stack` configurations, you can also specify multiple components using a `components` subkey.
-While this is currently not used for anything, this syntax gives you a place to put defaults, directly under
-the `cabal` entry.
 
 ```yaml
 cradle:
   cabal:
-    # Reserved for future default options
     components:
     - path: "./src"
       component: "lib:hie-bios"
@@ -317,6 +314,33 @@ cradle:
 ```
 
 This way we specified which component needs to be compiled given a certain source file for our whole project.
+
+Some projects have multiple `cabal.project` files for multiple versions of ghc or development options. In this case you
+can specify an alternate relative file to use by using the `project-file` option. The path is relative to the
+`hie.yaml`.
+
+```yaml
+cradle:
+  cabal:
+    project-file: "./cabal.project.dev"
+```
+
+We can combine the `project-file` field with `components`:
+
+```yaml
+cradle:
+  cabal:
+    project-file: "./cabal.project.dev"
+    components:
+    - path: "./src"
+      component: "lib:hie-bios"
+    - path: "./exe"
+      component: "exe:hie-bios"
+    - path: "./tests/BiosTests.hs"
+      component: "test:hie-bios"
+    - path: "./tests/ParserTests.hs"
+      component: "test:parser-tests"
+```
 
 #### Debugging a `cabal` cradle
 
