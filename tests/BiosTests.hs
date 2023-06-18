@@ -196,7 +196,7 @@ cabalTestCases extraGhcDep =
         loadRuntimeGhcVersion
         assertGhcVersionIs extraGhcVersion
     ]
-  , testGroup "Cabal project-file"
+  , testGroup "Cabal cabalProject"
     [ testCaseSteps "cabal-with-project, options propagated" $ runTestEnv "cabal-with-project" $ do
         opts <- cabalLoadOptions "src/MyLib.hs"
         liftIO $ do
