@@ -269,7 +269,7 @@ loadComponentOptions fp = do
   a_fp <- normFile fp
   crd <- askCradle
   step $ "Initialise flags for: " <> fp
-  clr <- liftIO $ getCompilerOptions mempty a_fp crd
+  clr <- liftIO $ getCompilerOptions mempty a_fp [] crd
   setLoadResult clr
 
 loadRuntimeGhcLibDir :: TestM ()
@@ -325,7 +325,7 @@ loadFileGhc fp = do
 assertCradle :: (Cradle Void -> Bool) -> TestM ()
 assertCradle cradlePred = do
   crd <- askCradle
-  liftIO $ cradlePred crd @? "Must be the correct kind of cradle"
+  liftIO $ cradlePred crd @? "Must be the correct kind of cradle, got " ++ show (actionName $ cradleOptsProg crd)
 
 assertLibDirVersion :: TestM ()
 assertLibDirVersion = assertLibDirVersionIs VERSION_ghc

@@ -15,7 +15,7 @@ module HIE.Bios.Config(
     pattern StackType,
     stackComponent,
     stackYaml,
-    CradleType(..),
+    CradleTree(..),
     Callable(..)
     ) where
 
@@ -47,7 +47,7 @@ data CradleConfig a =
         -- ^ Dependencies of a cradle.
         -- Dependencies are expected to be relative to the root directory.
         -- The given files are not required to exist.
-        , cradleType :: CradleType a
+        , cradleTree :: CradleTree a
         -- ^ Type of the cradle to use. Actions to obtain
         -- compiler flags from are dependant on this field.
         }
@@ -100,7 +100,7 @@ pattern StackType { stackComponent, stackYaml } = StackType_ (Last stackComponen
 instance Show StackType where
   show = show . Stack
 
-data CradleType a
+data CradleTree a
     = Cabal { cabalType :: !CabalType }
     | CabalMulti { defaultCabal :: !CabalType, subCabalComponents :: [ (FilePath, CabalType) ] }
     | Stack { stackType :: !StackType }
@@ -125,7 +125,7 @@ data CradleType a
     | Other { otherConfig :: a, originalYamlValue :: Value }
     deriving (Eq, Functor)
 
-instance Show (CradleType a) where
+instance Show (CradleTree a) where
     show (Cabal comp) = "Cabal {component = " ++ show (cabalComponent comp) ++ "}"
     show (CabalMulti d a) = "CabalMulti {defaultCabal = " ++ show d ++ ", subCabalComponents = " ++ show a ++ "}"
     show (Stack comp) = "Stack {component = " ++ show (stackComponent comp) ++ ", stackYaml = " ++ show (stackYaml comp) ++ "}"
@@ -154,31 +154,31 @@ readConfig fp = do
 
 fromYAMLConfig :: CradleConfigYAML a -> Config a
 fromYAMLConfig cradleYAML = Config $ CradleConfig (fromMaybe [] $ YAML.dependencies cradleYAML)
-                                                  (toCradleType $ YAML.cradle cradleYAML)
+                                                  (toCradleTree $ YAML.cradle cradleYAML)
 
-toCradleType :: YAML.CradleComponent a -> CradleType a
-toCradleType (YAML.Multi cpts)  =
+toCradleTree :: YAML.CradleComponent a -> CradleTree a
+toCradleTree (YAML.Multi cpts)  =
   Multi $ (\(YAML.MultiSubComponent fp' cfg) -> (fp', cradle $ fromYAMLConfig cfg)) <$> cpts
-toCradleType (YAML.Stack (YAML.StackConfig yaml cpts)) =
+toCradleTree (YAML.Stack (YAML.StackConfig yaml cpts)) =
   case cpts of
     YAML.NoComponent          -> Stack $ StackType Nothing yaml
     (YAML.SingleComponent c)  -> Stack $ StackType (Just c) yaml
     (YAML.ManyComponents cs)  -> StackMulti (StackType Nothing yaml)
                                             ((\(YAML.StackComponent fp' c cYAML) ->
                                               (fp', StackType (Just c) cYAML)) <$> cs)
-toCradleType (YAML.Cabal (YAML.CabalConfig prjFile cpts)) =
+toCradleTree (YAML.Cabal (YAML.CabalConfig prjFile cpts)) =
   case cpts of
     YAML.NoComponent          -> Cabal $ CabalType Nothing prjFile
     (YAML.SingleComponent c)  -> Cabal $ CabalType (Just c) prjFile
     (YAML.ManyComponents cs)  -> CabalMulti (CabalType Nothing prjFile)
                                             ((\(YAML.CabalComponent fp' c cPrjFile) ->
                                               (fp', CabalType (Just c) cPrjFile)) <$> cs)
-toCradleType (YAML.Direct cfg)  = Direct (YAML.arguments cfg)
-toCradleType (YAML.Bios cfg)    = Bios  (toCallable $ YAML.callable cfg)
+toCradleTree (YAML.Direct cfg)  = Direct (YAML.arguments cfg)
+toCradleTree (YAML.Bios cfg)    = Bios  (toCallable $ YAML.callable cfg)
                                         (toCallable <$> YAML.depsCallable cfg)
                                         (YAML.ghcPath cfg)
-toCradleType (YAML.None _)      = None
-toCradleType (YAML.Other cfg)   = Other (YAML.otherConfig cfg)
+toCradleTree (YAML.None _)      = None
+toCradleTree (YAML.Other cfg)   = Other (YAML.otherConfig cfg)
                                         (YAML.originalYamlValue cfg)
 
 toCallable :: YAML.Callable -> Callable

@@ -84,7 +84,7 @@ main = do
         [] -> error "too few arguments"
         _ -> do
           res <- forM files $ \fp -> do
-                  res <- getCompilerOptions logger fp cradle
+                  res <- getCompilerOptions logger fp [] cradle
                   case res of
                       CradleFail (CradleError _deps _ex err) ->
                         return $ "Failed to show flags for \""

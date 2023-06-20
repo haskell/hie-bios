@@ -113,7 +113,7 @@ instance Pretty Log where
 data CradleAction a = CradleAction {
                         actionName    :: ActionName a
                       -- ^ Name of the action.
-                      , runCradle     :: L.LogAction IO (L.WithSeverity Log) -> FilePath -> IO (CradleLoadResult ComponentOptions)
+                      , runCradle     :: L.LogAction IO (L.WithSeverity Log) -> FilePath -> [FilePath] -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
                       , runGhcCmd     :: L.LogAction IO (L.WithSeverity Log) -> [String] -> IO (CradleLoadResult String)
                       -- ^ Executes the @ghc@ binary that is usually used to
