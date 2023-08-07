@@ -784,6 +784,7 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp fps = do
           [] -> [fromMaybe (fixTargetPath fp) mc]
           -- Start a multi-component session with all the old files
           _ -> "--keep-temp-files"
+             : "--enable-multi-repl"
              : [fromMaybe (fixTargetPath fp) mc]
             ++ [fromMaybe (fixTargetPath old_fp) old_mc
                | old_fp <- fps
