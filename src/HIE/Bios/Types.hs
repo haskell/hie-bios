@@ -70,7 +70,14 @@ data Cradle a = Cradle {
   -- | The action which needs to be executed to get the correct
   -- command line arguments.
   , cradleOptsProg   :: CradleAction a
-  } deriving (Show, Functor)
+  , cradleLogger  :: L.LogAction IO (L.WithSeverity Log)
+  } deriving (Functor)
+
+instance Show a => Show (Cradle a) where
+  show (Cradle root prog _)
+    = "Cradle{ cradleRootDir = " ++ show root
+          ++", cradleOptsProg = " ++ show prog
+          ++"}"
 
 data ActionName a
   = Stack
@@ -113,9 +120,9 @@ instance Pretty Log where
 data CradleAction a = CradleAction {
                         actionName    :: ActionName a
                       -- ^ Name of the action.
-                      , runCradle     :: L.LogAction IO (L.WithSeverity Log) -> FilePath -> [FilePath] -> IO (CradleLoadResult ComponentOptions)
+                      , runCradle     :: FilePath -> [FilePath] -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
-                      , runGhcCmd     :: L.LogAction IO (L.WithSeverity Log) -> [String] -> IO (CradleLoadResult String)
+                      , runGhcCmd     :: [String] -> IO (CradleLoadResult String)
                       -- ^ Executes the @ghc@ binary that is usually used to
                       -- build the cradle. E.g. for a cabal cradle this should be
                       -- equivalent to @cabal exec ghc -- args@

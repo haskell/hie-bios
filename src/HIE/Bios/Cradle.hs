@@ -84,31 +84,31 @@ findCradle wfile = do
     runMaybeT (yamlConfig wdir)
 
 -- | Given root\/hie.yaml load the Cradle.
-loadCradle :: FilePath -> IO (Cradle Void)
-loadCradle = loadCradleWithOpts absurd
+loadCradle :: LogAction IO (WithSeverity Log) -> FilePath -> IO (Cradle Void)
+loadCradle l = loadCradleWithOpts l absurd
 
 -- | Given root\/foo\/bar.hs, load an implicit cradle
-loadImplicitCradle :: Show a => FilePath -> IO (Cradle a)
-loadImplicitCradle wfile = do
+loadImplicitCradle :: Show a => LogAction IO (WithSeverity Log) -> FilePath -> IO (Cradle a)
+loadImplicitCradle l wfile = do
   let wdir = takeDirectory wfile
   cfg <- runMaybeT (implicitConfig wdir)
   case cfg of
-    Just bc -> getCradle absurd bc
-    Nothing -> return $ defaultCradle wdir
+    Just bc -> getCradle l absurd bc
+    Nothing -> return $ defaultCradle l wdir
 
 -- | Finding 'Cradle'.
 --   Find a cabal file by tracing ancestor directories.
 --   Find a sandbox according to a cabal sandbox config
 --   in a cabal directory.
-loadCradleWithOpts :: (Yaml.FromJSON b, Show a) => (b -> CradleAction a) -> FilePath -> IO (Cradle a)
-loadCradleWithOpts buildCustomCradle wfile = do
+loadCradleWithOpts :: (Yaml.FromJSON b, Show a) => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> IO (Cradle a)
+loadCradleWithOpts l buildCustomCradle wfile = do
     cradleConfig <- readCradleConfig wfile
-    getCradle buildCustomCradle (cradleConfig, takeDirectory wfile)
+    getCradle l buildCustomCradle (cradleConfig, takeDirectory wfile)
 
-getCradle :: Show a => (b -> CradleAction a) -> (CradleConfig b, FilePath) -> IO (Cradle a)
-getCradle buildCustomCradle (cc, wdir) = do
+getCradle :: Show a => LogAction IO (WithSeverity Log) ->  (b -> CradleAction a) -> (CradleConfig b, FilePath) -> IO (Cradle a)
+getCradle l buildCustomCradle (cc, wdir) = do
     rcs <- canonicalizeResolvedCradles wdir cs
-    resolvedCradlesToCradle buildCustomCradle wdir rcs
+    resolvedCradlesToCradle l buildCustomCradle wdir rcs
   where
     cs = resolveCradleTree wdir cc
 
@@ -147,36 +147,34 @@ data ProgramVersions =
                   , ghcVersion    :: Maybe Version
                   }
 
-makeVersions :: ([String] -> IO (CradleLoadResult String)) -> IO ProgramVersions
-makeVersions ghc = do
-  cabalVersion <- unsafeInterleaveIO getCabalVersion
-  stackVersion <- unsafeInterleaveIO getStackVersion
+makeVersions :: LogAction IO (WithSeverity Log) -> FilePath -> ([String] -> IO (CradleLoadResult String)) -> IO ProgramVersions
+makeVersions l wdir ghc = do
+  cabalVersion <- unsafeInterleaveIO (getCabalVersion l wdir)
+  stackVersion <- unsafeInterleaveIO (getStackVersion l wdir)
   ghcVersion <- unsafeInterleaveIO (getGhcVersion ghc)
   pure ProgramVersions{..}
 
-getCabalVersion :: IO (Maybe Version)
-getCabalVersion = do
-  let p = proc "cabal" ["--numeric-version"]
-  res <- optional $ readCreateProcessWithExitCode p ""
+getCabalVersion :: LogAction IO (WithSeverity Log) -> FilePath -> IO (Maybe Version)
+getCabalVersion l wdir = do
+  res <- readProcessWithCwd l wdir "cabal" ["--numeric-version"] ""
   case res of
-    Just (ExitSuccess,stdo,_) ->
+    CradleSuccess stdo ->
       pure $ versionMaybe stdo
     _ -> pure Nothing
 
-getStackVersion :: IO (Maybe Version)
-getStackVersion = do
-  let p = proc "stack" ["--numeric-version"]
-  res <- optional $ readCreateProcessWithExitCode p ""
+getStackVersion :: LogAction IO (WithSeverity Log) -> FilePath -> IO (Maybe Version)
+getStackVersion l wdir = do
+  res <- readProcessWithCwd l wdir "stack" ["--numeric-version"] ""
   case res of
-    Just (ExitSuccess,stdo,_) ->
+    CradleSuccess stdo ->
       pure $ versionMaybe stdo
     _ -> pure Nothing
 
 getGhcVersion :: ([String] -> IO (CradleLoadResult String)) -> IO (Maybe Version)
 getGhcVersion ghc = do
-  res <- optional $ ghc ["--numeric-version"]
+  res <- ghc ["--numeric-version"]
   case res of
-    Just (CradleSuccess stdo) ->
+    CradleSuccess stdo ->
       pure $ versionMaybe stdo
     _ -> pure Nothing
 
@@ -194,9 +192,9 @@ addActionDeps deps =
       (\(ComponentOptions os' dir ds) -> CradleSuccess (ComponentOptions os' dir (ds `union` deps)))
   
 
-resolvedCradlesToCradle :: Show a => (b -> CradleAction a) -> FilePath -> [ResolvedCradle b] -> IO (Cradle a)
-resolvedCradlesToCradle buildCustomCradle root cs = mdo
-  let run_ghc_cmd l args =
+resolvedCradlesToCradle :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> [ResolvedCradle b] -> IO (Cradle a)
+resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
+  let run_ghc_cmd args =
         -- We're being lazy here and just returning the ghc path for the
         -- first non-none cradle. This shouldn't matter in practice: all
         -- sub cradles should be using the same ghc version!
@@ -205,11 +203,10 @@ resolvedCradlesToCradle buildCustomCradle root cs = mdo
           (act:_) ->
             runGhcCmd
               act
-              l
               args
-  versions <- makeVersions (run_ghc_cmd mempty)
+  versions <- makeVersions logger root run_ghc_cmd
   let rcs = ResolvedCradles root cs versions
-      cradleActions = [ (c, resolveCradleAction buildCustomCradle rcs root c) | c <- cs ]
+      cradleActions = [ (c, resolveCradleAction logger buildCustomCradle rcs root c) | c <- cs ]
       err_msg fp
         = ["Multi Cradle: No prefixes matched"
           , "pwd: " ++ root
@@ -218,13 +215,14 @@ resolvedCradlesToCradle buildCustomCradle root cs = mdo
           ] ++ [show (prefix pf, actionName cc) | (pf, cc) <- cradleActions]
   pure $ Cradle
     { cradleRootDir = root
+    , cradleLogger = logger
     , cradleOptsProg = CradleAction
       { actionName = multiActionName
-      , runCradle  = \l fp prev -> do
+      , runCradle  = \fp prev -> do
           absfp <- makeAbsolute fp
           case selectCradle (prefix . fst) absfp cradleActions of
             Just (rc, act) -> do
-              addActionDeps (cradleDeps rc) <$> runCradle act l fp prev
+              addActionDeps (cradleDeps rc) <$> runCradle act fp prev
             Nothing -> return $ CradleFail $ CradleError [] ExitSuccess (err_msg fp)
       , runGhcCmd = run_ghc_cmd
       }
@@ -266,13 +264,13 @@ resolvedCradlesToCradle buildCustomCradle root cs = mdo
     notNoneType _ = True
 
 
-resolveCradleAction :: (b -> CradleAction a) -> ResolvedCradles b -> FilePath -> ResolvedCradle b -> CradleAction a
-resolveCradleAction buildCustomCradle cs root cradle =
+resolveCradleAction :: LogAction IO (WithSeverity Log) ->  (b -> CradleAction a) -> ResolvedCradles b -> FilePath -> ResolvedCradle b -> CradleAction a
+resolveCradleAction l buildCustomCradle cs root cradle =
   case concreteCradle cradle of
-    ConcreteCabal t -> cabalCradle cs root (cabalComponent t) (projectConfigFromMaybe root (cabalProjectFile t))
-    ConcreteStack t -> stackCradle root (stackComponent t) (projectConfigFromMaybe root (stackYaml t))
-    ConcreteBios bios deps mbGhc -> biosCradle root bios deps mbGhc
-    ConcreteDirect xs -> directCradle root xs
+    ConcreteCabal t -> cabalCradle l cs root (cabalComponent t) (projectConfigFromMaybe root (cabalProjectFile t))
+    ConcreteStack t -> stackCradle l root (stackComponent t) (projectConfigFromMaybe root (stackYaml t))
+    ConcreteBios bios deps mbGhc -> biosCradle l root bios deps mbGhc
+    ConcreteDirect xs -> directCradle l root xs
     ConcreteNone -> noneCradle
     ConcreteOther a -> buildCustomCradle a
 
@@ -391,15 +389,16 @@ isOtherCradle crdl = case actionName (cradleOptsProg crdl) of
 
 -- | Default cradle has no special options, not very useful for loading
 -- modules.
-defaultCradle :: FilePath -> Cradle a
-defaultCradle cur_dir =
+defaultCradle :: LogAction IO (WithSeverity Log) -> FilePath -> Cradle a
+defaultCradle l cur_dir =
   Cradle
     { cradleRootDir = cur_dir
+    , cradleLogger = l
     , cradleOptsProg = CradleAction
         { actionName = Types.Default
-        , runCradle = \_ _ _ ->
+        , runCradle = \_ _ ->
             return (CradleSuccess (ComponentOptions argDynamic cur_dir []))
-        , runGhcCmd = \l -> runGhcCmdOnPath l cur_dir
+        , runGhcCmd = runGhcCmdOnPath l cur_dir
         }
     }
 
@@ -410,8 +409,8 @@ noneCradle :: CradleAction a
 noneCradle =
   CradleAction
       { actionName = Types.None
-      , runCradle = \_ _ _ -> return CradleNone
-      , runGhcCmd = \_ _ -> return CradleNone
+      , runCradle = \_ _ -> return CradleNone
+      , runGhcCmd = \_ -> return CradleNone
       }
 
 ---------------------------------------------------------------
@@ -435,13 +434,13 @@ selectCradle k cur_fp (c: css) =
 
 -------------------------------------------------------------------------
 
-directCradle :: FilePath -> [String] -> CradleAction a
-directCradle wdir args
+directCradle :: LogAction IO (WithSeverity Log) -> FilePath -> [String] -> CradleAction a
+directCradle l wdir args
   = CradleAction
       { actionName = Types.Direct
-      , runCradle = \_ _ _ ->
+      , runCradle = \_ _ ->
           return (CradleSuccess (ComponentOptions (args ++ argDynamic) wdir []))
-      , runGhcCmd = \l -> runGhcCmdOnPath l wdir
+      , runGhcCmd = runGhcCmdOnPath l wdir
       }
     
 
@@ -450,12 +449,12 @@ directCradle wdir args
 
 -- | Find a cradle by finding an executable `hie-bios` file which will
 -- be executed to find the correct GHC options to use.
-biosCradle :: FilePath -> Callable -> Maybe Callable -> Maybe FilePath -> CradleAction a
-biosCradle wdir biosCall biosDepsCall mbGhc
+biosCradle :: LogAction IO (WithSeverity Log) -> FilePath -> Callable -> Maybe Callable -> Maybe FilePath -> CradleAction a
+biosCradle l wdir biosCall biosDepsCall mbGhc
   = CradleAction
       { actionName = Types.Bios
-      , runCradle = biosAction wdir biosCall biosDepsCall
-      , runGhcCmd = \l args -> readProcessWithCwd l wdir (fromMaybe "ghc" mbGhc) args ""
+      , runCradle = biosAction wdir biosCall biosDepsCall l
+      , runGhcCmd = \args -> readProcessWithCwd l wdir (fromMaybe "ghc" mbGhc) args ""
       }
 
 biosWorkDir :: FilePath -> MaybeT IO FilePath
@@ -513,12 +512,12 @@ projectLocationOrDefault = \case
 
 -- |Cabal Cradle
 -- Works for new-build by invoking `v2-repl`.
-cabalCradle :: ResolvedCradles b -> FilePath -> Maybe String -> CradleProjectConfig -> CradleAction a
-cabalCradle cs wdir mc projectFile
+cabalCradle :: LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath -> Maybe String -> CradleProjectConfig -> CradleAction a
+cabalCradle l cs wdir mc projectFile
   = CradleAction
     { actionName = Types.Cabal
-    , runCradle = \l fp -> runCradleResultT . cabalAction cs wdir mc l projectFile fp
-    , runGhcCmd = \l args -> runCradleResultT $ do
+    , runCradle = \fp -> runCradleResultT . cabalAction cs wdir mc l projectFile fp
+    , runGhcCmd = \args -> runCradleResultT $ do
         buildDir <- liftIO $ cabalBuildDir wdir
         -- Workaround for a cabal-install bug on 3.0.0.0:
         -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
@@ -906,12 +905,12 @@ stackYamlLocationOrDefault (ExplicitConfig yaml) = yaml
 
 -- | Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
-stackCradle :: FilePath -> Maybe String -> CradleProjectConfig -> CradleAction a
-stackCradle wdir mc syaml =
+stackCradle :: LogAction IO (WithSeverity Log) ->  FilePath -> Maybe String -> CradleProjectConfig -> CradleAction a
+stackCradle l wdir mc syaml =
   CradleAction
     { actionName = Types.Stack
-    , runCradle = stackAction wdir mc syaml
-    , runGhcCmd = \l args -> runCradleResultT $ do
+    , runCradle = stackAction wdir mc syaml l
+    , runGhcCmd = \args -> runCradleResultT $ do
         -- Setup stack silently, since stack might print stuff to stdout in some cases (e.g. on Win)
         -- Issue 242 from HLS: https://github.com/haskell/haskell-language-server/issues/242
         _ <- readProcessWithCwd_ l wdir "stack" (stackYamlProcessArgs syaml <> ["setup", "--silent"]) ""

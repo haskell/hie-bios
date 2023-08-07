@@ -253,15 +253,15 @@ initCradle fp = do
   relMcfg <- traverse relFile mcfg
   step $ "Loading Cradle: " <> show relMcfg
   crd <- case mcfg of
-    Just cfg -> liftIO $ loadCradle cfg
-    Nothing -> liftIO $ loadImplicitCradle a_fp
+    Just cfg -> liftIO $ loadCradle testLogger cfg
+    Nothing -> liftIO $ loadImplicitCradle testLogger a_fp
   setCradle crd
 
 initImplicitCradle :: FilePath -> TestM ()
 initImplicitCradle fp = do
   a_fp <- normFile fp
   step $ "Loading implicit Cradle for: " <> fp
-  crd <- liftIO $ loadImplicitCradle a_fp
+  crd <- liftIO $ loadImplicitCradle testLogger a_fp
   setCradle crd
 
 loadComponentOptions :: FilePath -> TestM ()
@@ -269,21 +269,21 @@ loadComponentOptions fp = do
   a_fp <- normFile fp
   crd <- askCradle
   step $ "Initialise flags for: " <> fp
-  clr <- liftIO $ getCompilerOptions mempty a_fp [] crd
+  clr <- liftIO $ getCompilerOptions a_fp [] crd
   setLoadResult clr
 
 loadRuntimeGhcLibDir :: TestM ()
 loadRuntimeGhcLibDir = do
   crd <- askCradle
   step "Load run-time ghc libdir"
-  libdirRes <- liftIO $ getRuntimeGhcLibDir testLogger crd
+  libdirRes <- liftIO $ getRuntimeGhcLibDir crd
   setLibDirResult libdirRes
 
 loadRuntimeGhcVersion :: TestM ()
 loadRuntimeGhcVersion = do
   crd <- askCradle
   step "Load run-time ghc version"
-  ghcVersionRes <- liftIO $ getRuntimeGhcVersion testLogger crd
+  ghcVersionRes <- liftIO $ getRuntimeGhcVersion crd
   setGhcVersionResult ghcVersionRes
 
 testLogger :: forall a . Pretty a => L.LogAction IO (L.WithSeverity a)

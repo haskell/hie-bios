@@ -68,20 +68,18 @@ makeTargetIdAbsolute _ tid = tid
 --
 --
 -- Obtains libdir by calling 'runCradleGhc' on the provided cradle.
-getRuntimeGhcLibDir :: LogAction IO (WithSeverity Log)
-                    -> Cradle a
+getRuntimeGhcLibDir :: Cradle a
                     -> IO (CradleLoadResult FilePath)
-getRuntimeGhcLibDir l cradle = fmap (fmap trim) $
-      runGhcCmd (cradleOptsProg cradle) l ["--print-libdir"]
+getRuntimeGhcLibDir cradle = fmap (fmap trim) $
+      runGhcCmd (cradleOptsProg cradle) ["--print-libdir"]
 
 -- | Gets the version of ghc used when compiling the cradle. It is based off of
 -- 'getRuntimeGhcLibDir'. If it can't work out the verison reliably, it will
 -- return a 'CradleError'
-getRuntimeGhcVersion :: LogAction IO (WithSeverity Log)
-                     -> Cradle a
+getRuntimeGhcVersion :: Cradle a
                      -> IO (CradleLoadResult String)
-getRuntimeGhcVersion l cradle =
-  fmap (fmap trim) $ runGhcCmd (cradleOptsProg cradle) l ["--numeric-version"]
+getRuntimeGhcVersion cradle =
+  fmap (fmap trim) $ runGhcCmd (cradleOptsProg cradle) ["--numeric-version"]
 
 ----------------------------------------------------------------
 
