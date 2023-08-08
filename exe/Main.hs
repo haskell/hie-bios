@@ -63,28 +63,28 @@ main = do
     hSetEncoding stdout utf8
     cwd <- getCurrentDirectory
     cmd <- execParser progInfo
-    cradle <-
-        -- find cradle does a takeDirectory on the argument, so make it into a file
-        findCradle (cwd </> "File.hs") >>= \case
-          Just yaml -> loadCradle yaml
-          Nothing -> loadImplicitCradle (cwd </> "File.hs")
-
     let
       printLog (L.WithSeverity l sev) = "[" ++ show sev ++ "] " ++ show (pretty l)
       logger :: forall a . Pretty a => L.LogAction IO (L.WithSeverity a)
       logger = L.cmap printLog L.logStringStderr
 
+    cradle <-
+        -- find cradle does a takeDirectory on the argument, so make it into a file
+        findCradle (cwd </> "File.hs") >>= \case
+          Just yaml -> loadCradle logger yaml
+          Nothing -> loadImplicitCradle logger (cwd </> "File.hs")
+
     res <- case cmd of
-      Check targetFiles -> checkSyntax logger logger cradle targetFiles
+      Check targetFiles -> checkSyntax logger cradle targetFiles
       Debug files -> case files of
-        [] -> debugInfo logger (cradleRootDir cradle) cradle
-        fp -> debugInfo logger fp cradle
+        [] -> debugInfo (cradleRootDir cradle) cradle
+        fp -> debugInfo fp cradle
       Flags files -> case files of
         -- TODO force optparse to acquire one
         [] -> error "too few arguments"
         _ -> do
           res <- forM files $ \fp -> do
-                  res <- getCompilerOptions logger fp cradle
+                  res <- getCompilerOptions fp [] cradle
                   case res of
                       CradleFail (CradleError _deps _ex err) ->
                         return $ "Failed to show flags for \""
@@ -97,7 +97,7 @@ main = do
                       CradleNone -> return $ "No flags/None Cradle: component " ++ fp ++ " should not be loaded"
           return (unlines res)
       ConfigInfo files -> configInfo files
-      CradleInfo files -> cradleInfo files
+      CradleInfo files -> cradleInfo logger files
       Root    -> rootInfo cradle
       Version -> return progVersion
     putStr res

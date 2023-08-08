@@ -114,7 +114,7 @@ assertCustomParser fp cc = do
                           , "Expected: " ++ show cc
                           , "Actual: " ++ show conf ])
 
-noDeps :: CradleType a -> Config a
+noDeps :: CradleTree a -> Config a
 noDeps c = Config (CradleConfig [] c)
 
 shouldThrow :: (HasCallStack, Exception e) => IO a -> Selector e -> Assertion

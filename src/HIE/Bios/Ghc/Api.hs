@@ -33,24 +33,22 @@ import HIE.Bios.Flags
 -- | Initialize a GHC session by loading a given file into a given cradle.
 initializeFlagsWithCradle ::
     GhcMonad m
-    => LogAction IO (WithSeverity Log)
-    -> FilePath -- ^ The file we are loading the 'Cradle' because of
+    => FilePath -- ^ The file we are loading the 'Cradle' because of
     -> Cradle a   -- ^ The cradle we want to load
     -> m (CradleLoadResult (m G.SuccessFlag, ComponentOptions))
-initializeFlagsWithCradle l = initializeFlagsWithCradleWithMessage l (Just Gap.batchMsg)
+initializeFlagsWithCradle = initializeFlagsWithCradleWithMessage (Just Gap.batchMsg)
 
 -- | The same as 'initializeFlagsWithCradle' but with an additional argument to control
 -- how the loading progress messages are displayed to the user. In @haskell-ide-engine@
 -- the module loading progress is displayed in the UI by using a progress notification.
 initializeFlagsWithCradleWithMessage ::
   GhcMonad m
-  => LogAction IO (WithSeverity Log)
-  -> Maybe G.Messager
+  => Maybe G.Messager
   -> FilePath -- ^ The file we are loading the 'Cradle' because of
   -> Cradle a  -- ^ The cradle we want to load
   -> m (CradleLoadResult (m G.SuccessFlag, ComponentOptions)) -- ^ Whether we actually loaded the cradle or not.
-initializeFlagsWithCradleWithMessage l msg fp cradle =
-    fmap (initSessionWithMessage msg) <$> liftIO (getCompilerOptions l fp cradle)
+initializeFlagsWithCradleWithMessage msg fp cradle =
+    fmap (initSessionWithMessage msg) <$> liftIO (getCompilerOptions fp [] cradle)
 
 -- | Actually perform the initialisation of the session. Initialising the session corresponds to
 -- parsing the command line flags, setting the targets for the session and then attempting to load
