@@ -1,11 +1,11 @@
 Cabal-Version:          2.2
 Name:                   hie-bios
-Version:                0.12.0
+Version:                0.13.0
 Author:                 Matthew Pickering <matthewtpickering@gmail.com>
 Maintainer:             Matthew Pickering <matthewtpickering@gmail.com>
 License:                BSD-3-Clause
 License-File:           LICENSE
-Homepage:               https://github.com/mpickering/hie-bios
+Homepage:               https://github.com/haskell/hie-bios
 Synopsis:               Set up a GHC API session
 Description:            Set up a GHC API session and obtain flags required to compile a source file
 
@@ -139,7 +139,7 @@ Extra-Source-Files:     ChangeLog.md
                         tests/projects/stack-with-yaml/stack-with-yaml.cabal
                         tests/projects/stack-with-yaml/src/Lib.hs
 
-tested-with: GHC ==8.6.5 || ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.7 || ==9.4.5 || ==9.6.1
+tested-with: GHC ==8.6.5 || ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.8 || ==9.4.6 || ==9.6.2
 
 Library
   Default-Language:     Haskell2010
@@ -164,11 +164,11 @@ Library
   autogen-modules:      Paths_hie_bios
   Build-Depends:
                         base                 >= 4.8 && < 5,
-                        aeson                >= 1.4.4 && < 2.2,
+                        aeson                >= 1.4.4 && < 2.3,
                         base16-bytestring    >= 0.1.1 && < 1.1,
-                        bytestring           >= 0.10.8 && < 0.12,
+                        bytestring           >= 0.10.8 && < 0.13,
                         co-log-core          ^>= 0.3.0,
-                        deepseq              >= 1.4.3 && < 1.5,
+                        deepseq              >= 1.4.3 && < 1.6,
                         exceptions           ^>= 0.10,
                         cryptohash-sha1      >= 0.11.100 && < 0.12,
                         directory            >= 1.3.0 && < 1.4,
