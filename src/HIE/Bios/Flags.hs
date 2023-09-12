@@ -2,7 +2,7 @@ module HIE.Bios.Flags (getCompilerOptions) where
 
 import HIE.Bios.Types
 
-import Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&))
+import Colog.Core (WithSeverity (..), Severity (..), (<&))
 
 -- | Initialize the 'DynFlags' relating to the compilation of a single
 -- file or GHC session according to the provided 'Cradle'.

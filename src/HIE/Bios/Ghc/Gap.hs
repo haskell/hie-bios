@@ -3,8 +3,6 @@
 module HIE.Bios.Ghc.Gap (
   ghcVersion
   -- * Warnings, Doc Compat
-  , WarnFlags
-  , emptyWarnFlags
   , makeUserStyle
   , PprStyle
   -- * Argument parsing
@@ -27,11 +25,6 @@ module HIE.Bios.Ghc.Gap (
   , HIE.Bios.Ghc.Gap.getLogger
   -- * AST compat
   , pattern HIE.Bios.Ghc.Gap.RealSrcSpan
-  , LExpression
-  , LBinding
-  , LPattern
-  , inTypes
-  , outType
   -- * Exceptions
   , catch
   , bracket
@@ -49,7 +42,6 @@ module HIE.Bios.Ghc.Gap (
   -- * Platform constants
   , hostIsDynamic
   -- * misc
-  , getModuleName
   , getTyThing
   , fixInfo
   , Tc.FrontendResult(..)
@@ -68,7 +60,7 @@ import qualified Control.Monad.Catch as E
 import GHC
 import qualified GHC as G
 
-#if __GLASGOW_HASKELL__ >= 804 && __GLASGOW_HASKELL__ < 900
+#if __GLASGOW_HASKELL__ >= 810 && __GLASGOW_HASKELL__ < 900
 import Data.List
 import System.FilePath
 
@@ -89,25 +81,13 @@ import DriverPhases as G
 import Util as G
 import qualified GhcMonad as G
 
-#if __GLASGOW_HASKELL__ >= 808
 import qualified DynamicLoading (initializePlugins)
 import qualified Plugins (plugins)
-#endif
-
-#if __GLASGOW_HASKELL__ >= 806 && __GLASGOW_HASKELL__ < 810
-import HsExtension (GhcTc)
-import HsExpr (MatchGroup, MatchGroupTc(..))
-#elif __GLASGOW_HASKELL__ >= 804 && __GLASGOW_HASKELL__ < 810
-import HsExtension (GhcTc)
-import HsExpr (MatchGroup)
-#endif
 #endif
 ----------------------------------------------------------------
 ----------------------------------------------------------------
 
 #if __GLASGOW_HASKELL__ >= 902
-import GHC.Core.Multiplicity (irrelevantMult)
-import GHC.Data.EnumSet as E
 import GHC.Driver.CmdLine as CmdLine
 import GHC.Driver.Env as G
 import GHC.Driver.Session as G
@@ -195,15 +175,9 @@ handle :: (G.ExceptionMonad m, E.Exception e) => (e -> m a) -> m a -> m a
 handle = G.ghandle
 #endif
 
-#if __GLASGOW_HASKELL__ >= 810
 catch :: (E.MonadCatch m, E.Exception e) => m a -> (e -> m a) -> m a
 catch =
   E.catch
-#else
-catch :: (G.ExceptionMonad m, E.Exception e) => m a -> (e -> m a) -> m a
-catch =
-  G.gcatch
-#endif
 
 ----------------------------------------------------------------
 
@@ -264,20 +238,8 @@ makeUserStyle _dflags style = mkUserStyle style AllTheWay
 makeUserStyle dflags style = mkUserStyle dflags style AllTheWay
 #endif
 
-#if __GLASGOW_HASKELL__ >= 804
-getModuleName :: (a, b) -> a
-getModuleName = fst
-#endif
-
 ----------------------------------------------------------------
-
-#if __GLASGOW_HASKELL__ >= 804
-type WarnFlags = E.EnumSet WarningFlag
-emptyWarnFlags :: WarnFlags
-emptyWarnFlags = E.empty
-#endif
-
-#if __GLASGOW_HASKELL__ >= 804
+#if __GLASGOW_HASKELL__ >= 810
 getModSummaries :: ModuleGraph -> [ModSummary]
 getModSummaries = mgModSummaries
 
@@ -293,43 +255,17 @@ fixInfo (t,f,cs,fs,_) = (t,f,cs,fs)
 mapOverIncludePaths :: (FilePath -> FilePath) -> DynFlags -> DynFlags
 mapOverIncludePaths f df = df
   { includePaths =
-#if __GLASGOW_HASKELL__ > 804
+#if __GLASGOW_HASKELL__ >= 810
       G.IncludeSpecs
           (map f $ G.includePathsQuote  (includePaths df))
           (map f $ G.includePathsGlobal (includePaths df))
 #if MIN_VERSION_GLASGOW_HASKELL(9,0,2,0)
           (map f $ G.includePathsQuoteImplicit (includePaths df))
 #endif
-#else
-      map f (includePaths df)
 #endif
   }
 
 ----------------------------------------------------------------
-
-#if __GLASGOW_HASKELL__ >= 806
-type LExpression = LHsExpr GhcTc
-type LBinding    = LHsBind GhcTc
-type LPattern    = LPat    GhcTc
-
-inTypes :: MatchGroup GhcTc LExpression -> [Type]
-#if __GLASGOW_HASKELL__ >= 900
-inTypes = map irrelevantMult . mg_arg_tys . mg_ext
-#else
-inTypes = mg_arg_tys . mg_ext
-#endif
-outType :: MatchGroup GhcTc LExpression -> Type
-outType = mg_res_ty . mg_ext
-#elif __GLASGOW_HASKELL__ >= 804
-type LExpression = LHsExpr GhcTc
-type LBinding    = LHsBind GhcTc
-type LPattern    = LPat    GhcTc
-
-inTypes :: MatchGroup GhcTc LExpression -> [Type]
-inTypes = mg_arg_tys
-outType :: MatchGroup GhcTc LExpression -> Type
-outType = mg_res_ty
-#endif
 
 unsetLogAction :: GhcMonad m => m ()
 unsetLogAction = do

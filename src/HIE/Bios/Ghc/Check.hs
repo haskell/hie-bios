@@ -7,14 +7,9 @@ module HIE.Bios.Ghc.Check (
   , check
   ) where
 
-import GHC (DynFlags(..), GhcMonad)
+import GHC (GhcMonad)
 import qualified GHC as G
 
-#if __GLASGOW_HASKELL__ >= 900
-import qualified GHC.Driver.Session as G
-#else
-import qualified DynFlags as G
-#endif
 
 import Control.Exception
 import Control.Monad.IO.Class
@@ -28,8 +23,6 @@ import qualified HIE.Bios.Types as T
 import qualified HIE.Bios.Ghc.Load as Load
 import HIE.Bios.Environment
 
-import System.IO.Unsafe (unsafePerformIO)
-import qualified HIE.Bios.Ghc.Gap as Gap
 
 data Log =
   LoadLog Load.Log
@@ -74,23 +67,8 @@ check :: (GhcMonad m)
       -> [FilePath]  -- ^ The target files.
       -> m (Either String String)
 check logger fileNames = do
-  libDir <- G.topDir <$> G.getDynFlags
-  withLogger (setAllWarningFlags libDir) $ Load.setTargetFiles (cmap (fmap LoadLog) logger) (map dup fileNames)
+  withLogger id $ Load.setTargetFiles (cmap (fmap LoadLog) logger) (map dup fileNames)
 
 dup :: a -> (a, a)
 dup x = (x, x)
-
-----------------------------------------------------------------
-
--- | Set 'DynFlags' equivalent to "-Wall".
-setAllWarningFlags :: FilePath -> DynFlags -> DynFlags
-setAllWarningFlags libDir df = df { warningFlags = allWarningFlags libDir }
-
-{-# NOINLINE allWarningFlags #-}
-allWarningFlags :: FilePath -> Gap.WarnFlags
-allWarningFlags libDir = unsafePerformIO $
-    G.runGhcT (Just libDir) $ do
-        df <- G.getSessionDynFlags
-        (df', _) <- addCmdOpts ["-Wall"] df
-        return $ G.warningFlags df'
 
