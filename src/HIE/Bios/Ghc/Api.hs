@@ -23,7 +23,6 @@ import qualified GhcMake as G
 import qualified HIE.Bios.Ghc.Gap as Gap
 import Control.Monad (void)
 import Control.Monad.IO.Class
-import Colog.Core (LogAction (..), WithSeverity (..))
 import HIE.Bios.Types
 import HIE.Bios.Environment
 import HIE.Bios.Flags

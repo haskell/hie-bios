@@ -13,7 +13,6 @@ import System.FilePath
 import System.Environment (lookupEnv)
 
 import qualified Crypto.Hash.SHA1 as H
-import Colog.Core (LogAction, WithSeverity)
 import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Base16
 import Data.List

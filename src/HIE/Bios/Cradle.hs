@@ -190,7 +190,7 @@ addActionDeps deps =
       CradleNone
       (\err -> CradleFail (err { cradleErrorDependencies = cradleErrorDependencies err `union` deps }))
       (\(ComponentOptions os' dir ds) -> CradleSuccess (ComponentOptions os' dir (ds `union` deps)))
-  
+
 
 resolvedCradlesToCradle :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> [ResolvedCradle b] -> IO (Cradle a)
 resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
@@ -275,7 +275,7 @@ resolveCradleAction l buildCustomCradle cs root cradle =
     ConcreteOther a -> buildCustomCradle a
 
 resolveCradleTree :: FilePath -> CradleConfig a -> [ResolvedCradle a]
-resolveCradleTree root (CradleConfig deps tree) = go root deps tree
+resolveCradleTree root (CradleConfig confDeps confTree) = go root confDeps confTree
   where
     go pfix deps tree = case tree of
       Cabal t              -> [ResolvedCradle pfix deps (ConcreteCabal t)]
@@ -422,7 +422,7 @@ noneCradle =
 canonicalizeResolvedCradles :: FilePath -> [ResolvedCradle a] -> IO [ResolvedCradle a]
 canonicalizeResolvedCradles cur_dir cs =
   sortOn (Down . prefix)
-    <$> mapM (\c -> (\abs -> c {prefix = abs}) <$> makeAbsolute (cur_dir </> prefix c)) cs
+    <$> mapM (\c -> (\abs_fp -> c {prefix = abs_fp}) <$> makeAbsolute (cur_dir </> prefix c)) cs
 
 selectCradle :: (a -> FilePath) -> FilePath -> [a] -> Maybe a
 selectCradle _ _ [] = Nothing
@@ -442,7 +442,7 @@ directCradle l wdir args
           return (CradleSuccess (ComponentOptions (args ++ argDynamic) wdir []))
       , runGhcCmd = runGhcCmdOnPath l wdir
       }
-    
+
 
 -------------------------------------------------------------------------
 
@@ -526,7 +526,7 @@ cabalCradle l cs wdir mc projectFile
         cabalProc <- cabalProcess l projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
         readProcessWithCwd' l cabalProc ""
     }
-    
+
 
 -- | Execute a cabal process in our custom cache-build directory configured
 -- with the custom ghc executable.
