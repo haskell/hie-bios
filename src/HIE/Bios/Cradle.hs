@@ -77,10 +77,17 @@ import Text.ParserCombinators.ReadP (readP_to_S)
 
 ----------------------------------------------------------------
 
--- | Given root\/foo\/bar.hs, return root\/hie.yaml, or wherever the yaml file was found.
+-- | Given @root\/foo\/bar.hs@, return @root\/hie.yaml@, or wherever the yaml file was found.
+--
+-- Note, 'findCradle' used to **not** work for directories and required a Haskell file.
+-- This has been fixed since @0.14.0@.
+-- However, 'loadCradle' and 'loadImplicitCradle' still require a Haskell
+-- source file and won't work properly with a directory parameter.
 findCradle :: FilePath -> IO (Maybe FilePath)
 findCradle wfile = do
-    let wdir = takeDirectory wfile
+    wdir <- doesDirectoryExist wfile >>= \case
+      True ->  pure wfile
+      False -> pure (takeDirectory wfile)
     runMaybeT (yamlConfig wdir)
 
 -- | Given root\/hie.yaml load the Cradle.

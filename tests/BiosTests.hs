@@ -19,7 +19,7 @@ import Control.Monad ( forM_ )
 import Data.List ( sort, isPrefixOf )
 import Data.Typeable
 import System.Directory
-import System.FilePath ((</>) )
+import System.FilePath ((</>))
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import Control.Monad.Extra (unlessM)
 import qualified HIE.Bios.Ghc.Gap as Gap
@@ -48,17 +48,7 @@ main = do
 
   defaultMainWithIngredients (ignoreToolTests:defaultIngredients) $
     testGroup "Bios-tests"
-      [ testGroup "Find cradle"
-        [ testCaseSteps "simple-cabal" $
-            runTestEnvLocal "./simple-cabal" $ do
-              findCradleForModuleM "B.hs" (Just "hie.yaml")
-
-        -- Checks if we can find a hie.yaml even when the given filepath
-        -- is unknown. This functionality is required by Haskell IDE Engine.
-        , testCaseSteps "simple-cabal-unknown-path" $
-            runTestEnvLocal "./simple-cabal" $ do
-              findCradleForModuleM "Foo.hs" (Just "hie.yaml")
-        ]
+      [ testGroup "Find cradle" findCradleTests
       , testGroup "Symlink" symbolicLinkTests
       , testGroup "Loading tests"
         [ testGroup "bios" biosTestCases
@@ -300,6 +290,26 @@ directTestCases =
       testDirectoryM isMultiCradle "A.hs"
       testDirectoryM isMultiCradle "B.hs"
   ]
+
+findCradleTests :: [TestTree]
+findCradleTests =
+  [ cradleFileTest "Simple Existing File" "./simple-cabal"  "B.hs" (Just "hie.yaml")
+  -- Checks if we can find a hie.yaml even when the given filepath
+  -- is unknown. This functionality is required by Haskell IDE Engine.
+  , cradleFileTest "Existing File" "cabal-with-ghc" "src/MyLib.hs" (Just "hie.yaml")
+  , cradleFileTest "Non-existing file" "cabal-with-ghc" "src/MyLib2.hs" (Just "hie.yaml")
+  , cradleFileTest "Non-existing file 2" "cabal-with-ghc" "MyLib2.hs" (Just "hie.yaml")
+  , cradleFileTest "Directory 1" "cabal-with-ghc" "src/" (Just "hie.yaml")
+  , cradleFileTest "Directory 2" "simple-cabal" "" (Just "hie.yaml")
+  -- Unknown directory in a project, ought to work as well.
+  , cradleFileTest "Directory 3" "simple-cabal" "src/" (Just "hie.yaml")
+  , cradleFileTest "Directory does not exist" "doesnotexist" "A.hs" Nothing
+  ]
+  where
+    cradleFileTest :: String -> FilePath -> FilePath -> Maybe FilePath -> TestTree
+    cradleFileTest testName dir fpTarget result = testCaseSteps testName $ do
+      runTestEnv dir $ do
+        findCradleForModuleM fpTarget result
 
 -- ------------------------------------------------------------------
 -- Unit-test Helper functions

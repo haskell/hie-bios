@@ -427,7 +427,9 @@ findCradleForModuleM fp expected' = do
 withTempCopy :: FilePath -> (FilePath -> IO a) -> IO a
 withTempCopy srcDir f =
   withSystemTempDirectory "hie-bios-test" $ \newDir -> do
-    copyDir srcDir newDir
+    exists <- doesDirectoryExist srcDir
+    when exists $ do
+      copyDir srcDir newDir
     f newDir
 
 copyDir :: FilePath -> FilePath -> IO ()
