@@ -72,7 +72,7 @@ import GHC.Fingerprint (fingerprintString)
 import GHC.ResponseFile (escapeArgs)
 
 import Data.Version
-import System.IO.Unsafe (unsafeInterleaveIO)
+import Data.IORef
 import Text.ParserCombinators.ReadP (readP_to_S)
 
 ----------------------------------------------------------------
@@ -149,16 +149,30 @@ data ResolvedCradles a
  }
 
 data ProgramVersions =
-  ProgramVersions { cabalVersion  :: Maybe Version
-                  , stackVersion  :: Maybe Version
-                  , ghcVersion    :: Maybe Version
+  ProgramVersions { cabalVersion  :: CachedIO (Maybe Version)
+                  , stackVersion  :: CachedIO (Maybe Version)
+                  , ghcVersion    :: CachedIO (Maybe Version)
                   }
+
+newtype CachedIO a = CachedIO (IORef (Either (IO a) a))
+
+makeCachedIO :: IO a -> IO (CachedIO a)
+makeCachedIO act = CachedIO <$> newIORef (Left act)
+
+runCachedIO :: CachedIO a -> IO a
+runCachedIO (CachedIO ref) =
+  readIORef ref >>= \case
+    Right x -> pure x
+    Left act -> do
+      x <- act
+      writeIORef ref (Right x)
+      pure x
 
 makeVersions :: LogAction IO (WithSeverity Log) -> FilePath -> ([String] -> IO (CradleLoadResult String)) -> IO ProgramVersions
 makeVersions l wdir ghc = do
-  cabalVersion <- unsafeInterleaveIO (getCabalVersion l wdir)
-  stackVersion <- unsafeInterleaveIO (getStackVersion l wdir)
-  ghcVersion <- unsafeInterleaveIO (getGhcVersion ghc)
+  cabalVersion <- makeCachedIO $ getCabalVersion l wdir
+  stackVersion <- makeCachedIO $ getStackVersion l wdir
+  ghcVersion   <- makeCachedIO $ getGhcVersion ghc
   pure ProgramVersions{..}
 
 getCabalVersion :: LogAction IO (WithSeverity Log) -> FilePath -> IO (Maybe Version)
@@ -777,10 +791,10 @@ cabalAction
   -> [FilePath]
   -> CradleLoadResultT IO ComponentOptions
 cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp fps = do
+  cabal_version <- liftIO $ runCachedIO $ cabalVersion vs
+  ghc_version   <- liftIO $ runCachedIO $ ghcVersion vs
   let
     cabalCommand = "v2-repl"
-    cabal_version = cabalVersion vs
-    ghc_version = ghcVersion vs
     cabalArgs = case (cabal_version, ghc_version) of
       (Just cabal, Just ghc)
         -- Multi-component supported from cabal-install 3.11
