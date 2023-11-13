@@ -1,6 +1,6 @@
 # ChangeLog hie-bios
 
-## 2023-98-22 - 0.13.0
+## 2023-08-22 - 0.13.0
 
 * Multi Component cabal support [#409](https://github.com/haskell/hie-bios/pull/409)
 * Make sure cabal caches can be found [#408](https://github.com/haskell/hie-bios/pull/408)
@@ -8,6 +8,10 @@
 * Update README for new project-file key [#403](https://github.com/haskell/hie-bios/pull/403)
 * Add more informative log messages for cradle running [#406](https://github.com/haskell/hie-bios/pull/406)
 * Add cabal.project support for cabal cradles [#357](https://github.com/haskell/hie-bios/pull/357)
+
+## 2023-11-13 - 0.12.1
+
+* 9.8 support [#417](https://github.com/haskell/hie-bios/pull/417)
 
 ## 2023-03-13 - 0.12.0
 
