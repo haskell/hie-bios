@@ -158,6 +158,11 @@ import qualified HscMain as G
 import qualified GhcMake as G
 #endif
 
+#if __GLASGOW_HASKELL__ >= 907
+import GHC.Types.Error (mkUnknownDiagnostic, Messages)
+import GHC.Driver.Errors.Types (DriverMessage)
+#endif
+
 ghcVersion :: String
 ghcVersion = VERSION_ghc
 
@@ -169,7 +174,10 @@ homeUnitId_ :: DynFlags -> UnitId
 homeUnitId_ = homeUnitId
 #endif
 
-#if __GLASGOW_HASKELL__ >= 904
+#if __GLASGOW_HASKELL__ >= 907
+load' :: GhcMonad m => Maybe G.ModIfaceCache -> LoadHowMuch -> Maybe Messager -> ModuleGraph -> m SuccessFlag
+load' mhmi_cache how_much = G.load' mhmi_cache how_much mkUnknownDiagnostic
+#elif __GLASGOW_HASKELL__ >= 904
 load' :: GhcMonad m => Maybe G.ModIfaceCache -> LoadHowMuch -> Maybe Messager -> ModuleGraph -> m SuccessFlag
 load' = G.load'
 #else
@@ -474,7 +482,12 @@ parseDynamicFlags :: MonadIO m
     => Logger
     -> DynFlags
     -> [G.Located String]
-    -> m (DynFlags, [G.Located String], [CmdLine.Warn])
+    -> m (DynFlags, [G.Located String]
+#if __GLASGOW_HASKELL__ >= 907
+          , Messages DriverMessage)
+#else
+          , [CmdLine.Warn])
+#endif
 #if __GLASGOW_HASKELL__ >= 902
 parseDynamicFlags = G.parseDynamicFlags
 #else
