@@ -351,9 +351,9 @@ stackYaml resolver pkgs = unlines
 stackYamlResolver :: String
 stackYamlResolver =
 #if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,6,2,0)))
-  "nightly-2023-08-22" -- GHC 9.6.2
+  "nightly-2023-11-13" -- GHC 9.6.3
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,4,4,0)))
-  "lts-21.8" -- GHC 9.4.6
+  "lts-21.20" -- GHC 9.4.7
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,7,0)))
   "lts-20.26" -- GHC 9.2.8
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,1,0)))
@@ -423,12 +423,13 @@ ignoreToolTests = Tasty.TestManager [Tasty.Option (Proxy :: Proxy IgnoreToolDeps
 
 -- ------------------------------------------------------------------
 -- Ignore test group if built with GHC 9.2.1 until GHC 9.2.4
+-- or GHC 9.8.1 or newer.
 -- ------------------------------------------------------------------
 
 ignoreOnUnsupportedGhc :: TestTree -> TestTree
 ignoreOnUnsupportedGhc tt =
-#if (defined(MIN_VERSION_GLASGOW_HASKELL) && MIN_VERSION_GLASGOW_HASKELL(9,2,1,0) && !MIN_VERSION_GLASGOW_HASKELL(9,2,4,0))
-  ignoreTestBecause "Not supported on GHC >= 9.2.1 && < 9.2.4"
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,1,0) && !MIN_VERSION_GLASGOW_HASKELL(9,2,4,0)) || (MIN_VERSION_GLASGOW_HASKELL(9,8,1,0)))
+  ignoreTestBecause "Not supported on GHC >= 9.2.1 && < 9.2.4 || >= 9.8.1"
 #endif
   tt
 
