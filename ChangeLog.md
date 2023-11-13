@@ -1,5 +1,9 @@
 # ChangeLog hie-bios
 
+## 2023-11-13 - 0.12.1
+
+* 9.8 support [#417](https://github.com/haskell/hie-bios/pull/417)
+
 ## 2023-03-13 - 0.12.0
 
 * 9.6 support [#392](https://github.com/haskell/hie-bios/pull/392)
