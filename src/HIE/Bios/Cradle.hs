@@ -48,7 +48,7 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.HashMap.Strict as Map
-import Data.Maybe (fromMaybe, maybeToList)
+import Data.Maybe (fromMaybe, maybeToList, catMaybes)
 import Data.List
 import Data.List.Extra (trimEnd)
 import Data.Ord (Down(..))
@@ -67,6 +67,10 @@ import HIE.Bios.Types hiding (ActionName(..))
 import HIE.Bios.Wrappers
 import qualified HIE.Bios.Types as Types
 import qualified HIE.Bios.Ghc.Gap as Gap
+
+import Hie.Locate
+import Hie.Cabal.Parser
+import qualified Hie.Yaml as Implicit
 
 import GHC.Fingerprint (fingerprintString)
 import GHC.ResponseFile (escapeArgs)
@@ -318,16 +322,27 @@ inferCradleTree fp =
        maybeItsBios
    -- If we have both a config file (cabal.project/stack.yaml) and a work dir
    -- (dist-newstyle/.stack-work), prefer that
-   <|> (cabalExecutable >> cabalConfigDir fp >>= \dir -> cabalWorkDir dir >>= pure $ cabalCradle dir)
-   <|> (stackExecutable >> stackConfigDir fp >>= \dir -> stackWorkDir dir >>= pure $ stackCradle dir)
+   <|> (cabalExecutable >> cabalConfigDir fp >>= \dir -> cabalWorkDir dir >> pure (cabalCradle dir))
+   <|> (stackExecutable >> stackConfigDir fp >>= \dir -> stackWorkDir dir >> stackCradle dir)
    -- Redo the checks, but don't check for the work-dir, maybe the user hasn't run a build yet
-   <|> (cabalExecutable >> cabalConfigDir fp >>= pure . cabalCradle dir)
-   <|> (stackExecutable >> stackConfigDir fp >>= pure . stackCradle dir)
+   <|> (cabalExecutable >> cabalConfigDir fp >>= pure . cabalCradle)
+   <|> (stackExecutable >> stackConfigDir fp >>= stackCradle)
 
   where
   maybeItsBios = (\wdir -> (Bios (Program $ wdir </> ".hie-bios") Nothing Nothing, wdir)) <$> biosWorkDir fp
 
-  stackCradle fp = (Stack $ StackType Nothing Nothing, fp)
+  stackCradle :: FilePath -> MaybeT IO (CradleTree a, FilePath)
+  stackCradle fp = do
+    pkgs <- stackYamlPkgs fp
+    pkgsWithComps <- liftIO $ catMaybes <$> mapM (nestedPkg fp) pkgs
+    let yaml = fp </> "stack.yaml"
+    pure $ (,fp) $ case pkgsWithComps of
+      [] -> Stack (StackType Nothing (Just yaml))
+      ps -> StackMulti mempty $ do
+        Package n cs <- ps
+        c <- cs
+        let (prefix, comp) = Implicit.stackComponent n c
+        pure (prefix, StackType (Just comp) (Just yaml))
   cabalCradle fp = (Cabal $ CabalType Nothing Nothing, fp)
 
 -- | Wraps up the cradle inferred by @inferCradleTree@ as a @CradleConfig@ with no dependencies
@@ -896,7 +911,7 @@ cabalConfigDir wdir = findFileUpwards (== "cabal.project") wdir
 
 cabalWorkDir :: FilePath -> MaybeT IO ()
 cabalWorkDir wdir = do
-  check <- doesDirectoryExist (wdir </> "dist-newstyle")
+  check <- liftIO $ doesDirectoryExist (wdir </> "dist-newstyle")
   unless check $ fail "No dist-newstyle"
 
 cabalExecutable :: MaybeT IO FilePath
@@ -1020,13 +1035,13 @@ stackExecutable :: MaybeT IO FilePath
 stackExecutable = MaybeT $ findExecutable "stack"
 
 stackConfigDir :: FilePath -> MaybeT IO FilePath
-stackConfigDir = findFileUpwards isStack odir
+stackConfigDir = findFileUpwards isStack
   where
     isStack name = name == "stack.yaml"
 
 stackWorkDir :: FilePath -> MaybeT IO ()
 stackWorkDir wdir = do
-  check <- doesDirectoryExist (wdir </> ".stack-work")
+  check <- liftIO $ doesDirectoryExist (wdir </> ".stack-work")
   unless check $ fail "No .stack-work"
 
 {-
