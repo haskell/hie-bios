@@ -1,5 +1,13 @@
 # ChangeLog hie-bios
 
+## 2023-11-14 - 0.13.1
+
+* Add CI support for GHC 9.8.1 [#419](https://github.com/haskell/hie-bios/pull/419)
+* 9.8 support [#417](https://github.com/haskell/hie-bios/pull/417)
+* Avoid deadlocks in multi-component support [#416](https://github.com/haskell/hie-bios/pull/416)
+* Accept directories in 'findCradle' [#415](https://github.com/haskell/hie-bios/pull/415)
+* Drop old GHC version support [#414](https://github.com/haskell/hie-bios/pull/414)
+
 ## 2023-08-22 - 0.13.0
 
 * Multi Component cabal support [#409](https://github.com/haskell/hie-bios/pull/409)
