@@ -316,22 +316,19 @@ resolveCradleTree root (CradleConfig confDeps confTree) = go root confDeps confT
 inferCradleTree :: FilePath -> MaybeT IO (CradleTree a, FilePath)
 inferCradleTree fp =
        maybeItsBios
-   <|> maybeItsStack
-   <|> maybeItsCabal
--- <|> maybeItsObelisk
--- <|> maybeItsObelisk
+   -- If we have both a config file (cabal.project/stack.yaml) and a work dir
+   -- (dist-newstyle/.stack-work), prefer that
+   <|> (cabalExecutable >> cabalConfigDir fp >>= \dir -> cabalWorkDir dir >>= pure $ cabalCradle dir)
+   <|> (stackExecutable >> stackConfigDir fp >>= \dir -> stackWorkDir dir >>= pure $ stackCradle dir)
+   -- Redo the checks, but don't check for the work-dir, maybe the user hasn't run a build yet
+   <|> (cabalExecutable >> cabalConfigDir fp >>= pure . cabalCradle dir)
+   <|> (stackExecutable >> stackConfigDir fp >>= pure . stackCradle dir)
 
   where
   maybeItsBios = (\wdir -> (Bios (Program $ wdir </> ".hie-bios") Nothing Nothing, wdir)) <$> biosWorkDir fp
 
-  maybeItsStack = stackExecutable >> (Stack $ StackType Nothing Nothing,) <$> stackWorkDir fp
-
-  maybeItsCabal = (Cabal $ CabalType Nothing Nothing,) <$> cabalWorkDir fp
-
-  -- maybeItsObelisk = (Obelisk,) <$> obeliskWorkDir fp
-
-  -- maybeItsBazel = (Bazel,) <$> rulesHaskellWorkDir fp
-
+  stackCradle fp = (Stack $ StackType Nothing Nothing, fp)
+  cabalCradle fp = (Cabal $ CabalType Nothing Nothing, fp)
 
 -- | Wraps up the cradle inferred by @inferCradleTree@ as a @CradleConfig@ with no dependencies
 implicitConfig :: FilePath -> MaybeT IO (CradleConfig a, FilePath)
@@ -893,11 +890,17 @@ removeVerbosityOpts :: [String] -> [String]
 removeVerbosityOpts = filter ((&&) <$> (/= "-v0") <*> (/= "-w"))
 
 
-cabalWorkDir :: FilePath -> MaybeT IO FilePath
-cabalWorkDir wdir =
-      findFileUpwards (== "cabal.project") wdir
-  <|> findFileUpwards (\fp -> takeExtension fp == ".cabal") wdir
+cabalConfigDir :: FilePath -> MaybeT IO FilePath
+cabalConfigDir wdir = findFileUpwards (== "cabal.project") wdir
+                  <|> findFileUpwards (\fp -> takeExtension fp == ".cabal") wdir
 
+cabalWorkDir :: FilePath -> MaybeT IO ()
+cabalWorkDir wdir = do
+  check <- doesDirectoryExist (wdir </> "dist-newstyle")
+  unless check $ fail "No dist-newstyle"
+
+cabalExecutable :: MaybeT IO FilePath
+cabalExecutable = MaybeT $ findExecutable "cabal"
 
 ------------------------------------------------------------------------
 
@@ -1016,10 +1019,15 @@ combineExitCodes = foldr go ExitSuccess
 stackExecutable :: MaybeT IO FilePath
 stackExecutable = MaybeT $ findExecutable "stack"
 
-stackWorkDir :: FilePath -> MaybeT IO FilePath
-stackWorkDir = findFileUpwards isStack
+stackConfigDir :: FilePath -> MaybeT IO FilePath
+stackConfigDir = findFileUpwards isStack odir
   where
     isStack name = name == "stack.yaml"
+
+stackWorkDir :: FilePath -> MaybeT IO ()
+stackWorkDir wdir = do
+  check <- doesDirectoryExist (wdir </> ".stack-work")
+  unless check $ fail "No .stack-work"
 
 {-
 -- Support removed for 0.3 but should be added back in the future
