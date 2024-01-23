@@ -42,7 +42,7 @@ jobs:
       run: stack config set system-ghc --global true
 
     - name: Cache Cabal
-      uses: actions/cache@v3.3.1
+      uses: actions/cache@v4.0.0
       with:
         path: |
           ~/.cabal/packages
