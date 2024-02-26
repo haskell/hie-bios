@@ -15,18 +15,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ghc: ['9.8.1', '9.6.3', '9.4.7', '9.2.8', '9.0.2', '8.10.7']
+        ghc: ['9.8.2', '9.6.4', '9.4.8', '9.2.8']
         os: [ubuntu-latest, macOS-latest, windows-latest]
 
     steps:
     - uses: actions/checkout@v4
     - id:   extra-ghc
-      uses: haskell/actions/setup@v2
+      uses: haskell-actions/setup@v2
       with:
         cabal-version: '3.10.2.0'
         ghc-version: '8.10.7'
 
-    - uses: haskell/actions/setup@v2
+    - uses: haskell-actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: '3.10.2.0'
@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: haskell/actions/setup@v2
+    - uses: haskell-actions/setup@v2
     - name: Check
       run: cabal check
     - name: Generate sdist
@@ -80,13 +80,13 @@ jobs:
     - uses: actions/checkout@v4
     - uses: ludeeus/action-shellcheck@master
       with:
-        ignore: tests
+        ignore_paths: tests
 
   windows-wrapper:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: haskell/actions/setup@v2
+    - uses: haskell-actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
     - name: Compile Windows wrapper
