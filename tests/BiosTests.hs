@@ -350,18 +350,14 @@ stackYaml resolver pkgs = unlines
 
 stackYamlResolver :: String
 stackYamlResolver =
-#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,6,2,0)))
-  "nightly-2023-11-13" -- GHC 9.6.3
-#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,4,4,0)))
-  "lts-21.20" -- GHC 9.4.7
-#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,7,0)))
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,8,0,0)))
+  "nightly-2024-02-26" -- GHC 9.8.1
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)))
+  "lts-22.12" -- GHC 9.6.4
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,4,0,0)))
+  "lts-21.25" -- GHC 9.4.8
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)))
   "lts-20.26" -- GHC 9.2.8
-#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,1,0)))
-  "lts-20.11" -- GHC 9.2.5
-#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)))
-  "lts-19.33" -- GHC 9.0.2
-#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(8,10,7,0)))
-  "lts-18.28" -- GHC 8.10.7
 #endif
 
 -- ------------------------------------------------------------------
