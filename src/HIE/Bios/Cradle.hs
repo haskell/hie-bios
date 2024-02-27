@@ -25,7 +25,6 @@ module HIE.Bios.Cradle (
     , makeCradleResult
     -- | Cradle project configuration types
     , CradleProjectConfig(..)
-    ,
   ) where
 
 import Control.Applicative ((<|>), optional)
@@ -806,8 +805,8 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp fps = do
           -- Start a multi-component session with all the old files
           _ -> "--keep-temp-files"
              : "--enable-multi-repl"
-             : [fromMaybe (fixTargetPath fp) mc]
-            ++ [fromMaybe (fixTargetPath old_fp) old_mc
+             : fromMaybe (fixTargetPath fp) mc
+             : [fromMaybe (fixTargetPath old_fp) old_mc
                | old_fp <- fps
                -- Lookup the component for the old file
                , Just (ResolvedCradle{concreteCradle = ConcreteCabal ct}) <- [selectCradle prefix old_fp cs]

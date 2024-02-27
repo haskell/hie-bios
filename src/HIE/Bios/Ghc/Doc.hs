@@ -12,16 +12,14 @@ import GHC (DynFlags
 import GHC.Utils.Outputable
 #endif
 
-#if __GLASGOW_HASKELL__ >= 900
 import GHC.Driver.Session (initSDocContext)
-import GHC.Utils.Outputable (PprStyle, SDoc, runSDoc, neverQualify, )
 import GHC.Utils.Ppr  (Mode(..), Doc, Style(..), renderStyle, style)
-#else
-import Outputable (PprStyle, SDoc, runSDoc, neverQualify, initSDocContext)
-import Pretty (Mode(..), Doc, Style(..), renderStyle, style)
-#endif
 
 import HIE.Bios.Ghc.Gap (makeUserStyle, pageMode, oneLineMode)
+
+#if __GLASGOW_HASKELL__ < 905
+import GHC.Utils.Outputable (PprStyle, SDoc, runSDoc, neverQualify, )
+#endif
 
 #if __GLASGOW_HASKELL__ >= 905
 getPrintUnqual :: Monad m => m NamePprCtx

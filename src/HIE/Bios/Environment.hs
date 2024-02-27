@@ -150,7 +150,7 @@ addCmdOpts cmdOpts df1 = do
   let leftovers = map G.unLoc leftovers' ++ additionalTargets
 
   let (df3, srcs, _objs) = Gap.parseTargetFiles df2 leftovers
-  ts <- mapM (uncurry (\f phase -> Gap.guessTarget f (Just $ Gap.homeUnitId_ df3) phase) ) srcs
+  ts <- mapM (\(f, phase) -> Gap.guessTarget f (Just $ Gap.homeUnitId_ df3) phase) srcs
   return (df3, ts)
 
 -- | Make filepaths in the given 'DynFlags' absolute.

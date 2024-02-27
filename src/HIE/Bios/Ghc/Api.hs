@@ -11,15 +11,7 @@ module HIE.Bios.Ghc.Api (
 
 import GHC (LoadHowMuch(..), DynFlags, GhcMonad)
 import qualified GHC as G
-
-#if __GLASGOW_HASKELL__ >= 900
 import qualified GHC.Driver.Main as G
-import qualified GHC.Driver.Make as G
-#else
-import qualified HscMain as G
-import qualified GhcMake as G
-#endif
-
 import qualified HIE.Bios.Ghc.Gap as Gap
 import Control.Monad (void)
 import Control.Monad.IO.Class
