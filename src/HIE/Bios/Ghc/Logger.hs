@@ -8,28 +8,12 @@ import GHC (DynFlags(..), SrcSpan(..), GhcMonad, getSessionDynFlags)
 import qualified GHC as G
 import Control.Monad.IO.Class
 
-#if __GLASGOW_HASKELL__ >= 902
 import GHC.Data.Bag
 import GHC.Data.FastString (unpackFS)
 import GHC.Driver.Session (dopt, DumpFlag(Opt_D_dump_splices))
 import GHC.Types.SourceError
 import GHC.Utils.Error
 import GHC.Utils.Logger
-#elif __GLASGOW_HASKELL__ >= 900
-import GHC.Data.Bag
-import GHC.Data.FastString (unpackFS)
-import GHC.Driver.Session (dopt, DumpFlag(Opt_D_dump_splices), LogAction)
-import GHC.Driver.Types (SourceError, srcErrorMessages)
-import GHC.Utils.Error
-import GHC.Utils.Outputable (SDoc)
-#else
-import Bag (Bag, bagToList)
-import DynFlags (LogAction, dopt, DumpFlag(Opt_D_dump_splices))
-import ErrUtils
-import FastString (unpackFS)
-import HscTypes (SourceError, srcErrorMessages)
-import Outputable (SDoc)
-#endif
 
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import Data.Maybe (fromMaybe)
@@ -61,18 +45,15 @@ readAndClearLogRef (LogRef ref) = do
     return $! unlines (b [])
 
 appendLogRef :: DynFlags -> Gap.PprStyle -> LogRef -> LogAction
-appendLogRef df style (LogRef ref)
+appendLogRef df style (LogRef ref) _
 #if __GLASGOW_HASKELL__ < 903
-    _ _ sev src
+    _ sev
 #elif __GLASGOW_HASKELL__ < 905
-    _ (MCDiagnostic sev _) src
+    (MCDiagnostic sev _)
 #else
-    _ (MCDiagnostic sev _ _) src
+    (MCDiagnostic sev _ _)
 #endif
-#if __GLASGOW_HASKELL__ < 900
-  _style
-#endif
-  msg = do
+  src msg = do
         let !l = ppMsg src sev df style msg
         modifyIORef ref (\b -> b . (l:))
 
@@ -88,18 +69,12 @@ withLogger setDF body = Gap.handle sourceError $ do
     logref <- liftIO newLogRef
     dflags <- getSessionDynFlags
     style <- getStyle dflags
-#if __GLASGOW_HASKELL__ >= 902
     G.pushLogHookM (const $ appendLogRef dflags style logref)
     let setLogger _ df = df
-#else
-    let setLogger logref_ df = df { log_action =  appendLogRef df style logref_ }
-#endif
     r <- withDynFlags (setLogger logref . setDF) $ do
       body
       liftIO $ Right <$> readAndClearLogRef logref
-#if __GLASGOW_HASKELL__ >= 902
     G.popLogHookM
-#endif
     pure r
 
 
@@ -135,7 +110,7 @@ ppErrMsg dflag style err = ppMsg spn SevError dflag style msg -- ++ ext
      msg = pprLocMsgEnvelope err
 #endif
      -- fixme
-#elif __GLASGOW_HASKELL__ >= 902
+#else
 errBagToStrList :: DynFlags -> Gap.PprStyle -> Bag (MsgEnvelope DecoratedSDoc) -> [String]
 errBagToStrList dflag style = map (ppErrMsg dflag style) . reverse . bagToList
 
@@ -146,19 +121,6 @@ ppErrMsg dflag style err = ppMsg spn SevError dflag style msg -- ++ ext
      spn = errMsgSpan err
      msg = pprLocMsgEnvelope err
      -- fixme
-#else
-errBagToStrList :: DynFlags -> Gap.PprStyle -> Bag ErrMsg -> [String]
-errBagToStrList dflag style = map (ppErrMsg dflag style) . reverse . bagToList
-
-----------------------------------------------------------------
-
-ppErrMsg :: DynFlags -> Gap.PprStyle -> ErrMsg -> String
-ppErrMsg dflag style err = ppMsg spn SevError dflag style msg -- ++ ext
-   where
-     spn = errMsgSpan err
-     msg = pprLocErrMsg err
-     -- fixme
---     ext = showPage dflag style (pprLocErrMsg $ errMsgReason err)
 #endif
 
 ppMsg :: SrcSpan -> G.Severity-> DynFlags -> Gap.PprStyle -> SDoc -> String

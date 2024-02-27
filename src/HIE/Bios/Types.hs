@@ -90,7 +90,7 @@ data ActionName a
   | Other a
   deriving (Show, Eq, Ord, Functor)
 
-data Log 
+data Log
   = LogAny String
   | LogProcessOutput String
   | LogCreateProcessRun CreateProcess
@@ -101,8 +101,8 @@ instance Pretty Log where
   pretty (LogAny s) = pretty s
   pretty (LogProcessOutput s) = pretty s
   pretty (LogProcessRun fp args) = pretty fp <+> pretty (unwords args)
-  pretty (LogCreateProcessRun cp) =   
-    vcat $ 
+  pretty (LogCreateProcessRun cp) =
+    vcat $
       [ case cmdspec cp of
           ShellCommand sh -> pretty sh
           RawCommand cmd args -> pretty cmd <+> pretty (unwords args)
@@ -183,7 +183,7 @@ instance (Monad m, Applicative m) => Applicative (CradleLoadResultT m) where
 
 instance Monad m => Monad (CradleLoadResultT m) where
   {-# INLINE return #-}
-  return = CradleLoadResultT . return . CradleSuccess
+  return = pure
   {-# INLINE (>>=) #-}
   x >>= f = CradleLoadResultT $ do
     val <- runCradleResultT x

@@ -44,12 +44,12 @@ checkSyntax :: Show a
             -> [FilePath]  -- ^ The target files.
             -> IO String
 checkSyntax _           _      []    = return ""
-checkSyntax checkLogger cradle files = do
+checkSyntax checkLogger cradle files@(file:_) = do
     libDirRes <- getRuntimeGhcLibDir cradle
     handleRes libDirRes $ \libDir ->
       G.runGhcT (Just libDir) $ do
         liftIO $ checkLogger <& LogCradle cradle `WithSeverity` Info
-        res <- initializeFlagsWithCradle (head files) cradle
+        res <- initializeFlagsWithCradle file cradle
         handleRes res $ \(ini, _) -> do
           _sf <- ini
           either id id <$> check checkLogger files

@@ -25,7 +25,6 @@ module HIE.Bios.Cradle (
     , makeCradleResult
     -- | Cradle project configuration types
     , CradleProjectConfig(..)
-    ,
   ) where
 
 import Control.Applicative ((<|>), optional)
