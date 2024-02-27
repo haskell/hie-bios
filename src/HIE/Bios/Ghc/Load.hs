@@ -11,7 +11,7 @@ import Control.Monad.IO.Class
 
 import Data.List
 
-import Data.Text.Prettyprint.Doc
+import Prettyprinter
 import Data.IORef
 
 import GHC

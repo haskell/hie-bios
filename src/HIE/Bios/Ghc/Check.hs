@@ -14,7 +14,7 @@ import qualified GHC as G
 import Control.Exception
 import Control.Monad.IO.Class
 import Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&), cmap)
-import Data.Text.Prettyprint.Doc
+import Prettyprinter
 
 import HIE.Bios.Ghc.Api
 import HIE.Bios.Ghc.Logger

@@ -13,7 +13,7 @@ import           Control.Monad.Trans.Class
 #if MIN_VERSION_base(4,9,0)
 import qualified Control.Monad.Fail as Fail
 #endif
-import Data.Text.Prettyprint.Doc
+import Prettyprinter
 import System.Process.Extra (CreateProcess (env, cmdspec), CmdSpec (..))
 import Data.Maybe (fromMaybe)
 
