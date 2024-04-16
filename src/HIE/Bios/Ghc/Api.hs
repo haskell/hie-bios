@@ -39,7 +39,7 @@ initializeFlagsWithCradleWithMessage ::
   -> Cradle a  -- ^ The cradle we want to load
   -> m (CradleLoadResult (m G.SuccessFlag, ComponentOptions)) -- ^ Whether we actually loaded the cradle or not.
 initializeFlagsWithCradleWithMessage msg fp cradle =
-    fmap (initSessionWithMessage msg) <$> liftIO (getCompilerOptions fp [] cradle)
+    fmap (initSessionWithMessage msg) <$> liftIO (getCompilerOptions fp LoadFile cradle)
 
 -- | Actually perform the initialisation of the session. Initialising the session corresponds to
 -- parsing the command line flags, setting the targets for the session and then attempting to load

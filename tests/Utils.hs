@@ -269,7 +269,7 @@ loadComponentOptions fp = do
   a_fp <- normFile fp
   crd <- askCradle
   step $ "Initialise flags for: " <> fp
-  clr <- liftIO $ getCompilerOptions a_fp [] crd
+  clr <- liftIO $ getCompilerOptions a_fp LoadFile crd
   setLoadResult clr
 
 loadRuntimeGhcLibDir :: TestM ()

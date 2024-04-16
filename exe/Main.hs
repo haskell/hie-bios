@@ -16,6 +16,7 @@ import HIE.Bios
 import HIE.Bios.Ghc.Check
 import HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Internal.Debug
+import HIE.Bios.Types (LoadStyle(LoadFile))
 import Paths_hie_bios
 
 ----------------------------------------------------------------
@@ -84,7 +85,7 @@ main = do
         [] -> error "too few arguments"
         _ -> do
           res <- forM files $ \fp -> do
-                  res <- getCompilerOptions fp [] cradle
+                  res <- getCompilerOptions fp LoadFile cradle
                   case res of
                       CradleFail (CradleError _deps _ex err) ->
                         return $ "Failed to show flags for \""
