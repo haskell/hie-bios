@@ -30,7 +30,7 @@ debugInfo :: Show a
           -> IO String
 debugInfo fp cradle = unlines <$> do
     let logger = cradleLogger cradle
-    res <- getCompilerOptions fp [] cradle
+    res <- getCompilerOptions fp LoadFile cradle
     canonFp <- canonicalizePath fp
     conf <- findConfig canonFp
     crdl <- findCradle' logger canonFp

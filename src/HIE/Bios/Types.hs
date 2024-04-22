@@ -13,9 +13,10 @@ import           Control.Monad.Trans.Class
 #if MIN_VERSION_base(4,9,0)
 import qualified Control.Monad.Fail as Fail
 #endif
-import Prettyprinter
-import System.Process.Extra (CreateProcess (env, cmdspec), CmdSpec (..))
-import Data.Maybe (fromMaybe)
+import           Data.Maybe (fromMaybe)
+import qualified Data.Text as T
+import           Prettyprinter
+import           System.Process.Extra (CreateProcess (env, cmdspec), CmdSpec (..))
 
 ----------------------------------------------------------------
 -- Environment variables used by hie-bios.
@@ -91,11 +92,14 @@ data ActionName a
   deriving (Show, Eq, Ord, Functor)
 
 data Log
-  = LogAny String
+  = LogAny !T.Text
   | LogProcessOutput String
   | LogCreateProcessRun CreateProcess
   | LogProcessRun FilePath [FilePath]
-  deriving Show
+  | LogRequestedCradleLoadStyle !T.Text !LoadStyle
+  | LogComputedCradleLoadStyle !T.Text !LoadStyle
+  | LogLoadWithContextUnsupported !T.Text !(Maybe T.Text)
+  deriving (Show)
 
 instance Pretty Log where
   pretty (LogAny s) = pretty s
@@ -116,11 +120,45 @@ instance Pretty Log where
           ]
     where
       envText = map (indent 2 . pretty) $ prettyProcessEnv cp
+  pretty (LogRequestedCradleLoadStyle crdlName ls) =
+    "Requested to load" <+> pretty crdlName <+> "cradle" <+> case ls of
+      LoadFile -> "using single file mode"
+      LoadWithContext fps -> "using all files (multi-components):" <> line <> indent 4 (pretty fps)
+  pretty (LogComputedCradleLoadStyle crdlName ls) =
+    "Load" <+> pretty crdlName <+> "cradle" <+> case ls of
+      LoadFile -> "using single file"
+      LoadWithContext _ -> "using all files (multi-components)"
+
+  pretty (LogLoadWithContextUnsupported crdlName mReason) =
+    pretty crdlName <+> "cradle doesn't support loading using all files (multi-components)" <>
+      case mReason of
+        Nothing -> "."
+        Just reason -> ", because:" <+> pretty reason <> "."
+      <+> "Falling back loading to single file mode."
+
+-- | The 'LoadStyle' instructs a cradle on how to load a given file target.
+data LoadStyle
+  = LoadFile
+  -- ^ Instruct the cradle to load the given file target.
+  --
+  -- What this entails depends on the cradle. For example, the 'cabal' cradle
+  -- will configure the whole component the file target belongs to, and produce
+  -- component options to load the component, which is the minimal unit of code in cabal repl.
+  -- A 'default' cradle, on the other hand, will only load the given filepath.
+  | LoadWithContext [FilePath]
+  -- ^ Give a cradle additional context for loading a file target.
+  --
+  -- The context instructs the cradle to load the file target, while also loading
+  -- the given filepaths.
+  -- This is useful for cradles that support loading multiple code units at once,
+  -- e.g. cabal cradles can use the 'multi-repl' feature to set up a multiple home unit
+  -- session in GHC.
+  deriving (Show, Eq, Ord)
 
 data CradleAction a = CradleAction {
                         actionName    :: ActionName a
                       -- ^ Name of the action.
-                      , runCradle     :: FilePath -> [FilePath] -> IO (CradleLoadResult ComponentOptions)
+                      , runCradle     :: FilePath -> LoadStyle -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
                       , runGhcCmd     :: [String] -> IO (CradleLoadResult String)
                       -- ^ Executes the @ghc@ binary that is usually used to
