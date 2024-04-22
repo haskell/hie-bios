@@ -1,5 +1,11 @@
 # ChangeLog hie-bios
 
+## 2024-04-22 - 0.14.0
+
+* Add Loading Style option to 'runAction' [#433](https://github.com/haskell/hie-bios/pull/433)
+* Cleanup CPP for GHCs < 9.2, fix most GHC warnings [#429](https://github.com/haskell/hie-bios/pull/429)
+* Update GHC versions in CI, drop ghcs not supported by hls [#428](https://github.com/haskell/hie-bios/pull/428)
+
 ## 2023-11-14 - 0.13.1
 
 * Add CI support for GHC 9.8.1 [#419](https://github.com/haskell/hie-bios/pull/419)
