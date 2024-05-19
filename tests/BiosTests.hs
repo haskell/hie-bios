@@ -351,9 +351,9 @@ stackYaml resolver pkgs = unlines
 stackYamlResolver :: String
 stackYamlResolver =
 #if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,8,0,0)))
-  "nightly-2024-02-26" -- GHC 9.8.1
+  "nightly-2024-05-19" -- GHC 9.8.2
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)))
-  "lts-22.12" -- GHC 9.6.4
+  "lts-22.22" -- GHC 9.6.5
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,4,0,0)))
   "lts-21.25" -- GHC 9.4.8
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)))
