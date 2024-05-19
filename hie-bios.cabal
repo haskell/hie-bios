@@ -139,7 +139,7 @@ Extra-Source-Files:     README.md
                         tests/projects/stack-with-yaml/stack-with-yaml.cabal
                         tests/projects/stack-with-yaml/src/Lib.hs
 
-tested-with: GHC ==9.2.8 || ==9.4.8 || ==9.6.4 || ==9.8.2
+tested-with: GHC ==9.2.8 || ==9.4.8 || ==9.6.5 || ==9.8.2 || ==9.10.1
 
 Library
   Default-Language:     Haskell2010
@@ -173,10 +173,10 @@ Library
                         cryptohash-sha1      >= 0.11.100 && < 0.12,
                         directory            >= 1.3.0 && < 1.4,
                         filepath             >= 1.4.1 && < 1.6,
-                        time                 >= 1.8.0 && < 1.14,
+                        time                 >= 1.8.0 && < 1.15,
                         extra                >= 1.6.14 && < 1.8,
                         prettyprinter        ^>= 1.6 || ^>= 1.7.0,
-                        ghc                  >= 9.2.1 && < 9.9,
+                        ghc                  >= 9.2.1 && < 9.11,
                         transformers         >= 0.5.2 && < 0.7,
                         temporary            >= 1.2 && < 1.4,
                         template-haskell,
