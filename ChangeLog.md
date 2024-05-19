@@ -1,5 +1,9 @@
 # ChangeLog hie-bios
 
+## 2024-05-20 - 0.14.1
+
+* Allow building with GHC 9.10.1 [#435](https://github.com/haskell/hie-bios/pull/435)
+
 ## 2024-04-22 - 0.14.0
 
 * Add Loading Style option to 'runAction' [#433](https://github.com/haskell/hie-bios/pull/433)
