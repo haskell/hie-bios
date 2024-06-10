@@ -25,6 +25,7 @@ module HIE.Bios.Cradle (
     , makeCradleResult
     -- | Cradle project configuration types
     , CradleProjectConfig(..)
+    , CompilationProgress(..)
   ) where
 
 import Control.Applicative ((<|>), optional)
@@ -45,6 +46,7 @@ import Control.Monad.IO.Class
 import Data.Conduit.Process
 import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
+import qualified Data.Conduit.List as C (mapAccumM)
 import qualified Data.Conduit.Text as C
 import qualified Data.HashMap.Strict as Map
 import Data.Maybe (fromMaybe, maybeToList)
@@ -90,31 +92,31 @@ findCradle wfile = do
     runMaybeT (yamlConfig wdir)
 
 -- | Given root\/hie.yaml load the Cradle.
-loadCradle :: LogAction IO (WithSeverity Log) -> FilePath -> IO (Cradle Void)
-loadCradle l = loadCradleWithOpts l absurd
+loadCradle :: CompilationProgressReporter -> LogAction IO (WithSeverity Log) -> FilePath -> IO (Cradle Void)
+loadCradle cpr l = loadCradleWithOpts cpr l absurd
 
 -- | Given root\/foo\/bar.hs, load an implicit cradle
-loadImplicitCradle :: Show a => LogAction IO (WithSeverity Log) -> FilePath -> IO (Cradle a)
-loadImplicitCradle l wfile = do
+loadImplicitCradle :: Show a => CompilationProgressReporter -> LogAction IO (WithSeverity Log) -> FilePath -> IO (Cradle a)
+loadImplicitCradle cpr l wfile = do
   let wdir = takeDirectory wfile
   cfg <- runMaybeT (implicitConfig wdir)
   case cfg of
-    Just bc -> getCradle l absurd bc
+    Just bc -> getCradle cpr l absurd bc
     Nothing -> return $ defaultCradle l wdir
 
 -- | Finding 'Cradle'.
 --   Find a cabal file by tracing ancestor directories.
 --   Find a sandbox according to a cabal sandbox config
 --   in a cabal directory.
-loadCradleWithOpts :: (Yaml.FromJSON b, Show a) => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> IO (Cradle a)
-loadCradleWithOpts l buildCustomCradle wfile = do
+loadCradleWithOpts :: (Yaml.FromJSON b, Show a) => CompilationProgressReporter -> LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> IO (Cradle a)
+loadCradleWithOpts cpr l buildCustomCradle wfile = do
     cradleConfig <- readCradleConfig wfile
-    getCradle l buildCustomCradle (cradleConfig, takeDirectory wfile)
+    getCradle cpr l buildCustomCradle (cradleConfig, takeDirectory wfile)
 
-getCradle :: Show a => LogAction IO (WithSeverity Log) ->  (b -> CradleAction a) -> (CradleConfig b, FilePath) -> IO (Cradle a)
-getCradle l buildCustomCradle (cc, wdir) = do
+getCradle :: Show a => CompilationProgressReporter -> LogAction IO (WithSeverity Log) ->  (b -> CradleAction a) -> (CradleConfig b, FilePath) -> IO (Cradle a)
+getCradle cpr l buildCustomCradle (cc, wdir) = do
     rcs <- canonicalizeResolvedCradles wdir cs
-    resolvedCradlesToCradle l buildCustomCradle wdir rcs
+    resolvedCradlesToCradle cpr l buildCustomCradle wdir rcs
   where
     cs = resolveCradleTree wdir cc
 
@@ -212,8 +214,8 @@ addActionDeps deps =
       (\(ComponentOptions os' dir ds) -> CradleSuccess (ComponentOptions os' dir (ds `union` deps)))
 
 
-resolvedCradlesToCradle :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> [ResolvedCradle b] -> IO (Cradle a)
-resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
+resolvedCradlesToCradle :: Show a => CompilationProgressReporter -> LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> [ResolvedCradle b] -> IO (Cradle a)
+resolvedCradlesToCradle cpr logger buildCustomCradle root cs = mdo
   let run_ghc_cmd args =
         -- We're being lazy here and just returning the ghc path for the
         -- first non-none cradle. This shouldn't matter in practice: all
@@ -226,7 +228,7 @@ resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
               args
   versions <- makeVersions logger root run_ghc_cmd
   let rcs = ResolvedCradles root cs versions
-      cradleActions = [ (c, resolveCradleAction logger buildCustomCradle rcs root c) | c <- cs ]
+      cradleActions = [ (c, resolveCradleAction cpr logger buildCustomCradle rcs root c) | c <- cs ]
       err_msg fp
         = ["Multi Cradle: No prefixes matched"
           , "pwd: " ++ root
@@ -284,10 +286,10 @@ resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
     notNoneType _ = True
 
 
-resolveCradleAction :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> ResolvedCradles b -> FilePath -> ResolvedCradle b -> CradleAction a
-resolveCradleAction l buildCustomCradle cs root cradle = addLoadStyleLogToCradleAction $
+resolveCradleAction :: Show a => CompilationProgressReporter -> LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> ResolvedCradles b -> FilePath -> ResolvedCradle b -> CradleAction a
+resolveCradleAction cpr l buildCustomCradle cs root cradle = addLoadStyleLogToCradleAction $
   case concreteCradle cradle of
-    ConcreteCabal t -> cabalCradle l cs root (cabalComponent t) (projectConfigFromMaybe root (cabalProjectFile t))
+    ConcreteCabal t -> cabalCradle cpr l cs root (cabalComponent t) (projectConfigFromMaybe root (cabalProjectFile t))
     ConcreteStack t -> stackCradle l root (stackComponent t) (projectConfigFromMaybe root (stackYaml t))
     ConcreteBios bios deps mbGhc -> biosCradle l root bios deps mbGhc
     ConcreteDirect xs -> directCradle l root xs
@@ -541,21 +543,26 @@ projectLocationOrDefault = \case
 
 -- |Cabal Cradle
 -- Works for new-build by invoking `v2-repl`.
-cabalCradle :: LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath -> Maybe String -> CradleProjectConfig -> CradleAction a
-cabalCradle l cs wdir mc projectFile
+cabalCradle :: CompilationProgressReporter -> LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath -> Maybe String -> CradleProjectConfig -> CradleAction a
+cabalCradle cpr l cs wdir mc projectFile
   = CradleAction
     { actionName = Types.Cabal
-    , runCradle = \fp -> runCradleResultT . cabalAction cs wdir mc l projectFile fp
+    , runCradle = \fp -> runCradleResultT . cabalAction cpr cs wdir mc l projectFile fp
     , runGhcCmd = \args -> runCradleResultT $ do
         buildDir <- liftIO $ cabalBuildDir wdir
         -- Workaround for a cabal-install bug on 3.0.0.0:
         -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
         liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
         -- Need to pass -v0 otherwise we get "resolving dependencies..."
-        cabalProc <- cabalProcess l projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
+        cabalProc <- cabalProcess cpr l projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
         readProcessWithCwd' l cabalProc ""
     }
 
+data CompilationProgress = CompilationProgress { numPackagesToCompile :: Int
+                                               , numPackagesCompiled :: Int
+                                               }
+
+type CompilationProgressReporter = Maybe (CompilationProgress -> IO ())
 
 -- | Execute a cabal process in our custom cache-build directory configured
 -- with the custom ghc executable.
@@ -566,8 +573,8 @@ cabalCradle l cs wdir mc projectFile
 -- to the custom ghc wrapper via 'hie_bios_ghc' environment variable which
 -- the custom ghc wrapper may use as a fallback if it can not respond to certain
 -- queries, such as ghc version or location of the libdir.
-cabalProcess :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
-cabalProcess l cabalProject workDir command args = do
+cabalProcess :: CompilationProgressReporter -> LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
+cabalProcess _ l cabalProject workDir command args = do
   ghcDirs <- cabalGhcDirs l cabalProject workDir
   newEnvironment <- liftIO $ setupEnvironment ghcDirs
   cabalProc <- liftIO $ setupCabalCommand ghcDirs
@@ -789,7 +796,8 @@ cabalGhcDirs l cabalProject workDir = do
     projectFileArgs = projectFileProcessArgs cabalProject
 
 cabalAction
-  :: ResolvedCradles a
+  :: CompilationProgressReporter
+  -> ResolvedCradles a
   -> FilePath
   -> Maybe String
   -> LogAction IO (WithSeverity Log)
@@ -797,7 +805,7 @@ cabalAction
   -> FilePath
   -> LoadStyle
   -> CradleLoadResultT IO ComponentOptions
-cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle = do
+cabalAction cpr (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle = do
   cabal_version <- liftIO $ runCachedIO $ cabalVersion vs
   ghc_version   <- liftIO $ runCachedIO $ ghcVersion vs
   -- determine which load style is supported by this cabal cradle.
@@ -839,11 +847,11 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
   let
     cabalCommand = "v2-repl"
 
-  cabalProc <- cabalProcess l projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
+  cabalProc <- cabalProcess cpr l projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
       deps <- cabalCradleDependencies projectFile workDir workDir
       pure $ err { cradleErrorDependencies = cradleErrorDependencies err ++ deps }
 
-  (ex, output, stde, [(_, maybeArgs)]) <- liftIO $ readProcessWithOutputs [hie_bios_output] l workDir cabalProc
+  (ex, output, stde, [(_, maybeArgs)]) <- liftIO $ readCabalProcessWithProgress cpr [hie_bios_output] l workDir cabalProc
   let args = fromMaybe [] maybeArgs
 
   let errorDetails =
@@ -1158,19 +1166,18 @@ getCleanEnvironment = do
 type Outputs = [OutputName]
 type OutputName = String
 
--- | Call a given process with temp files for the process to write to.
--- * The process can discover the temp files paths by reading the environment.
--- * The contents of the temp files are returned by this function, if any.
--- * The logging function is called every time the process emits anything to stdout or stderr.
--- it can be used to report progress of the process to a user.
--- * The process is executed in the given directory.
-readProcessWithOutputs
-  :: Outputs  -- ^ Names of the outputs produced by this process
+data CabalParserState = CabalParserToBuild { numPackagesDeclared :: Int }
+                      | CabalParserBuilding { numPackagesCompleted :: Int, numPackagesToBuild :: Int }
+
+-- | Same as 'readProcessWithOutputs' but reports process when running cabal build
+readCabalProcessWithProgress
+  :: CompilationProgressReporter -- ^ Reporter function for the compilation process
+  -> Outputs  -- ^ Names of the outputs produced by this process
   -> LogAction IO (WithSeverity Log) -- ^ Output of the process is emitted as logs.
   -> FilePath -- ^ Working directory. Process is executed in this directory.
   -> CreateProcess -- ^ Parameters for the process to be executed.
   -> IO (ExitCode, [String], [String], [(OutputName, Maybe [String])])
-readProcessWithOutputs outputNames l workDir cp = flip runContT return $ do
+readCabalProcessWithProgress cpr outputNames l workDir cp = flip runContT return $ do
   old_env <- liftIO getCleanEnvironment
   output_files <- traverse (withOutput old_env) outputNames
 
@@ -1179,11 +1186,19 @@ readProcessWithOutputs outputNames l workDir cp = flip runContT return $ do
                     }
 
     -- Windows line endings are not converted so you have to filter out `'r` characters
-  let loggingConduit = C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')
-        C..| C.map T.unpack C..| C.iterM (\msg -> l <& LogProcessOutput msg `WithSeverity` Debug) C..| C.sinkList
+  let baseConduit = C.decodeUtf8 C..| C.lines C..| C.filterE (/= '\r')
+        C..| C.map T.unpack C..| C.iterM (\msg -> l <& LogProcessOutput msg `WithSeverity` Debug)
+      loggingOnlyConduit = baseConduit C..| C.sinkList
+      loggingReportingConduit = baseConduit
+        C..| void ((C.mapAccumM (reportProgress cpr) (CabalParserToBuild 0)))
+        C..| C.sinkList
+      loggingAndMaybeReportingConduit = case cpr of
+        Nothing -> loggingOnlyConduit
+        Just _ -> loggingReportingConduit
   liftIO $ l <& LogCreateProcessRun process `WithSeverity` Info
-  (ex, stdo, stde) <- liftIO $ sourceProcessWithStreams process mempty loggingConduit loggingConduit
-
+  (ex, stdo, stde) <- liftIO $ sourceProcessWithStreams process mempty loggingAndMaybeReportingConduit
+                                                        loggingOnlyConduit
+  
   res <- forM output_files $ \(name,path) ->
           liftIO $ (name,) <$> readOutput path
 
@@ -1211,6 +1226,43 @@ readProcessWithOutputs outputNames l workDir cp = flip runContT return $ do
             hClose h
             removeFileIfExists file
             action (name, file)
+
+      reportProgress :: CompilationProgressReporter -> String -> CabalParserState -> IO (CabalParserState, String)
+      reportProgress Nothing str cps = pure (cps, str)
+      reportProgress (Just reporter) str cps@(CabalParserToBuild { numPackagesDeclared = numPackages }) = do
+        let startBuilding = do reporter (CompilationProgress { numPackagesToCompile = numPackages
+                                                             , numPackagesCompiled = 0
+                                                             })
+                               pure (CabalParserBuilding { numPackagesCompleted = 0, numPackagesToBuild = numPackages }, str)
+        case str of
+           ' ':'-':' ':_ -> pure (cps { numPackagesDeclared = numPackages + 1 }, str)
+           'S':'t':'a':'r':'t':'i':'n':'g':' ':' ':' ':' ':' ':_ -> startBuilding
+           _ -> pure (cps, str)
+      reportProgress (Just reporter) str cps@(CabalParserBuilding { numPackagesCompleted = numPackages
+                                                                  , numPackagesToBuild = totalPackages
+                                                                  }) =
+        case str of
+           'C':'o':'m':'p':'l':'e':'t':'e':'d':' ':' ':' ':' ':_ -> do
+             reporter (CompilationProgress { numPackagesToCompile = totalPackages
+                                           , numPackagesCompiled = numPackages + 1
+                                           })
+             pure (cps { numPackagesCompleted = numPackages + 1 }, str)
+           _ -> pure (cps, str)
+
+-- | Call a given process with temp files for the process to write to.
+-- * The process can discover the temp files paths by reading the environment.
+-- * The contents of the temp files are returned by this function, if any.
+-- * The logging function is called every time the process emits anything to stdout or stderr.
+-- it can be used to report progress of the process to a user.
+-- * The process is executed in the given directory.
+readProcessWithOutputs
+  :: Outputs  -- ^ Names of the outputs produced by this process
+  -> LogAction IO (WithSeverity Log) -- ^ Output of the process is emitted as logs.
+  -> FilePath -- ^ Working directory. Process is executed in this directory.
+  -> CreateProcess -- ^ Parameters for the process to be executed.
+  -> IO (ExitCode, [String], [String], [(OutputName, Maybe [String])])
+readProcessWithOutputs outputNames l workDir cp =
+  readCabalProcessWithProgress Nothing outputNames l workDir cp
 
 removeFileIfExists :: FilePath -> IO ()
 removeFileIfExists f = do

@@ -193,7 +193,7 @@ Executable hie-bios
   Default-Language:     Haskell2010
   Main-Is:              Main.hs
   Other-Modules:        Paths_hie_bios
-  GHC-Options:          -Wall
+  GHC-Options:          -Wall -threaded
   HS-Source-Dirs:       exe
   Build-Depends:        base >= 4.16 && < 5
                       , co-log-core
