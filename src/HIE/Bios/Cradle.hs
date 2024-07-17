@@ -851,7 +851,7 @@ cabalAction cpr (ResolvedCradles root cs vs) workDir mc l projectFile fp loadSty
       deps <- cabalCradleDependencies projectFile workDir workDir
       pure $ err { cradleErrorDependencies = cradleErrorDependencies err ++ deps }
 
-  (ex, output, stde, [(_, maybeArgs)]) <- liftIO $ readCabalProcessWithProgress cpr [hie_bios_output] l workDir cabalProc
+  (ex, output, stde, [(_, maybeArgs)]) <- liftIO $ readCabalWithOutputsAndProgress cpr [hie_bios_output] l workDir cabalProc
   let args = fromMaybe [] maybeArgs
 
   let errorDetails =
@@ -1170,14 +1170,15 @@ data CabalParserState = CabalParserToBuild { numPackagesDeclared :: Int }
                       | CabalParserBuilding { numPackagesCompleted :: Int, numPackagesToBuild :: Int }
 
 -- | Same as 'readProcessWithOutputs' but reports process when running cabal build
-readCabalProcessWithProgress
-  :: CompilationProgressReporter -- ^ Reporter function for the compilation process
-  -> Outputs  -- ^ Names of the outputs produced by this process
+readAndFollowProcess
+  :: Maybe (String -> state -> IO state, state)
+      -- ^ Monitor function that takes a line of output and a state and returns a new state
+  -> Outputs -- ^ Names of the outputs produced by this process
   -> LogAction IO (WithSeverity Log) -- ^ Output of the process is emitted as logs.
   -> FilePath -- ^ Working directory. Process is executed in this directory.
   -> CreateProcess -- ^ Parameters for the process to be executed.
   -> IO (ExitCode, [String], [String], [(OutputName, Maybe [String])])
-readCabalProcessWithProgress cpr outputNames l workDir cp = flip runContT return $ do
+readAndFollowProcess mMonitorFunc outputNames l workDir cp = flip runContT return $ do
   old_env <- liftIO getCleanEnvironment
   output_files <- traverse (withOutput old_env) outputNames
 
@@ -1189,14 +1190,14 @@ readCabalProcessWithProgress cpr outputNames l workDir cp = flip runContT return
   let baseConduit = C.decodeUtf8 C..| C.lines C..| C.filterE (/= '\r')
         C..| C.map T.unpack C..| C.iterM (\msg -> l <& LogProcessOutput msg `WithSeverity` Debug)
       loggingOnlyConduit = baseConduit C..| C.sinkList
-      loggingReportingConduit = baseConduit
-        C..| void ((C.mapAccumM (reportProgress cpr) (CabalParserToBuild 0)))
-        C..| C.sinkList
-      loggingAndMaybeReportingConduit = case cpr of
-        Nothing -> loggingOnlyConduit
-        Just _ -> loggingReportingConduit
+      loggingAndMaybeMonitoringConduit =
+        case mMonitorFunc of
+          Nothing -> loggingOnlyConduit
+          Just (monitorFunc, acc0) -> baseConduit
+                                        C..| void (C.mapAccumM (wrapConduit monitorFunc) acc0)
+                                        C..| C.sinkList
   liftIO $ l <& LogCreateProcessRun process `WithSeverity` Info
-  (ex, stdo, stde) <- liftIO $ sourceProcessWithStreams process mempty loggingAndMaybeReportingConduit
+  (ex, stdo, stde) <- liftIO $ sourceProcessWithStreams process mempty loggingAndMaybeMonitoringConduit
                                                         loggingOnlyConduit
   
   res <- forM output_files $ \(name,path) ->
@@ -1205,6 +1206,11 @@ readCabalProcessWithProgress cpr outputNames l workDir cp = flip runContT return
   return (ex, stdo, stde, res)
 
     where
+      wrapConduit :: (String -> state -> IO state) -> String -> state -> IO (state, String)
+      wrapConduit f str acc = do
+        acc' <- f str acc
+        return (acc', str)
+
       readOutput :: FilePath -> IO (Maybe [String])
       readOutput path = do
         haveFile <- doesFileExist path
@@ -1227,28 +1233,6 @@ readCabalProcessWithProgress cpr outputNames l workDir cp = flip runContT return
             removeFileIfExists file
             action (name, file)
 
-      reportProgress :: CompilationProgressReporter -> String -> CabalParserState -> IO (CabalParserState, String)
-      reportProgress Nothing str cps = pure (cps, str)
-      reportProgress (Just reporter) str cps@(CabalParserToBuild { numPackagesDeclared = numPackages }) = do
-        let startBuilding = do reporter (CompilationProgress { numPackagesToCompile = numPackages
-                                                             , numPackagesCompiled = 0
-                                                             })
-                               pure (CabalParserBuilding { numPackagesCompleted = 0, numPackagesToBuild = numPackages }, str)
-        case str of
-           ' ':'-':' ':_ -> pure (cps { numPackagesDeclared = numPackages + 1 }, str)
-           'S':'t':'a':'r':'t':'i':'n':'g':' ':' ':' ':' ':' ':_ -> startBuilding
-           _ -> pure (cps, str)
-      reportProgress (Just reporter) str cps@(CabalParserBuilding { numPackagesCompleted = numPackages
-                                                                  , numPackagesToBuild = totalPackages
-                                                                  }) =
-        case str of
-           'C':'o':'m':'p':'l':'e':'t':'e':'d':' ':' ':' ':' ':_ -> do
-             reporter (CompilationProgress { numPackagesToCompile = totalPackages
-                                           , numPackagesCompiled = numPackages + 1
-                                           })
-             pure (cps { numPackagesCompleted = numPackages + 1 }, str)
-           _ -> pure (cps, str)
-
 -- | Call a given process with temp files for the process to write to.
 -- * The process can discover the temp files paths by reading the environment.
 -- * The contents of the temp files are returned by this function, if any.
@@ -1261,8 +1245,39 @@ readProcessWithOutputs
   -> FilePath -- ^ Working directory. Process is executed in this directory.
   -> CreateProcess -- ^ Parameters for the process to be executed.
   -> IO (ExitCode, [String], [String], [(OutputName, Maybe [String])])
-readProcessWithOutputs outputNames l workDir cp =
-  readCabalProcessWithProgress Nothing outputNames l workDir cp
+readProcessWithOutputs = readAndFollowProcess Nothing
+
+-- | Same as 'readProcessWithOutputs' but reports process when running cabal build
+readCabalWithOutputsAndProgress
+  :: CompilationProgressReporter -- ^ Reporter function for the compilation process
+  -> Outputs  -- ^ Names of the outputs produced by this process
+  -> LogAction IO (WithSeverity Log) -- ^ Output of the process is emitted as logs.
+  -> FilePath -- ^ Working directory. Process is executed in this directory.
+  -> CreateProcess -- ^ Parameters for the process to be executed.
+  -> IO (ExitCode, [String], [String], [(OutputName, Maybe [String])])
+readCabalWithOutputsAndProgress Nothing = readAndFollowProcess Nothing
+readCabalWithOutputsAndProgress (Just cpr) = readAndFollowProcess (Just (reportProgress cpr, (CabalParserToBuild 0)))
+  where
+    reportProgress :: (CompilationProgress -> IO ()) -> String -> CabalParserState -> IO CabalParserState
+    reportProgress reporter str cps@(CabalParserToBuild { numPackagesDeclared = numPackages }) = do
+      let startBuilding = do reporter (CompilationProgress { numPackagesToCompile = numPackages
+                                                           , numPackagesCompiled = 0
+                                                           })
+                             pure $ CabalParserBuilding { numPackagesCompleted = 0, numPackagesToBuild = numPackages }
+      case str of
+          ' ':'-':' ':_ -> pure $ cps { numPackagesDeclared = numPackages + 1 }
+          'S':'t':'a':'r':'t':'i':'n':'g':' ':' ':' ':' ':' ':_ -> startBuilding
+          _ -> pure cps
+    reportProgress reporter str cps@(CabalParserBuilding { numPackagesCompleted = numPackages
+                                                         , numPackagesToBuild = totalPackages
+                                                         }) =
+      case str of
+          'C':'o':'m':'p':'l':'e':'t':'e':'d':' ':' ':' ':' ':_ -> do
+            reporter $ CompilationProgress { numPackagesToCompile = totalPackages
+                                           , numPackagesCompiled = numPackages + 1
+                                           }
+            pure $ cps { numPackagesCompleted = numPackages + 1 }
+          _ -> pure cps
 
 removeFileIfExists :: FilePath -> IO ()
 removeFileIfExists f = do
