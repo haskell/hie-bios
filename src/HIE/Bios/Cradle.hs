@@ -554,7 +554,7 @@ cabalCradle cpr l cs wdir mc projectFile
         -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
         liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
         -- Need to pass -v0 otherwise we get "resolving dependencies..."
-        cabalProc <- cabalProcess cpr l projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
+        cabalProc <- cabalProcess l projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
         readProcessWithCwd' l cabalProc ""
     }
 
@@ -573,8 +573,8 @@ type CompilationProgressReporter = Maybe (CompilationProgress -> IO ())
 -- to the custom ghc wrapper via 'hie_bios_ghc' environment variable which
 -- the custom ghc wrapper may use as a fallback if it can not respond to certain
 -- queries, such as ghc version or location of the libdir.
-cabalProcess :: CompilationProgressReporter -> LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
-cabalProcess _ l cabalProject workDir command args = do
+cabalProcess :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
+cabalProcess l cabalProject workDir command args = do
   ghcDirs <- cabalGhcDirs l cabalProject workDir
   newEnvironment <- liftIO $ setupEnvironment ghcDirs
   cabalProc <- liftIO $ setupCabalCommand ghcDirs
@@ -847,7 +847,7 @@ cabalAction cpr (ResolvedCradles root cs vs) workDir mc l projectFile fp loadSty
   let
     cabalCommand = "v2-repl"
 
-  cabalProc <- cabalProcess cpr l projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
+  cabalProc <- cabalProcess l projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
       deps <- cabalCradleDependencies projectFile workDir workDir
       pure $ err { cradleErrorDependencies = cradleErrorDependencies err ++ deps }
 
