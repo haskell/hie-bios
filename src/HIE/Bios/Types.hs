@@ -266,6 +266,7 @@ data CradleError = CradleError
   , cradleErrorStderr :: [String]
   -- ^ Standard error output that can be shown to users to explain
   -- the loading error.
+  , cradleErrorLoadingFiles :: [FilePath]
   }
   deriving (Show, Eq)
 

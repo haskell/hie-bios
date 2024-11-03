@@ -243,7 +243,7 @@ resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
           case selectCradle (prefix . fst) absfp cradleActions of
             Just (rc, act) -> do
               addActionDeps (cradleDeps rc) <$> runCradle act fp prev
-            Nothing -> return $ CradleFail $ CradleError [] ExitSuccess (err_msg fp)
+            Nothing -> return $ CradleFail $ CradleError [] ExitSuccess (err_msg fp) [fp]
       , runGhcCmd = run_ghc_cmd
       }
     }
@@ -518,7 +518,7 @@ biosAction wdir bios bios_deps l fp loadStyle = do
         -- delimited by newlines.
         -- Execute the bios action and add dependencies of the cradle.
         -- Removes all duplicates.
-  return $ makeCradleResult (ex, std, wdir, fromMaybe [] res) deps
+  return $ makeCradleResult (ex, std, wdir, fromMaybe [] res) deps [fp]
 
 callableToProcess :: Callable -> Maybe String -> IO CreateProcess
 callableToProcess (Command shellCommand) file = do
@@ -817,9 +817,9 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
               pure LoadFile
     _ -> pure LoadFile
 
-  let cabalArgs = case determinedLoadStyle of
-        LoadFile -> [fromMaybe (fixTargetPath fp) mc]
-        LoadWithContext fps -> concat
+  let (cabalArgs, extraFileDeps) = case determinedLoadStyle of
+        LoadFile -> ([fromMaybe (fixTargetPath fp) mc], [(fp, deps) | Just (ResolvedCradle{cradleDeps = deps}) <- [selectCradle prefix fp cs]])
+        LoadWithContext fps -> (concat
           [ [ "--keep-temp-files"
             , "--enable-multi-repl"
             , fromMaybe (fixTargetPath fp) mc
@@ -832,8 +832,10 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
             , (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile
             , let old_mc = cabalComponent ct
             ]
-          ]
+          ], [(file, deps) | file <- fp:fps, Just (ResolvedCradle{cradleDeps = deps}) <- [selectCradle prefix file cs]])
 
+  let extraDeps = concatMap snd extraFileDeps
+      loadingFiles = map fst extraFileDeps
   liftIO $ l <& LogComputedCradleLoadStyle "cabal" determinedLoadStyle `WithSeverity` Info
 
   let
@@ -858,7 +860,7 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
     deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
     let cmd = show (["cabal", cabalCommand] <> cabalArgs)
     let errorMsg = "Failed to run " <> cmd <> " in directory \"" <> workDir <> "\". Consult the logs for full command and error."
-    throwCE (CradleError deps ex ([errorMsg] <> errorDetails))
+    throwCE (CradleError deps ex ([errorMsg] <> errorDetails) loadingFiles)
 
   case processCabalWrapperArgs args of
     Nothing -> do
@@ -866,10 +868,10 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
       -- Best effort. Assume the working directory is the
       -- root of the component, so we are right in trivial cases at least.
       deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
-      throwCE (CradleError deps ex $ ["Failed to parse result of calling cabal" ] <> errorDetails)
+      throwCE (CradleError (deps <> extraDeps) ex (["Failed to parse result of calling cabal" ] <> errorDetails) loadingFiles)
     Just (componentDir, final_args) -> do
       deps <- liftIO $ cabalCradleDependencies projectFile workDir componentDir
-      CradleLoadResultT $ pure $ makeCradleResult (ex, stde, componentDir, final_args) deps
+      CradleLoadResultT $ pure $ makeCradleResult (ex, stde, componentDir, final_args) (deps <> extraDeps) loadingFiles
   where
     -- Need to make relative on Windows, due to a Cabal bug with how it
     -- parses file targets with a C: drive in it
@@ -987,7 +989,7 @@ stackAction
   -> FilePath
   -> LoadStyle
   -> IO (CradleLoadResult ComponentOptions)
-stackAction workDir mc syaml l _fp loadStyle = do
+stackAction workDir mc syaml l fp loadStyle = do
   logCradleHasNoSupportForLoadWithContext l loadStyle "stack"
   let ghcProcArgs = ("stack", stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
   -- Same wrapper works as with cabal
@@ -1011,10 +1013,11 @@ stackAction workDir mc syaml l _fp loadStyle = do
         -- the root of the component, so we are right in trivial cases at least.
         deps <- stackCradleDependencies workDir workDir syaml
         pure $ CradleFail
-                  (CradleError deps ex1 $
-                    [ "Failed to parse result of calling stack" ]
+                  (CradleError deps ex1
+                    ([ "Failed to parse result of calling stack" ]
                     ++ stde
-                    ++ args
+                    ++ args)
+                    [fp]
                   )
 
       Just (componentDir, ghc_args) -> do
@@ -1025,6 +1028,7 @@ stackAction workDir mc syaml l _fp loadStyle = do
                   , ghc_args ++ pkg_ghc_args
                   )
                   deps
+                  [fp]
 
 stackProcess :: CradleProjectConfig -> [String] -> CreateProcess
 stackProcess syaml args = proc "stack" $ stackYamlProcessArgs syaml <> args
@@ -1217,10 +1221,10 @@ removeFileIfExists f = do
   yes <- doesFileExist f
   when yes (removeFile f)
 
-makeCradleResult :: (ExitCode, [String], FilePath, [String]) -> [FilePath] -> CradleLoadResult ComponentOptions
-makeCradleResult (ex, err, componentDir, gopts) deps =
+makeCradleResult :: (ExitCode, [String], FilePath, [String]) -> [FilePath] -> [FilePath] -> CradleLoadResult ComponentOptions
+makeCradleResult (ex, err, componentDir, gopts) deps loadingFiles =
   case ex of
-    ExitFailure _ -> CradleFail (CradleError deps ex err)
+    ExitFailure _ -> CradleFail (CradleError deps ex err loadingFiles)
     _ ->
         let compOpts = ComponentOptions gopts componentDir deps
         in CradleSuccess compOpts
@@ -1252,11 +1256,13 @@ readProcessWithCwd' l createdProcess stdin = do
   case mResult of
     Just (ExitSuccess, stdo, _) -> pure stdo
     Just (exitCode, stdo, stde) -> throwCE $
-      CradleError [] exitCode $
-        ["Error when calling " <> cmdString, stdo, stde] <> prettyProcessEnv createdProcess
+      CradleError [] exitCode
+        (["Error when calling " <> cmdString, stdo, stde] <> prettyProcessEnv createdProcess)
+        []
     Nothing -> throwCE $
-      CradleError [] ExitSuccess $
-        ["Couldn't execute " <> cmdString] <> prettyProcessEnv createdProcess
+      CradleError [] ExitSuccess
+        (["Couldn't execute " <> cmdString] <> prettyProcessEnv createdProcess)
+        []
 
 -- | Log that the cradle has no supported for loading with context, if and only if
 -- 'LoadWithContext' was requested.
