@@ -380,7 +380,7 @@ assertCradleLoadSuccess :: CradleLoadResult a -> TestM a
 assertCradleLoadSuccess = \case
   (CradleSuccess x) -> pure x
   CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
-  (CradleFail (CradleError _deps _ex stde)) ->
+  (CradleFail (CradleError _deps _ex stde _err_loading_files)) ->
     liftIO $ assertFailure ("Unexpected cradle fail" <> unlines stde)
 
 assertCradleLoadError :: CradleLoadResult a -> TestM CradleError
