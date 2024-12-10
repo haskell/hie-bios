@@ -47,7 +47,7 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.HashMap.Strict as Map
-import Data.Maybe (fromMaybe, maybeToList)
+import Data.Maybe (fromMaybe)
 import Data.List
 import Data.List.Extra (trimEnd)
 import Data.Ord (Down(..))
@@ -289,7 +289,7 @@ resolveCradleAction l buildCustomCradle cs root cradle = addLoadStyleLogToCradle
   case concreteCradle cradle of
     ConcreteCabal t -> cabalCradle l cs root (cabalComponent t) (projectConfigFromMaybe root (cabalProjectFile t))
     ConcreteStack t -> stackCradle l root (stackComponent t) (projectConfigFromMaybe root (stackYaml t))
-    ConcreteBios bios deps mbGhc -> biosCradle l root bios deps mbGhc
+    ConcreteBios bios deps mbGhc -> biosCradle l cs root bios deps mbGhc
     ConcreteDirect xs -> directCradle l root xs
     ConcreteNone -> noneCradle
     ConcreteOther a -> buildCustomCradle a
@@ -477,11 +477,11 @@ directCradle l wdir args
 
 -- | Find a cradle by finding an executable `hie-bios` file which will
 -- be executed to find the correct GHC options to use.
-biosCradle :: LogAction IO (WithSeverity Log) -> FilePath -> Callable -> Maybe Callable -> Maybe FilePath -> CradleAction a
-biosCradle l wdir biosCall biosDepsCall mbGhc
+biosCradle :: LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath -> Callable -> Maybe Callable -> Maybe FilePath -> CradleAction a
+biosCradle l rc wdir biosCall biosDepsCall mbGhc
   = CradleAction
       { actionName = Types.Bios
-      , runCradle = biosAction wdir biosCall biosDepsCall l
+      , runCradle = biosAction rc wdir biosCall biosDepsCall l
       , runGhcCmd = \args -> readProcessWithCwd l wdir (fromMaybe "ghc" mbGhc) args ""
       }
 
@@ -489,8 +489,11 @@ biosWorkDir :: FilePath -> MaybeT IO FilePath
 biosWorkDir = findFileUpwards (".hie-bios" ==)
 
 biosDepsAction :: LogAction IO (WithSeverity Log) -> FilePath -> Maybe Callable -> FilePath -> LoadStyle -> IO [FilePath]
-biosDepsAction l wdir (Just biosDepsCall) fp _prevs = do
-  biosDeps' <- callableToProcess biosDepsCall (Just fp) -- TODO multi pass the previous files too
+biosDepsAction l wdir (Just biosDepsCall) fp loadStyle = do
+  let fps = case loadStyle of
+        LoadFile -> [fp]
+        LoadWithContext old_fps -> fp : old_fps
+  biosDeps' <- callableToProcess biosDepsCall fps
   (ex, sout, serr, [(_, args)]) <- readProcessWithOutputs [hie_bios_output] l wdir biosDeps'
   case ex of
     ExitFailure _ ->  error $ show (ex, sout, serr)
@@ -498,16 +501,36 @@ biosDepsAction l wdir (Just biosDepsCall) fp _prevs = do
 biosDepsAction _ _ Nothing _ _ = return []
 
 biosAction
-  :: FilePath
+  :: ResolvedCradles a
+  -> FilePath
   -> Callable
   -> Maybe Callable
   -> LogAction IO (WithSeverity Log)
   -> FilePath
   -> LoadStyle
   -> IO (CradleLoadResult ComponentOptions)
-biosAction wdir bios bios_deps l fp loadStyle = do
-  logCradleHasNoSupportForLoadWithContext l loadStyle "bios"
-  bios' <- callableToProcess bios (Just fp) -- TODO pass all the files instead of listToMaybe
+biosAction rc wdir bios bios_deps l fp loadStyle = do
+  ghc_version <- liftIO $ runCachedIO $ ghcVersion $ cradleProgramVersions rc
+  determinedLoadStyle <- case ghc_version of
+    Just ghc
+      -- Multi-component supported from ghc 9.4
+      -- We trust the assertion for a bios program, as we have no way of
+      -- checking its version
+      | LoadWithContext _ <- loadStyle ->
+          if ghc >= makeVersion [9,4]
+            then pure loadStyle
+            else do
+              liftIO $ l <& WithSeverity
+                (LogLoadWithContextUnsupported "bios"
+                  $ Just "ghc version is too old. We require `ghc >= 9.4`"
+                )
+                Warning
+              pure LoadFile
+    _ -> pure LoadFile
+  let fps = case determinedLoadStyle of
+        LoadFile -> [fp]
+        LoadWithContext old_fps -> fp : old_fps
+  bios' <- callableToProcess bios fps
   (ex, _stdo, std, [(_, res),(_, mb_deps)]) <-
     readProcessWithOutputs [hie_bios_output, hie_bios_deps] l wdir bios'
 
@@ -520,13 +543,16 @@ biosAction wdir bios bios_deps l fp loadStyle = do
         -- Removes all duplicates.
   return $ makeCradleResult (ex, std, wdir, fromMaybe [] res) deps
 
-callableToProcess :: Callable -> Maybe String -> IO CreateProcess
-callableToProcess (Command shellCommand) file = do
+callableToProcess :: Callable -> [String] -> IO CreateProcess
+callableToProcess (Command shellCommand) files = do
   old_env <- getEnvironment
-  return $ (shell shellCommand) { env = (: old_env) . (,) hie_bios_arg <$> file }
-callableToProcess (Program path) file = do
+  let maybeArg = case files of
+        [] -> Nothing
+        _  -> Just $ "\0" `intercalate` files
+  return $ (shell shellCommand) { env = (: old_env) . (,) hie_bios_arg <$> maybeArg }
+callableToProcess (Program path) files = do
   canon_path <- canonicalizePath path
-  return $ proc canon_path (maybeToList file)
+  return $ proc canon_path files
 
 ------------------------------------------------------------------------
 
