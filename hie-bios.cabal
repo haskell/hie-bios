@@ -139,7 +139,7 @@ Extra-Source-Files:     README.md
                         tests/projects/stack-with-yaml/stack-with-yaml.cabal
                         tests/projects/stack-with-yaml/src/Lib.hs
 
-tested-with: GHC ==9.2.8 || ==9.4.8 || ==9.6.5 || ==9.8.2 || ==9.10.1
+tested-with: GHC ==9.2.8 || ==9.4.8 || ==9.6.5 || ==9.8.2 || ==9.10.1 || ==9.12.1
 
 Library
   Default-Language:     Haskell2010
@@ -176,10 +176,10 @@ Library
                         time                 >= 1.8.0 && < 1.15,
                         extra                >= 1.6.14 && < 1.9,
                         prettyprinter        ^>= 1.6 || ^>= 1.7.0,
-                        ghc                  >= 9.2.1 && < 9.11,
+                        ghc                  >= 9.2.1 && < 9.13,
                         transformers         >= 0.5.2 && < 0.7,
                         temporary            >= 1.2 && < 1.4,
-                        template-haskell     >= 2.18 && <2.23,
+                        template-haskell     >= 2.18 && <2.24,
                         text                 >= 1.2.3 && < 2.2,
                         unix-compat          >= 0.5.1 && < 0.8,
                         unordered-containers >= 0.2.9 && < 0.3,
@@ -245,4 +245,4 @@ test-suite bios-tests
 
 Source-Repository head
   Type:                 git
-  Location:             git://github.com/mpickering/hie-bios.git
+  Location:             https://github.com/haskell/hie-bios.git
