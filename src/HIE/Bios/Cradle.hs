@@ -490,7 +490,7 @@ biosWorkDir = findFileUpwards (".hie-bios" ==)
 
 biosDepsAction :: LogAction IO (WithSeverity Log) -> FilePath -> Maybe Callable -> FilePath -> LoadStyle -> IO [FilePath]
 biosDepsAction l wdir (Just biosDepsCall) fp _prevs = do
-  biosDeps' <- callableToProcess biosDepsCall (Just fp) -- TODO multi pass the previous files too
+  biosDeps' <- callableToProcess wdir biosDepsCall (Just fp) -- TODO multi pass the previous files too
   (ex, sout, serr, [(_, args)]) <- readProcessWithOutputs [hie_bios_output] l wdir biosDeps'
   case ex of
     ExitFailure _ ->  error $ show (ex, sout, serr)
@@ -507,7 +507,7 @@ biosAction
   -> IO (CradleLoadResult ComponentOptions)
 biosAction wdir bios bios_deps l fp loadStyle = do
   logCradleHasNoSupportForLoadWithContext l loadStyle "bios"
-  bios' <- callableToProcess bios (Just fp) -- TODO pass all the files instead of listToMaybe
+  bios' <- callableToProcess wdir bios (Just fp) -- TODO pass all the files instead of listToMaybe
   (ex, _stdo, std, [(_, res),(_, mb_deps)]) <-
     readProcessWithOutputs [hie_bios_output, hie_bios_deps] l wdir bios'
 
@@ -520,12 +520,12 @@ biosAction wdir bios bios_deps l fp loadStyle = do
         -- Removes all duplicates.
   return $ makeCradleResult (ex, std, wdir, fromMaybe [] res) deps
 
-callableToProcess :: Callable -> Maybe String -> IO CreateProcess
-callableToProcess (Command shellCommand) file = do
+callableToProcess :: FilePath -> Callable -> Maybe String -> IO CreateProcess
+callableToProcess _wir (Command shellCommand) file = do
   old_env <- getEnvironment
   return $ (shell shellCommand) { env = (: old_env) . (,) hie_bios_arg <$> file }
-callableToProcess (Program path) file = do
-  canon_path <- canonicalizePath path
+callableToProcess wdir (Program path) file = do
+  canon_path <- canonicalizePath (if isAbsolute path then path else wdir </> path)
   return $ proc canon_path (maybeToList file)
 
 ------------------------------------------------------------------------
