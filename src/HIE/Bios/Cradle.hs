@@ -25,6 +25,11 @@ module HIE.Bios.Cradle (
     , makeCradleResult
     -- | Cradle project configuration types
     , CradleProjectConfig(..)
+
+    -- expose to tests
+    , makeVersions
+    , isCabalMultipleCompSupported
+    , ProgramVersions
   ) where
 
 import Control.Applicative ((<|>), optional)
@@ -796,6 +801,15 @@ cabalGhcDirs l cabalProject workDir = do
   where
     projectFileArgs = projectFileProcessArgs cabalProject
 
+isCabalMultipleCompSupported :: MonadIO m => ProgramVersions -> m Bool
+isCabalMultipleCompSupported vs = do
+  cabal_version <- liftIO $ runCachedIO $ cabalVersion vs
+  ghc_version <- liftIO $ runCachedIO $ ghcVersion vs
+  -- determine which load style is supported by this cabal cradle.
+  case (cabal_version, ghc_version) of
+    (Just cabal, Just ghc) -> pure $ ghc >= makeVersion [9, 4] && cabal >= makeVersion [3, 11]
+    _ -> pure False
+
 cabalAction
   :: ResolvedCradles a
   -> FilePath
@@ -806,17 +820,10 @@ cabalAction
   -> LoadStyle
   -> CradleLoadResultT IO ComponentOptions
 cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle = do
-  cabal_version <- liftIO $ runCachedIO $ cabalVersion vs
-  ghc_version <- liftIO $ runCachedIO $ ghcVersion vs
+  multiCompSupport <- isCabalMultipleCompSupported vs
   -- determine which load style is supported by this cabal cradle.
-  determinedLoadStyle <- case (cabal_version, ghc_version) of
-    (Just cabal, Just ghc)
-      -- Multi-component supported from cabal-install 3.11
-      -- and ghc 9.4
-      | LoadWithContext _ <- loadStyle ->
-          if ghc >= makeVersion [9, 4] && cabal >= makeVersion [3, 11]
-            then pure loadStyle
-            else do
+  determinedLoadStyle <- case loadStyle of
+      LoadWithContext _ | not multiCompSupport -> do
               liftIO $
                 l
                   <& WithSeverity
@@ -825,7 +832,7 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
                     )
                     Warning
               pure LoadFile
-    _ -> pure LoadFile
+      _ -> pure loadStyle
 
   let (cabalArgs, extraFileDeps) = case determinedLoadStyle of
         LoadFile -> ([fromMaybe (fixTargetPath fp) mc], filesFromSameProject [fp])

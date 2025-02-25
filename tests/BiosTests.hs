@@ -147,11 +147,16 @@ cabalTestCases extraGhcDep =
   , testCaseSteps "failing-cabal-multi-repl-with-shrink-error-files" $ runTestEnv "./failing-multi-repl-cabal-project" $ do
       cabalAttemptLoadFiles "multi-repl-cabal-fail/app/Main.hs" ["multi-repl-cabal-fail/src/Lib.hs", "multi-repl-cabal-fail/src/Fail.hs", "NotInPath.hs"]
       root <- askRoot
-      assertCradleError (\CradleError {..} -> do
-        cradleErrorExitCode @?= ExitFailure 1
-        cradleErrorDependencies `shouldMatchList` ["cabal.project","cabal.project.local","multi-repl-cabal-fail.cabal"]
-        -- NotInPath.hs does not match the cradle for `app/Main.hs`, so it should not be tried.
-        (makeRelative root <$> cradleErrorLoadingFiles) `shouldMatchList` ["multi-repl-cabal-fail/app/Main.hs","multi-repl-cabal-fail/src/Fail.hs","multi-repl-cabal-fail/src/Lib.hs"])
+      multiSupported <- isCabalMultipleCompSupported'
+      if multiSupported
+        then
+          assertCradleError (\CradleError {..} -> do
+            cradleErrorExitCode @?= ExitFailure 1
+            cradleErrorDependencies `shouldMatchList` ["cabal.project","cabal.project.local","multi-repl-cabal-fail.cabal"]
+            -- NotInPath.hs does not match the cradle for `app/Main.hs`, so it should not be tried.
+            (makeRelative root <$> cradleErrorLoadingFiles) `shouldMatchList` ["multi-repl-cabal-fail/app/Main.hs","multi-repl-cabal-fail/src/Fail.hs","multi-repl-cabal-fail/src/Lib.hs"])
+        else assertLoadSuccess >>= \ComponentOptions {} -> do
+          return ()
   , testCaseSteps "simple-cabal" $ runTestEnv "./simple-cabal" $ do
       testDirectoryM isCabalCradle "B.hs"
   , testCaseSteps "nested-cabal" $ runTestEnv "./nested-cabal" $ do

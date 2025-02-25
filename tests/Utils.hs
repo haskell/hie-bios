@@ -47,6 +47,7 @@ module Utils (
   loadRuntimeGhcVersion,
   inCradleRootDir,
   loadFileGhc,
+  isCabalMultipleCompSupported',
 
   -- * Assertion helpers
   assertCradle,
@@ -296,6 +297,15 @@ loadRuntimeGhcVersion = do
   ghcVersionRes <- liftIO $ getRuntimeGhcVersion crd
   setGhcVersionResult ghcVersionRes
 
+isCabalMultipleCompSupported' :: TestM Bool
+isCabalMultipleCompSupported' = do
+        -- let createdProc = (proc "cabal" ["ghc", "--numeric-version"])
+        cr <- askCradle
+        root <- askRoot
+        versions <- liftIO $ makeVersions (cradleLogger cr) root ((runGhcCmd . cradleOptsProg) cr)
+        liftIO $ isCabalMultipleCompSupported versions
+
+
 testLogger :: forall a . Pretty a => L.LogAction IO (L.WithSeverity a)
 testLogger = L.cmap printLog L.logStringStderr
   where printLog (L.WithSeverity l sev) = "[" ++ show sev ++ "] " ++ show (pretty l)
@@ -398,14 +408,6 @@ assertCradleLoadError = \case
   (CradleSuccess _) -> liftIO $ assertFailure "Unexpected CradleSuccess"
   CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
   (CradleFail err) -> pure err
-
-assertCradleLoadErrorWithErrorFiles :: [FilePath] -> CradleLoadResult a -> TestM ()
-assertCradleLoadErrorWithErrorFiles failFiles = \case
-  (CradleSuccess _) -> liftIO $ assertFailure "Unexpected CradleSuccess"
-  CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
-  (CradleFail (CradleError _deps _ex _stde err_loading_files)) -> do
-    let actualFailFiles = err_loading_files
-    liftIO $ actualFailFiles @?= failFiles
 
 
 -- ---------------------------------------------------------------------------
