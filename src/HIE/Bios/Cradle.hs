@@ -830,16 +830,15 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
         LoadWithContext fps -> (concat
           [ [ "--keep-temp-files"
             , "--enable-multi-repl"
-            , fromMaybe (fixTargetPath fp) mc
             ]
-          , [fromMaybe (fixTargetPath old_fp) old_mc
+          , nub (fromMaybe (fixTargetPath fp) mc: [fromMaybe (fixTargetPath old_fp) old_mc
             | old_fp <- fps
             -- Lookup the component for the old file
             , Just (ResolvedCradle{concreteCradle = ConcreteCabal ct}) <- [selectCradle prefix old_fp cs]
             -- Only include this file if the old component is in the same project
             , (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile
             , let old_mc = cabalComponent ct
-            ]
+            ])
           ], filesFromSameProject (fp:fps))
 
   let extraDeps = concatMap snd extraFileDeps
