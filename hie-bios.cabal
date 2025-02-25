@@ -138,6 +138,11 @@ Extra-Source-Files:     README.md
                         tests/projects/stack-with-yaml/hie.yaml
                         tests/projects/stack-with-yaml/stack-with-yaml.cabal
                         tests/projects/stack-with-yaml/src/Lib.hs
+                        tests/projects/failing-multi-repl-cabal-project/multi-repl-cabal-fail/app/Main.hs
+                        tests/projects/failing-multi-repl-cabal-project/multi-repl-cabal-fail/multi-repl-cabal-fail.cabal
+                        tests/projects/failing-multi-repl-cabal-project/multi-repl-cabal-fail/src/Fail.hs
+                        tests/projects/failing-multi-repl-cabal-project/multi-repl-cabal-fail/src/Lib.hs
+                        tests/projects/failing-multi-repl-cabal-project/NotInPath.hs
 
 tested-with: GHC ==9.2.8 || ==9.4.8 || ==9.6.5 || ==9.8.2 || ==9.10.1
 
