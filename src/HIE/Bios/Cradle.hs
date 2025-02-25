@@ -73,6 +73,7 @@ import GHC.ResponseFile (escapeArgs)
 import Data.Version
 import Data.IORef
 import Text.ParserCombinators.ReadP (readP_to_S)
+import qualified Data.HashMap.Strict as M
 
 ----------------------------------------------------------------
 
@@ -806,40 +807,42 @@ cabalAction
   -> CradleLoadResultT IO ComponentOptions
 cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle = do
   cabal_version <- liftIO $ runCachedIO $ cabalVersion vs
-  ghc_version   <- liftIO $ runCachedIO $ ghcVersion vs
+  ghc_version <- liftIO $ runCachedIO $ ghcVersion vs
   -- determine which load style is supported by this cabal cradle.
   determinedLoadStyle <- case (cabal_version, ghc_version) of
     (Just cabal, Just ghc)
       -- Multi-component supported from cabal-install 3.11
       -- and ghc 9.4
       | LoadWithContext _ <- loadStyle ->
-          if ghc >= makeVersion [9,4] && cabal >= makeVersion [3,11]
+          if ghc >= makeVersion [9, 4] && cabal >= makeVersion [3, 11]
             then pure loadStyle
             else do
-              liftIO $ l <& WithSeverity
-                (LogLoadWithContextUnsupported "cabal"
-                  $ Just "cabal or ghc version is too old. We require `cabal >= 3.11` and `ghc >= 9.4`"
-                )
-                Warning
+              liftIO $
+                l
+                  <& WithSeverity
+                    ( LogLoadWithContextUnsupported "cabal" $
+                        Just "cabal or ghc version is too old. We require `cabal >= 3.11` and `ghc >= 9.4`"
+                    )
+                    Warning
               pure LoadFile
     _ -> pure LoadFile
 
-
   let (cabalArgs, extraFileDeps) = case determinedLoadStyle of
         LoadFile -> ([fromMaybe (fixTargetPath fp) mc], filesFromSameProject [fp])
-        LoadWithContext fps -> (concat
-          [ [ "--keep-temp-files"
-            , "--enable-multi-repl"
-            ]
-          , nub (fromMaybe (fixTargetPath fp) mc: [fromMaybe (fixTargetPath old_fp) old_mc
-            | old_fp <- fps
-            -- Lookup the component for the old file
-            , Just (ResolvedCradle{concreteCradle = ConcreteCabal ct}) <- [selectCradle prefix old_fp cs]
-            -- Only include this file if the old component is in the same project
-            , (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile
-            , let old_mc = cabalComponent ct
-            ])
-          ], filesFromSameProject (fp:fps))
+        LoadWithContext fps ->
+          let allFpsDeps =
+                M.toList $
+                  M.fromListWith
+                    (<>)
+                    ((fromMaybe (fixTargetPath fp) mc, []) : filesFromSameProject (fp : fps))
+           in ( concat
+                  [ [ "--keep-temp-files",
+                      "--enable-multi-repl"
+                    ],
+                    fst <$> allFpsDeps
+                  ],
+                allFpsDeps
+              )
 
   let extraDeps = concatMap snd extraFileDeps
       loadingFiles = map fst extraFileDeps
@@ -853,23 +856,24 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
         (T.pack . show <$> loadingFiles)
       `WithSeverity` Debug
 
-  let
-    cabalCommand = "v2-repl"
+  let cabalCommand = "v2-repl"
 
-  cabalProc <- cabalProcess l projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
+  cabalProc <-
+    cabalProcess l projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
       deps <- cabalCradleDependencies projectFile workDir workDir
-      pure $ err { cradleErrorDependencies = cradleErrorDependencies err ++ deps }
+      pure $ err {cradleErrorDependencies = cradleErrorDependencies err ++ deps}
 
   (ex, output, stde, [(_, maybeArgs)]) <- liftIO $ readProcessWithOutputs [hie_bios_output] l workDir cabalProc
   let args = fromMaybe [] maybeArgs
 
   let errorDetails =
-        ["Failed command: " <> prettyCmdSpec (cmdspec cabalProc)
-        , unlines output
-        , unlines stde
-        , unlines $ args
-        , "Process Environment:"]
-        <> prettyProcessEnv cabalProc
+        [ "Failed command: " <> prettyCmdSpec (cmdspec cabalProc),
+          unlines output,
+          unlines stde,
+          unlines args,
+          "Process Environment:"
+        ]
+          <> prettyProcessEnv cabalProc
 
   when (ex /= ExitSuccess) $ do
     deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
@@ -883,7 +887,7 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
       -- Best effort. Assume the working directory is the
       -- root of the component, so we are right in trivial cases at least.
       deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
-      throwCE (CradleError (deps <> extraDeps) ex (["Failed to parse result of calling cabal" ] <> errorDetails) loadingFiles)
+      throwCE (CradleError (deps <> extraDeps) ex (["Failed to parse result of calling cabal"] <> errorDetails) loadingFiles)
     Just (componentDir, final_args) -> do
       deps <- liftIO $ cabalCradleDependencies projectFile workDir componentDir
       CradleLoadResultT $ pure $ makeCradleResult (ex, stde, componentDir, final_args) (deps <> extraDeps) loadingFiles
@@ -894,14 +898,14 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
       | isWindows && hasDrive x = makeRelative workDir x
       | otherwise = x
     filesFromSameProject fps =
-          [ (fromMaybe (fixTargetPath old_fp) old_mc, deps)
-            | old_fp <- fps
-            -- Lookup the component for the old file
-            , Just (ResolvedCradle{concreteCradle = ConcreteCabal ct, cradleDeps = deps}) <- [selectCradle prefix old_fp cs]
-            -- Only include this file if the old component is in the same project
-            , (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile
-            , let old_mc = cabalComponent ct
-            ]
+      [ (fromMaybe (fixTargetPath old_fp) old_mc, deps)
+      | old_fp <- fps,
+        -- Lookup the component for the old file
+        Just (ResolvedCradle {concreteCradle = ConcreteCabal ct, cradleDeps = deps}) <- [selectCradle prefix old_fp cs],
+        -- Only include this file if the old component is in the same project
+        (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile,
+        let old_mc = cabalComponent ct
+      ]
 
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
