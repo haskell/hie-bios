@@ -144,13 +144,13 @@ cabalTestCases extraGhcDep =
       assertCradleError (\CradleError {..} -> do
         cradleErrorExitCode @?= ExitFailure 1
         cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
-  , testCaseSteps "failing-cabal2" $ runTestEnv "./failing-multi-repl-cabal-project" $ do
+  , testCaseSteps "failing-cabal-multi-repl-with-shrink-error-files" $ runTestEnv "./failing-multi-repl-cabal-project" $ do
       cabalAttemptLoadFiles "multi-repl-cabal-fail/app/Main.hs" ["multi-repl-cabal-fail/src/Lib.hs", "multi-repl-cabal-fail/src/Fail.hs", "NotInPath.hs"]
       -- NotInPath.hs does not match the cradle for `app/Main.hs`, so it should not be tried.
       root <- askRoot
       assertCradleError (\CradleError {..} -> do
         cradleErrorExitCode @?= ExitFailure 1
-        cradleErrorDependencies `shouldMatchList` ["cabal.project", "cabal.project.local"]
+        cradleErrorDependencies `shouldMatchList` ["cabal.project","cabal.project.local","multi-repl-cabal-fail.cabal"]
         -- how do I take file names
         (makeRelative root <$> cradleErrorLoadingFiles) `shouldMatchList` ["multi-repl-cabal-fail/app/Main.hs","multi-repl-cabal-fail/src/Fail.hs","multi-repl-cabal-fail/src/Lib.hs"])
   , testCaseSteps "simple-cabal" $ runTestEnv "./simple-cabal" $ do

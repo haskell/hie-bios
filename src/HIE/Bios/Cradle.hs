@@ -127,7 +127,14 @@ data ConcreteCradle a
   | ConcreteDirect [String]
   | ConcreteNone
   | ConcreteOther a
-  deriving Show
+
+instance Show (ConcreteCradle a) where
+  show = \case ConcreteCabal ct -> "ConcreteCabal " ++ show ct
+               ConcreteStack st -> "ConcreteStack " ++ show st
+               ConcreteBios _ _ mf -> "ConcreteBios " ++ show mf
+               ConcreteDirect cs -> "ConcreteDirect " ++ show cs
+               ConcreteNone -> "ConcreteNone"
+               ConcreteOther{} -> "ConcreteOther"
 
 -- | ConcreteCradle augmented with information on which file the
 -- cradle applies
@@ -819,7 +826,7 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
 
 
   let (cabalArgs, extraFileDeps) = case determinedLoadStyle of
-        LoadFile -> ([fromMaybe (fixTargetPath fp) mc], filesFromSameProject [fp] projectFile)
+        LoadFile -> ([fromMaybe (fixTargetPath fp) mc], filesFromSameProject [fp])
         LoadWithContext fps -> (concat
           [ [ "--keep-temp-files"
             , "--enable-multi-repl"
@@ -833,11 +840,19 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
             , (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile
             , let old_mc = cabalComponent ct
             ]
-          ], filesFromSameProject (fp:fps) projectFile)
+          ], filesFromSameProject (fp:fps))
 
   let extraDeps = concatMap snd extraFileDeps
       loadingFiles = map fst extraFileDeps
   liftIO $ l <& LogComputedCradleLoadStyle "cabal" determinedLoadStyle `WithSeverity` Info
+  liftIO $
+    l
+      <& LogCabalLoad
+        fp
+        mc
+        (T.pack . show . prefix <$> cs)
+        (T.pack . show <$> loadingFiles)
+      `WithSeverity` Debug
 
   let
     cabalCommand = "v2-repl"
@@ -879,13 +894,13 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
     fixTargetPath x
       | isWindows && hasDrive x = makeRelative workDir x
       | otherwise = x
-    filesFromSameProject fps projectFile' =
+    filesFromSameProject fps =
           [ (fromMaybe (fixTargetPath old_fp) old_mc, deps)
             | old_fp <- fps
             -- Lookup the component for the old file
             , Just (ResolvedCradle{concreteCradle = ConcreteCabal ct, cradleDeps = deps}) <- [selectCradle prefix old_fp cs]
             -- Only include this file if the old component is in the same project
-            , (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile'
+            , (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile
             , let old_mc = cabalComponent ct
             ]
 
@@ -940,7 +955,7 @@ cabalWorkDir wdir =
 data CradleProjectConfig
   = NoExplicitConfig
   | ExplicitConfig FilePath
-  deriving Eq
+  deriving (Eq, Show)
 
 -- | Create an explicit project configuration. Expects a working directory
 -- followed by an optional name of the project configuration.

@@ -1,7 +1,0 @@
-cradle:
-  cabal:
-      - path: ./src
-        component: "lib:multi-cabal"
-
-      - path: ./app
-        component: "exe:multi-cabal"
