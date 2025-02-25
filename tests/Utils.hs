@@ -42,6 +42,7 @@ module Utils (
   initCradle,
   initImplicitCradle,
   loadComponentOptions,
+  loadComponentOptionsMultiStyle,
   loadRuntimeGhcLibDir,
   loadRuntimeGhcVersion,
   inCradleRootDir,
@@ -272,6 +273,15 @@ loadComponentOptions fp = do
   clr <- liftIO $ getCompilerOptions a_fp LoadFile crd
   setLoadResult clr
 
+loadComponentOptionsMultiStyle :: FilePath -> [FilePath] -> TestM ()
+loadComponentOptionsMultiStyle fp fps = do
+  a_fp <- normFile fp
+  a_fps <- mapM normFile fps
+  crd <- askCradle
+  step $ "Initialise flags for: " <> fp <> " and " <> show fps
+  clr <- liftIO $ getCompilerOptions a_fp (LoadWithContext a_fps) crd
+  setLoadResult clr
+
 loadRuntimeGhcLibDir :: TestM ()
 loadRuntimeGhcLibDir = do
   crd <- askCradle
@@ -388,6 +398,15 @@ assertCradleLoadError = \case
   (CradleSuccess _) -> liftIO $ assertFailure "Unexpected CradleSuccess"
   CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
   (CradleFail err) -> pure err
+
+assertCradleLoadErrorWithErrorFiles :: [FilePath] -> CradleLoadResult a -> TestM ()
+assertCradleLoadErrorWithErrorFiles failFiles = \case
+  (CradleSuccess _) -> liftIO $ assertFailure "Unexpected CradleSuccess"
+  CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
+  (CradleFail (CradleError _deps _ex _stde err_loading_files)) -> do
+    let actualFailFiles = err_loading_files
+    liftIO $ actualFailFiles @?= failFiles
+
 
 -- ---------------------------------------------------------------------------
 -- High-level, re-usable assertions

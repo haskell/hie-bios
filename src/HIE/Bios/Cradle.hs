@@ -817,8 +817,9 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
               pure LoadFile
     _ -> pure LoadFile
 
+
   let (cabalArgs, extraFileDeps) = case determinedLoadStyle of
-        LoadFile -> ([fromMaybe (fixTargetPath fp) mc], [(fp, deps) | Just (ResolvedCradle{cradleDeps = deps}) <- [selectCradle prefix fp cs]])
+        LoadFile -> ([fromMaybe (fixTargetPath fp) mc], filesFromSameProject [fp] projectFile)
         LoadWithContext fps -> (concat
           [ [ "--keep-temp-files"
             , "--enable-multi-repl"
@@ -832,7 +833,7 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
             , (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile
             , let old_mc = cabalComponent ct
             ]
-          ], [(file, deps) | file <- fp:fps, Just (ResolvedCradle{cradleDeps = deps}) <- [selectCradle prefix file cs]])
+          ], filesFromSameProject (fp:fps) projectFile)
 
   let extraDeps = concatMap snd extraFileDeps
       loadingFiles = map fst extraFileDeps
@@ -878,6 +879,15 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
     fixTargetPath x
       | isWindows && hasDrive x = makeRelative workDir x
       | otherwise = x
+    filesFromSameProject fps projectFile' =
+          [ (fromMaybe (fixTargetPath old_fp) old_mc, deps)
+            | old_fp <- fps
+            -- Lookup the component for the old file
+            , Just (ResolvedCradle{concreteCradle = ConcreteCabal ct, cradleDeps = deps}) <- [selectCradle prefix old_fp cs]
+            -- Only include this file if the old component is in the same project
+            , (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile'
+            , let old_mc = cabalComponent ct
+            ]
 
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
