@@ -894,8 +894,8 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
       CradleLoadResultT $ pure $ makeCradleResult (ex, stde, componentDir, final_args) (deps <> extraDeps) loadingFiles
   where
     -- Need to make relative on Windows, due to a Cabal bug with how it
-    -- parses file targets with a C: drive in it by making it relative to
-    -- the working directory.
+    -- parses file targets with a C: drive in it. So we decide to make
+    -- the paths relative to the working directory.
     fixTargetPath x
       | isWindows && hasDrive x = makeRelative workDir x
       | otherwise = x
