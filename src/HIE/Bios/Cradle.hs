@@ -839,14 +839,7 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
            in (["--keep-temp-files", "--enable-multi-repl"] ++ allModules, allFiles, allFpsDeps)
 
   liftIO $ l <& LogComputedCradleLoadStyle "cabal" determinedLoadStyle `WithSeverity` Info
-  liftIO $
-    l
-      <& LogCabalLoad
-        fp
-        mc
-        (prefix <$> cs)
-        loadingFiles
-      `WithSeverity` Debug
+  liftIO $ l <& LogCabalLoad fp mc (prefix <$> cs) loadingFiles `WithSeverity` Debug
 
   let cabalCommand = "v2-repl"
 
