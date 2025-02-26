@@ -133,14 +133,8 @@ data ConcreteCradle a
   | ConcreteDirect [String]
   | ConcreteNone
   | ConcreteOther a
+  deriving Show
 
-instance Show (ConcreteCradle a) where
-  show = \case ConcreteCabal ct -> "ConcreteCabal " ++ show ct
-               ConcreteStack st -> "ConcreteStack " ++ show st
-               ConcreteBios _ _ mf -> "ConcreteBios " ++ show mf
-               ConcreteDirect cs -> "ConcreteDirect " ++ show cs
-               ConcreteNone -> "ConcreteNone"
-               ConcreteOther{} -> "ConcreteOther"
 
 -- | ConcreteCradle augmented with information on which file the
 -- cradle applies
