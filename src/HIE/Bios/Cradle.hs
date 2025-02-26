@@ -52,6 +52,7 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.HashMap.Strict as Map
+import qualified Data.HashSet as S
 import Data.Maybe (fromMaybe, maybeToList)
 import Data.List
 import Data.List.Extra (trimEnd)
@@ -78,7 +79,6 @@ import GHC.ResponseFile (escapeArgs)
 import Data.Version
 import Data.IORef
 import Text.ParserCombinators.ReadP (readP_to_S)
-import qualified Data.HashMap.Strict as M
 
 ----------------------------------------------------------------
 
@@ -817,36 +817,27 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
   multiCompSupport <- isCabalMultipleCompSupported vs
   -- determine which load style is supported by this cabal cradle.
   determinedLoadStyle <- case loadStyle of
-      LoadWithContext _ | not multiCompSupport -> do
-              liftIO $
-                l
-                  <& WithSeverity
-                    ( LogLoadWithContextUnsupported "cabal" $
-                        Just "cabal or ghc version is too old. We require `cabal >= 3.11` and `ghc >= 9.4`"
-                    )
-                    Warning
-              pure LoadFile
-      _ -> pure loadStyle
+    LoadWithContext _ | not multiCompSupport -> do
+      liftIO $
+        l
+          <& WithSeverity
+            ( LogLoadWithContextUnsupported "cabal" $
+                Just "cabal or ghc version is too old. We require `cabal >= 3.11` and `ghc >= 9.4`"
+            )
+            Warning
+      pure LoadFile
+    _ -> pure loadStyle
 
-  let (cabalArgs, extraFileDeps) = case determinedLoadStyle of
-        LoadFile -> ([fromMaybe (fixTargetPath fp) mc], filesFromSameProject [fp])
+  let fpModule = fromMaybe (fixTargetPath fp) mc
+  let (cabalArgs, loadingFiles, extraDeps) = case determinedLoadStyle of
+        LoadFile -> ([fpModule], [fp], [])
         LoadWithContext fps ->
-          let allFpsDeps =
-                M.toList $
-                  M.fromListWith
-                    (<>)
-                    ((fromMaybe (fixTargetPath fp) mc, []) : filesFromSameProject (fp : fps))
-           in ( concat
-                  [ [ "--keep-temp-files",
-                      "--enable-multi-repl"
-                    ],
-                    fst <$> allFpsDeps
-                  ],
-                allFpsDeps
-              )
+          let allModulesFpsDeps = ((fpModule, fp, []) : moduleFilesFromSameProject fps)
+              allModules = nubSet $ firstOfThree <$> allModulesFpsDeps
+              allFiles = nubSet $ secondOfThree <$> allModulesFpsDeps
+              allFpsDeps = nubSet $ concatMap thirdOfThree allModulesFpsDeps
+           in (["--keep-temp-files", "--enable-multi-repl"] ++ allModules, allFiles, allFpsDeps)
 
-  let extraDeps = concatMap snd extraFileDeps
-      loadingFiles = map fst extraFileDeps
   liftIO $ l <& LogComputedCradleLoadStyle "cabal" determinedLoadStyle `WithSeverity` Info
   liftIO $
     l
@@ -899,11 +890,15 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
     fixTargetPath x
       | isWindows && hasDrive x = makeRelative workDir x
       | otherwise = x
-    filesFromSameProject fps =
-      [ (fromMaybe (fixTargetPath old_fp) old_mc, deps)
-      | old_fp <- fps,
+    nubSet = S.toList . S.fromList
+    firstOfThree (a, _, _) = a
+    secondOfThree (_, b, _) = b
+    thirdOfThree (_, _, c) = c
+    moduleFilesFromSameProject fps =
+      [ (fromMaybe (fixTargetPath file) old_mc, file, deps)
+      | file <- fps,
         -- Lookup the component for the old file
-        Just (ResolvedCradle {concreteCradle = ConcreteCabal ct, cradleDeps = deps}) <- [selectCradle prefix old_fp cs],
+        Just (ResolvedCradle {concreteCradle = ConcreteCabal ct, cradleDeps = deps}) <- [selectCradle prefix file cs],
         -- Only include this file if the old component is in the same project
         (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile,
         let old_mc = cabalComponent ct
