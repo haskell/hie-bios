@@ -408,7 +408,6 @@ assertCradleLoadError = \case
   CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
   (CradleFail err) -> pure err
 
-
 -- ---------------------------------------------------------------------------
 -- High-level, re-usable assertions
 -- ---------------------------------------------------------------------------
