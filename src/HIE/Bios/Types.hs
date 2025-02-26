@@ -273,6 +273,9 @@ data CradleError = CradleError
   -- ^ Standard error output that can be shown to users to explain
   -- the loading error.
   , cradleErrorLoadingFiles :: [FilePath]
+  -- ^ files that were attempted to be loaded by the cradle.
+  -- This can be useful if we are loading multiple files at once,
+  -- e.g. in a cabal cradle with the multi-repl feature.
   }
   deriving (Show, Eq)
 
