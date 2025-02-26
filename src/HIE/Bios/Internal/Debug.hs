@@ -53,7 +53,7 @@ debugInfo fp cradle = unlines <$> do
                , "Deps: " ++ show deps
                , "Exit Code: " ++ show ext
                , "Stderr: " ++ unlines stderr
-               , "ExtraFiles: " ++ unlines extraFiles
+               , "Failed: " ++ unlines extraFiles
                ]
       CradleNone ->
         return ["No cradle"]
