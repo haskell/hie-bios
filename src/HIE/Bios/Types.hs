@@ -99,7 +99,7 @@ data Log
   | LogRequestedCradleLoadStyle !T.Text !LoadStyle
   | LogComputedCradleLoadStyle !T.Text !LoadStyle
   | LogLoadWithContextUnsupported !T.Text !(Maybe T.Text)
-  | LogCabalLoad !FilePath (Maybe String) ![T.Text] ![T.Text]
+  | LogCabalLoad !FilePath !(Maybe String) ![FilePath] ![FilePath]
   deriving (Show)
 
 instance Pretty Log where

@@ -853,8 +853,8 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
       <& LogCabalLoad
         fp
         mc
-        (T.pack . show . prefix <$> cs)
-        (T.pack . show <$> loadingFiles)
+        (prefix <$> cs)
+        loadingFiles
       `WithSeverity` Debug
 
   let cabalCommand = "v2-repl"
