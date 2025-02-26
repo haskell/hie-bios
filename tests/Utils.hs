@@ -299,11 +299,10 @@ loadRuntimeGhcVersion = do
 
 isCabalMultipleCompSupported' :: TestM Bool
 isCabalMultipleCompSupported' = do
-        -- let createdProc = (proc "cabal" ["ghc", "--numeric-version"])
-        cr <- askCradle
-        root <- askRoot
-        versions <- liftIO $ makeVersions (cradleLogger cr) root ((runGhcCmd . cradleOptsProg) cr)
-        liftIO $ isCabalMultipleCompSupported versions
+  cr <- askCradle
+  root <- askRoot
+  versions <- liftIO $ makeVersions (cradleLogger cr) root ((runGhcCmd . cradleOptsProg) cr)
+  liftIO $ isCabalMultipleCompSupported versions
 
 
 testLogger :: forall a . Pretty a => L.LogAction IO (L.WithSeverity a)
