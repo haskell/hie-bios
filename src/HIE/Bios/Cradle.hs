@@ -55,7 +55,7 @@ import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as S
 import Data.Maybe (fromMaybe, maybeToList)
 import Data.List
-import Data.List.Extra (trimEnd)
+import Data.List.Extra (trimEnd, nubOrd)
 import Data.Ord (Down(..))
 import qualified Data.Text as T
 import System.Environment
@@ -79,6 +79,7 @@ import GHC.ResponseFile (escapeArgs)
 import Data.Version
 import Data.IORef
 import Text.ParserCombinators.ReadP (readP_to_S)
+import Data.Tuple.Extra (fst3, snd3, thd3)
 
 ----------------------------------------------------------------
 
