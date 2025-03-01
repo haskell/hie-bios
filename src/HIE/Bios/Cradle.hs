@@ -833,9 +833,9 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
         LoadFile -> ([fpModule], [fp], [])
         LoadWithContext fps ->
           let allModulesFpsDeps = ((fpModule, fp, []) : moduleFilesFromSameProject fps)
-              allModules = nubSet $ firstOfThree <$> allModulesFpsDeps
-              allFiles = nubSet $ secondOfThree <$> allModulesFpsDeps
-              allFpsDeps = nubSet $ concatMap thirdOfThree allModulesFpsDeps
+              allModules = nubOrd $ fst3 <$> allModulesFpsDeps
+              allFiles = nubOrd $ snd3 <$> allModulesFpsDeps
+              allFpsDeps = nubOrd $ concatMap thd3 allModulesFpsDeps
            in (["--keep-temp-files", "--enable-multi-repl"] ++ allModules, allFiles, allFpsDeps)
 
   liftIO $ l <& LogComputedCradleLoadStyle "cabal" determinedLoadStyle `WithSeverity` Info
@@ -883,10 +883,6 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
     fixTargetPath x
       | isWindows && hasDrive x = makeRelative workDir x
       | otherwise = x
-    nubSet = S.toList . S.fromList
-    firstOfThree (a, _, _) = a
-    secondOfThree (_, b, _) = b
-    thirdOfThree (_, _, c) = c
     moduleFilesFromSameProject fps =
       [ (fromMaybe (fixTargetPath file) old_mc, file, deps)
       | file <- fps,
