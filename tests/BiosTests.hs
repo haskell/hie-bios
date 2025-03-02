@@ -19,7 +19,7 @@ import Control.Monad ( forM_ )
 import Data.List ( sort, isPrefixOf )
 import Data.Typeable
 import System.Directory
-import System.FilePath ((</>))
+import System.FilePath ((</>), makeRelative)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import Control.Monad.Extra (unlessM)
 import qualified HIE.Bios.Ghc.Gap as Gap
@@ -138,11 +138,25 @@ biosTestCases =
 
 cabalTestCases :: ToolDependency -> [TestTree]
 cabalTestCases extraGhcDep =
-  [ testCaseSteps "failing-cabal" $ runTestEnv "./failing-cabal" $ do
+  [
+    testCaseSteps "failing-cabal" $ runTestEnv "./failing-cabal" $ do
       cabalAttemptLoad "MyLib.hs"
       assertCradleError (\CradleError {..} -> do
         cradleErrorExitCode @?= ExitFailure 1
         cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
+  , testCaseSteps "failing-cabal-multi-repl-with-shrink-error-files" $ runTestEnv "./failing-multi-repl-cabal-project" $ do
+      cabalAttemptLoadFiles "multi-repl-cabal-fail/app/Main.hs" ["multi-repl-cabal-fail/src/Lib.hs", "multi-repl-cabal-fail/src/Fail.hs", "NotInPath.hs"]
+      root <- askRoot
+      multiSupported <- isCabalMultipleCompSupported'
+      if multiSupported
+        then
+          assertCradleError (\CradleError {..} -> do
+            cradleErrorExitCode @?= ExitFailure 1
+            cradleErrorDependencies `shouldMatchList` ["cabal.project","cabal.project.local","multi-repl-cabal-fail.cabal"]
+            -- NotInPath.hs does not match the cradle for `app/Main.hs`, so it should not be tried.
+            (makeRelative root <$> cradleErrorLoadingFiles) `shouldMatchList` ["multi-repl-cabal-fail/app/Main.hs","multi-repl-cabal-fail/src/Fail.hs","multi-repl-cabal-fail/src/Lib.hs"])
+        else assertLoadSuccess >>= \ComponentOptions {} -> do
+          return ()
   , testCaseSteps "simple-cabal" $ runTestEnv "./simple-cabal" $ do
       testDirectoryM isCabalCradle "B.hs"
   , testCaseSteps "nested-cabal" $ runTestEnv "./nested-cabal" $ do
@@ -223,6 +237,12 @@ cabalTestCases extraGhcDep =
       initCradle fp
       assertCradle isCabalCradle
       loadComponentOptions fp
+
+    cabalAttemptLoadFiles :: FilePath -> [FilePath] -> TestM ()
+    cabalAttemptLoadFiles fp fps = do
+      initCradle fp
+      assertCradle isCabalCradle
+      loadComponentOptionsMultiStyle fp fps
 
     cabalLoadOptions :: FilePath -> TestM ComponentOptions
     cabalLoadOptions fp = do

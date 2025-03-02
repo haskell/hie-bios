@@ -42,10 +42,12 @@ module Utils (
   initCradle,
   initImplicitCradle,
   loadComponentOptions,
+  loadComponentOptionsMultiStyle,
   loadRuntimeGhcLibDir,
   loadRuntimeGhcVersion,
   inCradleRootDir,
   loadFileGhc,
+  isCabalMultipleCompSupported',
 
   -- * Assertion helpers
   assertCradle,
@@ -272,6 +274,15 @@ loadComponentOptions fp = do
   clr <- liftIO $ getCompilerOptions a_fp LoadFile crd
   setLoadResult clr
 
+loadComponentOptionsMultiStyle :: FilePath -> [FilePath] -> TestM ()
+loadComponentOptionsMultiStyle fp fps = do
+  a_fp <- normFile fp
+  a_fps <- mapM normFile fps
+  crd <- askCradle
+  step $ "Initialise flags for: " <> fp <> " and " <> show fps
+  clr <- liftIO $ getCompilerOptions a_fp (LoadWithContext a_fps) crd
+  setLoadResult clr
+
 loadRuntimeGhcLibDir :: TestM ()
 loadRuntimeGhcLibDir = do
   crd <- askCradle
@@ -285,6 +296,14 @@ loadRuntimeGhcVersion = do
   step "Load run-time ghc version"
   ghcVersionRes <- liftIO $ getRuntimeGhcVersion crd
   setGhcVersionResult ghcVersionRes
+
+isCabalMultipleCompSupported' :: TestM Bool
+isCabalMultipleCompSupported' = do
+  cr <- askCradle
+  root <- askRoot
+  versions <- liftIO $ makeVersions (cradleLogger cr) root ((runGhcCmd . cradleOptsProg) cr)
+  liftIO $ isCabalMultipleCompSupported versions
+
 
 testLogger :: forall a . Pretty a => L.LogAction IO (L.WithSeverity a)
 testLogger = L.cmap printLog L.logStringStderr
@@ -380,7 +399,7 @@ assertCradleLoadSuccess :: CradleLoadResult a -> TestM a
 assertCradleLoadSuccess = \case
   (CradleSuccess x) -> pure x
   CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
-  (CradleFail (CradleError _deps _ex stde)) ->
+  (CradleFail (CradleError _deps _ex stde _err_loading_files)) ->
     liftIO $ assertFailure ("Unexpected cradle fail" <> unlines stde)
 
 assertCradleLoadError :: CradleLoadResult a -> TestM CradleError

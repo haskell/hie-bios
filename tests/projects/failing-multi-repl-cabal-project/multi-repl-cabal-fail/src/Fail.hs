@@ -1,4 +1,4 @@
-module Lib where
+module Fail where
 
 import System.FilePath ((</>))
 
