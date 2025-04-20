@@ -32,7 +32,7 @@ module HIE.Bios.Cradle (
     , ProgramVersions
   ) where
 
-import Control.Applicative ((<|>), optional)
+import Control.Applicative ((<|>), asum, optional)
 import Data.Bifunctor (first)
 import Control.DeepSeq
 import Control.Exception (handleJust)
@@ -53,7 +53,7 @@ import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.HashMap.Strict as Map
 import qualified Data.HashSet as S
-import Data.Maybe (fromMaybe, maybeToList)
+import Data.Maybe (fromMaybe, isNothing, maybeToList)
 import Data.List
 import Data.List.Extra (trimEnd, nubOrd)
 import Data.Ord (Down(..))
@@ -555,13 +555,16 @@ cabalCradle l cs wdir mc projectFile
     { actionName = Types.Cabal
     , runCradle = \fp -> runCradleResultT . cabalAction cs wdir mc l projectFile fp
     , runGhcCmd = \args -> runCradleResultT $ do
-        buildDir <- liftIO $ cabalBuildDir wdir
-        -- Workaround for a cabal-install bug on 3.0.0.0:
-        -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
-        liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
-        -- Need to pass -v0 otherwise we get "resolving dependencies..."
-        cabalProc <- cabalProcess l projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
-        readProcessWithCwd' l cabalProc ""
+        cabalPathCompilerPath l wdir >>= \case
+          Just p -> readProcessWithCwd_ l wdir p args ""
+          Nothing -> do
+            buildDir <- liftIO $ cabalBuildDir wdir
+            -- Workaround for a cabal-install bug on 3.0.0.0:
+            -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
+            liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
+            -- Need to pass -v0 otherwise we get "resolving dependencies..."
+            cabalProc <- cabalProcess l projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
+            readProcessWithCwd' l cabalProc ""
     }
 
 
@@ -576,9 +579,17 @@ cabalCradle l cs wdir mc projectFile
 -- queries, such as ghc version or location of the libdir.
 cabalProcess :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
 cabalProcess l cabalProject workDir command args = do
-  ghcDirs <- cabalGhcDirs l cabalProject workDir
+  (ghcDirs, ghcPkgPath) <- cabalPathCompilerPath l workDir >>= \case
+    Just p -> do
+      libdir <- readProcessWithCwd_ l workDir p ["--print-libdir"] ""
+      pure ((p, trimEnd libdir), Nothing)
+    Nothing -> do
+      ghcDirs@(ghcBin, libdir) <- cabalGhcDirs l cabalProject workDir
+      ghcPkgPath <- liftIO $ withGhcPkgTool ghcBin libdir
+      pure (ghcDirs, Just ghcPkgPath)
+
   newEnvironment <- liftIO $ setupEnvironment ghcDirs
-  cabalProc <- liftIO $ setupCabalCommand ghcDirs
+  cabalProc <- liftIO $ setupCabalCommand ghcPkgPath
   pure $ (cabalProc
       { env = Just newEnvironment
       , cwd = Just workDir
@@ -593,17 +604,21 @@ cabalProcess l cabalProject workDir command args = do
       environment <- getCleanEnvironment
       pure $ processEnvironment ghcDirs ++ environment
 
-    setupCabalCommand :: (FilePath, FilePath) -> IO CreateProcess
-    setupCabalCommand (ghcBin, libdir) = do
+    setupCabalCommand :: Maybe FilePath -> IO CreateProcess
+    setupCabalCommand ghcPkgPath = do
       wrapper_fp <- withGhcWrapperTool l ("ghc", []) workDir
       buildDir <- cabalBuildDir workDir
-      ghcPkgPath <- withGhcPkgTool ghcBin libdir
-      let extraCabalArgs =
+      let hcPkgArgs = case ghcPkgPath of
+            Nothing -> []
+            Just p -> ["--with-hc-pkg", p]
+
+          extraCabalArgs =
             [ "--builddir=" <> buildDir
             , command
             , "--with-compiler", wrapper_fp
-            , "--with-hc-pkg", ghcPkgPath
-            ] <> projectFileProcessArgs cabalProject
+            ]
+            <> hcPkgArgs
+            <> projectFileProcessArgs cabalProject
       pure $ proc "cabal" (extraCabalArgs ++ args)
 
 -- | Discovers the location of 'ghc-pkg' given the absolute path to 'ghc'
@@ -795,6 +810,17 @@ cabalGhcDirs l cabalProject workDir = do
   pure (trimEnd exe, trimEnd libdir)
   where
     projectFileArgs = projectFileProcessArgs cabalProject
+
+cabalPathCompilerPath :: LogAction IO (WithSeverity Log) -> FilePath -> CradleLoadResultT IO (Maybe FilePath)
+cabalPathCompilerPath l workDir = do
+  liftIO (getCabalVersion l workDir) >>= \case
+    Just cabal_version | cabal_version >= makeVersion [3,14] -> do
+      compiler_info <- readProcessWithCwd_ l workDir "cabal" ["path", "--compiler-info"] ""
+      let compiler_path = asum $ stripPrefix "compiler-path: " <$> lines compiler_info
+      when (isNothing compiler_path) $
+        liftIO $ l <& WithSeverity (LogAny "Could not parse output of 'cabal path'") Warning
+      pure compiler_path
+    _ -> pure Nothing
 
 isCabalMultipleCompSupported :: MonadIO m => ProgramVersions -> m Bool
 isCabalMultipleCompSupported vs = do
