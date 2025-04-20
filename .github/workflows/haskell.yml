@@ -15,6 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        cabal: ['3.10.2.0', '3.14.1.0']
         ghc: ['9.12.1', '9.10.1', '9.8.2', '9.6.5', '9.4.8', '9.2.8']
         os: [ubuntu-latest, macOS-latest, windows-latest]
 
@@ -23,13 +24,13 @@ jobs:
     - id:   extra-ghc
       uses: haskell-actions/setup@v2
       with:
-        cabal-version: '3.10.2.0'
+        cabal-version: ${{ matrix.cabal }}
         ghc-version: '8.10.7'
 
     - uses: haskell-actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
-        cabal-version: '3.10.2.0'
+        cabal-version: ${{ matrix.cabal }}
         enable-stack: true
 
     - name: Print extra ghc version
