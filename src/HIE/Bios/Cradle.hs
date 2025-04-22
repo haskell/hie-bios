@@ -559,7 +559,7 @@ cabalCradle l cs wdir mc projectFile
     { actionName = Types.Cabal
     , runCradle = \fp -> runCradleResultT . cabalAction cs wdir mc l projectFile fp
     , runGhcCmd = \args -> runCradleResultT $ do
-        cabalPathCompilerPath l wdir >>= \case
+        cabalPathCompilerPath l wdir projectFile >>= \case
           Just p -> readProcessWithCwd_ l wdir p args ""
           Nothing -> do
             buildDir <- liftIO $ cabalBuildDir wdir
@@ -583,7 +583,7 @@ cabalCradle l cs wdir mc projectFile
 -- queries, such as ghc version or location of the libdir.
 cabalProcess :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
 cabalProcess l cabalProject workDir command args = do
-  (ghcDirs, ghcPkgPath) <- cabalPathCompilerPath l workDir >>= \case
+  (ghcDirs, ghcPkgPath) <- cabalPathCompilerPath l workDir cabalProject >>= \case
     Just p -> do
       libdir <- readProcessWithCwd_ l workDir p ["--print-libdir"] ""
       pure ((p, trimEnd libdir), Nothing)
@@ -815,15 +815,17 @@ cabalGhcDirs l cabalProject workDir = do
   where
     projectFileArgs = projectFileProcessArgs cabalProject
 
-cabalPathCompilerPath :: LogAction IO (WithSeverity Log) -> FilePath -> CradleLoadResultT IO (Maybe FilePath)
-cabalPathCompilerPath l workDir = do
+cabalPathCompilerPath :: LogAction IO (WithSeverity Log) -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
+cabalPathCompilerPath l workDir projectFile = do
   liftIO (getCabalVersion l workDir) >>= \case
     Just cabal_version | cabal_version >= makeVersion [3,14] -> do
-      compiler_info <- readProcessWithCwd_ l workDir "cabal" ["path", "--output-format=json"] ""
       let
-        bs = BS.fromStrict $ T.encodeUtf8 $ T.pack compiler_info
+        args = ["path", "--output-format=json"] <> projectFileProcessArgs projectFile
+        bs = BS.fromStrict . T.encodeUtf8 . T.pack
         parse_compiler_path = Aeson.parseEither ((.: "compiler") >=>  (.: "path")) <=< Aeson.eitherDecode
-      case parse_compiler_path bs of
+
+      compiler_info <- readProcessWithCwd_ l workDir "cabal" args ""
+      case parse_compiler_path (bs compiler_info) of
         Left err -> do
           liftIO $ l <& WithSeverity (LogAny $ "Could not parse json output of 'cabal path': " <> T.pack err) Warning
           pure Nothing
