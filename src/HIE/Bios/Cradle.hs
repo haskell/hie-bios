@@ -32,8 +32,7 @@ module HIE.Bios.Cradle (
     , ProgramVersions
   ) where
 
-import Control.Applicative ((<|>), asum, optional)
-import Data.Bifunctor (first)
+import Control.Applicative ((<|>), optional)
 import Control.DeepSeq
 import Control.Exception (handleJust)
 import qualified Data.Yaml as Yaml
@@ -47,17 +46,22 @@ import Control.Monad.Extra (unlessM)
 import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Maybe
 import Control.Monad.IO.Class
+import Data.Aeson ((.:))
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Types as Aeson
+import Data.Bifunctor (first)
+import qualified Data.ByteString as BS
 import Data.Conduit.Process
 import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.HashMap.Strict as Map
-import qualified Data.HashSet as S
-import Data.Maybe (fromMaybe, isNothing, maybeToList)
+import Data.Maybe (fromMaybe, maybeToList)
 import Data.List
 import Data.List.Extra (trimEnd, nubOrd)
 import Data.Ord (Down(..))
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import System.Environment
 import System.FilePath
 import System.PosixCompat.Files
@@ -815,11 +819,15 @@ cabalPathCompilerPath :: LogAction IO (WithSeverity Log) -> FilePath -> CradleLo
 cabalPathCompilerPath l workDir = do
   liftIO (getCabalVersion l workDir) >>= \case
     Just cabal_version | cabal_version >= makeVersion [3,14] -> do
-      compiler_info <- readProcessWithCwd_ l workDir "cabal" ["path", "--compiler-info"] ""
-      let compiler_path = asum $ stripPrefix "compiler-path: " <$> lines compiler_info
-      when (isNothing compiler_path) $
-        liftIO $ l <& WithSeverity (LogAny "Could not parse output of 'cabal path'") Warning
-      pure compiler_path
+      compiler_info <- readProcessWithCwd_ l workDir "cabal" ["path", "--output-format=json"] ""
+      let
+        bs = BS.fromStrict $ T.encodeUtf8 $ T.pack compiler_info
+        parse_compiler_path = Aeson.parseEither ((.: "compiler") >=>  (.: "path")) <=< Aeson.eitherDecode
+      case parse_compiler_path bs of
+        Left err -> do
+          liftIO $ l <& WithSeverity (LogAny $ "Could not parse json output of 'cabal path': " <> T.pack err) Warning
+          pure Nothing
+        Right a -> pure a
     _ -> pure Nothing
 
 isCabalMultipleCompSupported :: MonadIO m => ProgramVersions -> m Bool
