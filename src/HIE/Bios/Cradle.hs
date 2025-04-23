@@ -559,7 +559,8 @@ cabalCradle l cs wdir mc projectFile
     { actionName = Types.Cabal
     , runCradle = \fp -> runCradleResultT . cabalAction cs wdir mc l projectFile fp
     , runGhcCmd = \args -> runCradleResultT $ do
-        cabalPathCompilerPath l wdir projectFile >>= \case
+        let vs = cradleProgramVersions cs
+        cabalPathCompilerPath l vs wdir projectFile >>= \case
           Just p -> readProcessWithCwd_ l wdir p args ""
           Nothing -> do
             buildDir <- liftIO $ cabalBuildDir wdir
@@ -567,7 +568,7 @@ cabalCradle l cs wdir mc projectFile
             -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
             liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
             -- Need to pass -v0 otherwise we get "resolving dependencies..."
-            cabalProc <- cabalProcess l projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
+            cabalProc <- cabalProcess l vs projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
             readProcessWithCwd' l cabalProc ""
     }
 
@@ -581,9 +582,9 @@ cabalCradle l cs wdir mc projectFile
 -- to the custom ghc wrapper via 'hie_bios_ghc' environment variable which
 -- the custom ghc wrapper may use as a fallback if it can not respond to certain
 -- queries, such as ghc version or location of the libdir.
-cabalProcess :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
-cabalProcess l cabalProject workDir command args = do
-  (ghcDirs, ghcPkgPath) <- cabalPathCompilerPath l workDir cabalProject >>= \case
+cabalProcess :: LogAction IO (WithSeverity Log) -> ProgramVersions -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
+cabalProcess l vs cabalProject workDir command args = do
+  (ghcDirs, ghcPkgPath) <- cabalPathCompilerPath l vs workDir cabalProject >>= \case
     Just p -> do
       libdir <- readProcessWithCwd_ l workDir p ["--print-libdir"] ""
       pure ((p, trimEnd libdir), Nothing)
@@ -815,9 +816,9 @@ cabalGhcDirs l cabalProject workDir = do
   where
     projectFileArgs = projectFileProcessArgs cabalProject
 
-cabalPathCompilerPath :: LogAction IO (WithSeverity Log) -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
-cabalPathCompilerPath l workDir projectFile = do
-  liftIO (getCabalVersion l workDir) >>= \case
+cabalPathCompilerPath :: LogAction IO (WithSeverity Log) -> ProgramVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
+cabalPathCompilerPath l vs workDir projectFile = do
+  liftIO (runCachedIO $ cabalVersion vs) >>= \case
     Just cabal_version | cabal_version >= makeVersion [3,14] -> do
       let
         args = ["path", "--output-format=json"] <> projectFileProcessArgs projectFile
@@ -881,7 +882,7 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
   let cabalCommand = "v2-repl"
 
   cabalProc <-
-    cabalProcess l projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
+    cabalProcess l vs projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
       deps <- cabalCradleDependencies projectFile workDir workDir
       pure $ err {cradleErrorDependencies = cradleErrorDependencies err ++ deps}
 
