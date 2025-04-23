@@ -560,7 +560,7 @@ cabalCradle l cs wdir mc projectFile
     , runCradle = \fp -> runCradleResultT . cabalAction cs wdir mc l projectFile fp
     , runGhcCmd = \args -> runCradleResultT $ do
         let vs = cradleProgramVersions cs
-        cabalPathCompilerPath l vs wdir projectFile >>= \case
+        callCabalPathForCompilerPath l vs wdir projectFile >>= \case
           Just p -> readProcessWithCwd_ l wdir p args ""
           Nothing -> do
             buildDir <- liftIO $ cabalBuildDir wdir
@@ -584,7 +584,7 @@ cabalCradle l cs wdir mc projectFile
 -- queries, such as ghc version or location of the libdir.
 cabalProcess :: LogAction IO (WithSeverity Log) -> ProgramVersions -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
 cabalProcess l vs cabalProject workDir command args = do
-  (ghcDirs, ghcPkgPath) <- cabalPathCompilerPath l vs workDir cabalProject >>= \case
+  (ghcDirs, ghcPkgPath) <- callCabalPathForCompilerPath l vs workDir cabalProject >>= \case
     Just p -> do
       libdir <- readProcessWithCwd_ l workDir p ["--print-libdir"] ""
       pure ((p, trimEnd libdir), Nothing)
@@ -816,8 +816,8 @@ cabalGhcDirs l cabalProject workDir = do
   where
     projectFileArgs = projectFileProcessArgs cabalProject
 
-cabalPathCompilerPath :: LogAction IO (WithSeverity Log) -> ProgramVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
-cabalPathCompilerPath l vs workDir projectFile = do
+callCabalPathForCompilerPath :: LogAction IO (WithSeverity Log) -> ProgramVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
+callCabalPathForCompilerPath l vs workDir projectFile = do
   isCabalPathSupported vs >>= \case
     False -> pure Nothing
     True -> do
