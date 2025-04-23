@@ -827,7 +827,7 @@ cabalPathCompilerPath l workDir projectFile = do
       compiler_info <- readProcessWithCwd_ l workDir "cabal" args ""
       case parse_compiler_path (bs compiler_info) of
         Left err -> do
-          liftIO $ l <& WithSeverity (LogAny $ "Could not parse json output of 'cabal path': " <> T.pack err) Warning
+          liftIO $ l <& WithSeverity (LogCabalPath $ T.pack err) Warning
           pure Nothing
         Right a -> pure a
     _ -> pure Nothing
