@@ -818,8 +818,9 @@ cabalGhcDirs l cabalProject workDir = do
 
 cabalPathCompilerPath :: LogAction IO (WithSeverity Log) -> ProgramVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
 cabalPathCompilerPath l vs workDir projectFile = do
-  liftIO (runCachedIO $ cabalVersion vs) >>= \case
-    Just cabal_version | cabal_version >= makeVersion [3,14] -> do
+  isCabalPathSupported vs >>= \case
+    False -> pure Nothing
+    True -> do
       let
         args = ["path", "--output-format=json"] <> projectFileProcessArgs projectFile
         bs = BS.fromStrict . T.encodeUtf8 . T.pack
@@ -831,7 +832,11 @@ cabalPathCompilerPath l vs workDir projectFile = do
           liftIO $ l <& WithSeverity (LogCabalPath $ T.pack err) Warning
           pure Nothing
         Right a -> pure a
-    _ -> pure Nothing
+
+isCabalPathSupported :: MonadIO m => ProgramVersions -> m Bool
+isCabalPathSupported vs = do
+  v <- liftIO $ runCachedIO $ cabalVersion vs
+  pure $ maybe False (>= makeVersion [3,14]) v
 
 isCabalMultipleCompSupported :: MonadIO m => ProgramVersions -> m Bool
 isCabalMultipleCompSupported vs = do
