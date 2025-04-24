@@ -33,7 +33,6 @@ module HIE.Bios.Cradle (
   ) where
 
 import Control.Applicative ((<|>), optional)
-import Data.Bifunctor (first)
 import Control.DeepSeq
 import Control.Exception (handleJust)
 import qualified Data.Yaml as Yaml
@@ -47,17 +46,22 @@ import Control.Monad.Extra (unlessM)
 import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Maybe
 import Control.Monad.IO.Class
+import Data.Aeson ((.:))
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Types as Aeson
+import Data.Bifunctor (first)
+import qualified Data.ByteString as BS
 import Data.Conduit.Process
 import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.HashMap.Strict as Map
-import qualified Data.HashSet as S
 import Data.Maybe (fromMaybe, maybeToList)
 import Data.List
 import Data.List.Extra (trimEnd, nubOrd)
 import Data.Ord (Down(..))
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import System.Environment
 import System.FilePath
 import System.PosixCompat.Files
@@ -555,13 +559,17 @@ cabalCradle l cs wdir mc projectFile
     { actionName = Types.Cabal
     , runCradle = \fp -> runCradleResultT . cabalAction cs wdir mc l projectFile fp
     , runGhcCmd = \args -> runCradleResultT $ do
-        buildDir <- liftIO $ cabalBuildDir wdir
-        -- Workaround for a cabal-install bug on 3.0.0.0:
-        -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
-        liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
-        -- Need to pass -v0 otherwise we get "resolving dependencies..."
-        cabalProc <- cabalProcess l projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
-        readProcessWithCwd' l cabalProc ""
+        let vs = cradleProgramVersions cs
+        callCabalPathForCompilerPath l vs wdir projectFile >>= \case
+          Just p -> readProcessWithCwd_ l wdir p args ""
+          Nothing -> do
+            buildDir <- liftIO $ cabalBuildDir wdir
+            -- Workaround for a cabal-install bug on 3.0.0.0:
+            -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
+            liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
+            -- Need to pass -v0 otherwise we get "resolving dependencies..."
+            cabalProc <- cabalProcess l vs projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
+            readProcessWithCwd' l cabalProc ""
     }
 
 
@@ -574,11 +582,19 @@ cabalCradle l cs wdir mc projectFile
 -- to the custom ghc wrapper via 'hie_bios_ghc' environment variable which
 -- the custom ghc wrapper may use as a fallback if it can not respond to certain
 -- queries, such as ghc version or location of the libdir.
-cabalProcess :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
-cabalProcess l cabalProject workDir command args = do
-  ghcDirs <- cabalGhcDirs l cabalProject workDir
+cabalProcess :: LogAction IO (WithSeverity Log) -> ProgramVersions -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
+cabalProcess l vs cabalProject workDir command args = do
+  (ghcDirs, ghcPkgPath) <- callCabalPathForCompilerPath l vs workDir cabalProject >>= \case
+    Just p -> do
+      libdir <- readProcessWithCwd_ l workDir p ["--print-libdir"] ""
+      pure ((p, trimEnd libdir), Nothing)
+    Nothing -> do
+      ghcDirs@(ghcBin, libdir) <- cabalGhcDirs l cabalProject workDir
+      ghcPkgPath <- liftIO $ withGhcPkgTool ghcBin libdir
+      pure (ghcDirs, Just ghcPkgPath)
+
   newEnvironment <- liftIO $ setupEnvironment ghcDirs
-  cabalProc <- liftIO $ setupCabalCommand ghcDirs
+  cabalProc <- liftIO $ setupCabalCommand ghcPkgPath
   pure $ (cabalProc
       { env = Just newEnvironment
       , cwd = Just workDir
@@ -593,17 +609,21 @@ cabalProcess l cabalProject workDir command args = do
       environment <- getCleanEnvironment
       pure $ processEnvironment ghcDirs ++ environment
 
-    setupCabalCommand :: (FilePath, FilePath) -> IO CreateProcess
-    setupCabalCommand (ghcBin, libdir) = do
+    setupCabalCommand :: Maybe FilePath -> IO CreateProcess
+    setupCabalCommand ghcPkgPath = do
       wrapper_fp <- withGhcWrapperTool l ("ghc", []) workDir
       buildDir <- cabalBuildDir workDir
-      ghcPkgPath <- withGhcPkgTool ghcBin libdir
-      let extraCabalArgs =
+      let hcPkgArgs = case ghcPkgPath of
+            Nothing -> []
+            Just p -> ["--with-hc-pkg", p]
+
+          extraCabalArgs =
             [ "--builddir=" <> buildDir
             , command
             , "--with-compiler", wrapper_fp
-            , "--with-hc-pkg", ghcPkgPath
-            ] <> projectFileProcessArgs cabalProject
+            ]
+            <> hcPkgArgs
+            <> projectFileProcessArgs cabalProject
       pure $ proc "cabal" (extraCabalArgs ++ args)
 
 -- | Discovers the location of 'ghc-pkg' given the absolute path to 'ghc'
@@ -796,6 +816,28 @@ cabalGhcDirs l cabalProject workDir = do
   where
     projectFileArgs = projectFileProcessArgs cabalProject
 
+callCabalPathForCompilerPath :: LogAction IO (WithSeverity Log) -> ProgramVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
+callCabalPathForCompilerPath l vs workDir projectFile = do
+  isCabalPathSupported vs >>= \case
+    False -> pure Nothing
+    True -> do
+      let
+        args = ["path", "--output-format=json"] <> projectFileProcessArgs projectFile
+        bs = BS.fromStrict . T.encodeUtf8 . T.pack
+        parse_compiler_path = Aeson.parseEither ((.: "compiler") >=>  (.: "path")) <=< Aeson.eitherDecode
+
+      compiler_info <- readProcessWithCwd_ l workDir "cabal" args ""
+      case parse_compiler_path (bs compiler_info) of
+        Left err -> do
+          liftIO $ l <& WithSeverity (LogCabalPath $ T.pack err) Warning
+          pure Nothing
+        Right a -> pure a
+
+isCabalPathSupported :: MonadIO m => ProgramVersions -> m Bool
+isCabalPathSupported vs = do
+  v <- liftIO $ runCachedIO $ cabalVersion vs
+  pure $ maybe False (>= makeVersion [3,14]) v
+
 isCabalMultipleCompSupported :: MonadIO m => ProgramVersions -> m Bool
 isCabalMultipleCompSupported vs = do
   cabal_version <- liftIO $ runCachedIO $ cabalVersion vs
@@ -845,7 +887,7 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
   let cabalCommand = "v2-repl"
 
   cabalProc <-
-    cabalProcess l projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
+    cabalProcess l vs projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
       deps <- cabalCradleDependencies projectFile workDir workDir
       pure $ err {cradleErrorDependencies = cradleErrorDependencies err ++ deps}
 

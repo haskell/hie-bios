@@ -100,6 +100,7 @@ data Log
   | LogComputedCradleLoadStyle !T.Text !LoadStyle
   | LogLoadWithContextUnsupported !T.Text !(Maybe T.Text)
   | LogCabalLoad !FilePath !(Maybe String) ![FilePath] ![FilePath]
+  | LogCabalPath !T.Text
   deriving (Show)
 
 instance Pretty Log where
@@ -141,6 +142,9 @@ instance Pretty Log where
           <> line <> indent 4 "from project: " <+> pretty projectFile
           <> line <> indent 4 "with prefixes:" <+> pretty prefixes
           <> line <> indent 4 "with actual loading files:" <+> pretty crs
+  pretty (LogCabalPath err) =
+    "Could not parse json output of 'cabal path': "
+      <> line <> indent 4 (pretty err)
 
 -- | The 'LoadStyle' instructs a cradle on how to load a given file target.
 data LoadStyle
