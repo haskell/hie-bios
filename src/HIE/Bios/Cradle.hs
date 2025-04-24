@@ -62,6 +62,7 @@ import Data.List.Extra (trimEnd, nubOrd)
 import Data.Ord (Down(..))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
+import Data.Traversable (for)
 import System.Environment
 import System.FilePath
 import System.PosixCompat.Files
@@ -237,8 +238,9 @@ resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
               act
               args
   versions <- makeVersions logger root run_ghc_cmd
-  let rcs = ResolvedCradles root cs versions
-      cradleActions = [ (c, resolveCradleAction logger buildCustomCradle rcs root c) | c <- cs ]
+  cradleActions <- for cs $ \c ->
+    fmap (c,) $ resolveCradleAction logger buildCustomCradle (ResolvedCradles root cs versions) root c
+  let
       err_msg fp
         = ["Multi Cradle: No prefixes matched"
           , "pwd: " ++ root
@@ -296,15 +298,15 @@ resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
     notNoneType _ = True
 
 
-resolveCradleAction :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> ResolvedCradles b -> FilePath -> ResolvedCradle b -> CradleAction a
-resolveCradleAction l buildCustomCradle cs root cradle = addLoadStyleLogToCradleAction $
+resolveCradleAction :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> ResolvedCradles b -> FilePath -> ResolvedCradle b -> IO (CradleAction a)
+resolveCradleAction l buildCustomCradle cs root cradle = fmap addLoadStyleLogToCradleAction $
   case concreteCradle cradle of
     ConcreteCabal t -> cabalCradle l cs root (cabalComponent t) (projectConfigFromMaybe root (cabalProjectFile t))
-    ConcreteStack t -> stackCradle l root (stackComponent t) (projectConfigFromMaybe root (stackYaml t))
-    ConcreteBios bios deps mbGhc -> biosCradle l cs root bios deps mbGhc
-    ConcreteDirect xs -> directCradle l root xs
-    ConcreteNone -> noneCradle
-    ConcreteOther a -> buildCustomCradle a
+    ConcreteStack t -> pure $ stackCradle l root (stackComponent t) (projectConfigFromMaybe root (stackYaml t))
+    ConcreteBios bios deps mbGhc -> pure $ biosCradle l cs root bios deps mbGhc
+    ConcreteDirect xs -> pure $ directCradle l root xs
+    ConcreteNone -> pure $ noneCradle
+    ConcreteOther a -> pure $ buildCustomCradle a
   where
     -- Add a log message to each loading operation.
     addLoadStyleLogToCradleAction crdlAct = crdlAct
@@ -574,7 +576,7 @@ withCallableToProcess (Program path) files = ContT $ \action -> do
   old_env <- getEnvironment
   case files of
     [] -> action $ (proc canon_path []){env = Nothing}
-    (x : _) -> 
+    (x : _) ->
       runContT (withHieBiosMultiArg files) $ \multi_file -> do
         let updated_env = Just $
               (hie_bios_multi_arg, multi_file) : old_env
@@ -604,14 +606,19 @@ projectLocationOrDefault = \case
 
 -- |Cabal Cradle
 -- Works for new-build by invoking `v2-repl`.
-cabalCradle :: LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath -> Maybe String -> CradleProjectConfig -> CradleAction a
-cabalCradle l cs wdir mc projectFile
-  = CradleAction
+cabalCradle :: LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath -> Maybe String -> CradleProjectConfig -> IO (CradleAction a)
+cabalCradle l cs wdir mc projectFile = do
+  res <- runCradleResultT $ callCabalPathForCompilerPath l (cradleProgramVersions cs) wdir projectFile
+  let
+    ghcPath = case res of
+      CradleSuccess path -> path
+      _ -> Nothing
+
+  pure $ CradleAction
     { actionName = Types.Cabal
-    , runCradle = \fp -> runCradleResultT . cabalAction cs wdir mc l projectFile fp
+    , runCradle = \fp -> runCradleResultT . cabalAction cs wdir ghcPath mc l projectFile fp
     , runGhcCmd = \args -> runCradleResultT $ do
-        let vs = cradleProgramVersions cs
-        callCabalPathForCompilerPath l vs wdir projectFile >>= \case
+        case ghcPath of
           Just p -> readProcessWithCwd_ l wdir p args ""
           Nothing -> do
             buildDir <- liftIO $ cabalBuildDir wdir
@@ -619,7 +626,7 @@ cabalCradle l cs wdir mc projectFile
             -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
             liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
             -- Need to pass -v0 otherwise we get "resolving dependencies..."
-            cabalProc <- cabalProcess l vs projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
+            cabalProc <- cabalProcess l projectFile wdir Nothing "v2-exec" $ ["ghc", "-v0", "--"] ++ args
             readProcessWithCwd' l cabalProc ""
     }
 
@@ -633,9 +640,9 @@ cabalCradle l cs wdir mc projectFile
 -- to the custom ghc wrapper via 'hie_bios_ghc' environment variable which
 -- the custom ghc wrapper may use as a fallback if it can not respond to certain
 -- queries, such as ghc version or location of the libdir.
-cabalProcess :: LogAction IO (WithSeverity Log) -> ProgramVersions -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
-cabalProcess l vs cabalProject workDir command args = do
-  ghcDirs@(ghcBin, libdir) <- callCabalPathForCompilerPath l vs workDir cabalProject >>= \case
+cabalProcess :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> Maybe FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
+cabalProcess l cabalProject workDir ghcPath command args = do
+  ghcDirs@(ghcBin, libdir) <- case ghcPath of
     Just p -> do
       libdir <- readProcessWithCwd_ l workDir p ["--print-libdir"] ""
       pure (p, trimEnd libdir)
@@ -895,13 +902,14 @@ isCabalMultipleCompSupported vs = do
 cabalAction
   :: ResolvedCradles a
   -> FilePath
+  -> Maybe FilePath
   -> Maybe String
   -> LogAction IO (WithSeverity Log)
   -> CradleProjectConfig
   -> FilePath
   -> LoadStyle
   -> CradleLoadResultT IO ComponentOptions
-cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle = do
+cabalAction (ResolvedCradles root cs vs) workDir ghcPath mc l projectFile fp loadStyle = do
   multiCompSupport <- isCabalMultipleCompSupported vs
   -- determine which load style is supported by this cabal cradle.
   determinedLoadStyle <- case loadStyle of
@@ -932,7 +940,7 @@ cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle =
   let cabalCommand = "v2-repl"
 
   cabalProc <-
-    cabalProcess l vs projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
+    cabalProcess l projectFile workDir ghcPath cabalCommand cabalArgs `modCradleError` \err -> do
       deps <- cabalCradleDependencies projectFile workDir workDir
       pure $ err {cradleErrorDependencies = cradleErrorDependencies err ++ deps}
 
