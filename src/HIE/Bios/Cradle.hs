@@ -1,10 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE RecordWildCards #-}
 module HIE.Bios.Cradle (
       findCradle
     , loadCradle
@@ -28,11 +27,13 @@ module HIE.Bios.Cradle (
 
     -- expose to tests
     , makeVersions
+    , getGhcVersion
     , isCabalMultipleCompSupported
-    , ProgramVersions
+    , BuildToolVersions
   ) where
 
 import Control.Applicative ((<|>), optional)
+import Control.Concurrent.Async (mapConcurrently)
 import Control.DeepSeq
 import Control.Exception (handleJust)
 import qualified Data.Yaml as Yaml
@@ -82,7 +83,6 @@ import GHC.Fingerprint (fingerprintString)
 import GHC.ResponseFile (escapeArgs)
 
 import Data.Version
-import Data.IORef
 import Text.ParserCombinators.ReadP (readP_to_S)
 import Data.Tuple.Extra (fst3, snd3, thd3)
 
@@ -157,35 +157,18 @@ data ResolvedCradles a
  = ResolvedCradles
  { cradleRoot :: FilePath
  , resolvedCradles :: [ResolvedCradle a] -- ^ In order of decreasing specificity
- , cradleProgramVersions :: ProgramVersions
+ , cradleBuildToolVersions :: BuildToolVersions
  }
 
-data ProgramVersions =
-  ProgramVersions { cabalVersion  :: CachedIO (Maybe Version)
-                  , stackVersion  :: CachedIO (Maybe Version)
-                  , ghcVersion    :: CachedIO (Maybe Version)
-                  }
+type BuildToolVersions = BuildToolVersions' (Maybe Version)
+data BuildToolVersions' v =
+  BuildToolVersions { cabalVersion  :: v
+                    , stackVersion  :: v
+                    }
+  deriving (Functor, Foldable, Traversable)
 
-newtype CachedIO a = CachedIO (IORef (Either (IO a) a))
-
-makeCachedIO :: IO a -> IO (CachedIO a)
-makeCachedIO act = CachedIO <$> newIORef (Left act)
-
-runCachedIO :: CachedIO a -> IO a
-runCachedIO (CachedIO ref) =
-  readIORef ref >>= \case
-    Right x -> pure x
-    Left act -> do
-      x <- act
-      writeIORef ref (Right x)
-      pure x
-
-makeVersions :: LogAction IO (WithSeverity Log) -> FilePath -> ([String] -> IO (CradleLoadResult String)) -> IO ProgramVersions
-makeVersions l wdir ghc = do
-  cabalVersion <- makeCachedIO $ getCabalVersion l wdir
-  stackVersion <- makeCachedIO $ getStackVersion l wdir
-  ghcVersion   <- makeCachedIO $ getGhcVersion ghc
-  pure ProgramVersions{..}
+makeVersions :: LogAction IO (WithSeverity Log) -> FilePath -> IO BuildToolVersions
+makeVersions l wdir = mapConcurrently (\v -> v l wdir) $ BuildToolVersions getCabalVersion getStackVersion
 
 getCabalVersion :: LogAction IO (WithSeverity Log) -> FilePath -> IO (Maybe Version)
 getCabalVersion l wdir = do
@@ -224,9 +207,11 @@ addActionDeps deps =
       (\err -> CradleFail (err { cradleErrorDependencies = cradleErrorDependencies err `union` deps }))
       (\(ComponentOptions os' dir ds) -> CradleSuccess (ComponentOptions os' dir (ds `union` deps)))
 
-
 resolvedCradlesToCradle :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> [ResolvedCradle b] -> IO (Cradle a)
-resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
+resolvedCradlesToCradle logger buildCustomCradle root cs = do
+  versions <- makeVersions logger root
+  cradleActions <- for cs $ \c ->
+    fmap (c,) $ resolveCradleAction logger buildCustomCradle (ResolvedCradles root cs versions) root c
   let run_ghc_cmd args =
         -- We're being lazy here and just returning the ghc path for the
         -- first non-none cradle. This shouldn't matter in practice: all
@@ -237,10 +222,6 @@ resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
             runGhcCmd
               act
               args
-  versions <- makeVersions logger root run_ghc_cmd
-  cradleActions <- for cs $ \c ->
-    fmap (c,) $ resolveCradleAction logger buildCustomCradle (ResolvedCradles root cs versions) root c
-  let
       err_msg fp
         = ["Multi Cradle: No prefixes matched"
           , "pwd: " ++ root
@@ -303,7 +284,7 @@ resolveCradleAction l buildCustomCradle cs root cradle = fmap addLoadStyleLogToC
   case concreteCradle cradle of
     ConcreteCabal t -> cabalCradle l cs root (cabalComponent t) (projectConfigFromMaybe root (cabalProjectFile t))
     ConcreteStack t -> pure $ stackCradle l root (stackComponent t) (projectConfigFromMaybe root (stackYaml t))
-    ConcreteBios bios deps mbGhc -> pure $ biosCradle l cs root bios deps mbGhc
+    ConcreteBios bios deps mbGhc -> pure $ biosCradle l root bios deps mbGhc
     ConcreteDirect xs -> pure $ directCradle l root xs
     ConcreteNone -> pure $ noneCradle
     ConcreteOther a -> pure $ buildCustomCradle a
@@ -491,13 +472,14 @@ directCradle l wdir args
 
 -- | Find a cradle by finding an executable `hie-bios` file which will
 -- be executed to find the correct GHC options to use.
-biosCradle :: LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath -> Callable -> Maybe Callable -> Maybe FilePath -> CradleAction a
-biosCradle l rc wdir biosCall biosDepsCall mbGhc
+biosCradle :: LogAction IO (WithSeverity Log) -> FilePath -> Callable -> Maybe Callable -> Maybe FilePath -> CradleAction a
+biosCradle l wdir biosCall biosDepsCall mbGhc
   = CradleAction
       { actionName = Types.Bios
-      , runCradle = biosAction rc wdir biosCall biosDepsCall l
-      , runGhcCmd = \args -> readProcessWithCwd l wdir (fromMaybe "ghc" mbGhc) args ""
+      , runCradle = biosAction runGhcCmd wdir biosCall biosDepsCall l
+      , runGhcCmd = runGhcCmd
       }
+      where runGhcCmd = \args -> readProcessWithCwd l wdir (fromMaybe "ghc" mbGhc) args ""
 
 biosWorkDir :: FilePath -> MaybeT IO FilePath
 biosWorkDir = findFileUpwards ".hie-bios"
@@ -516,7 +498,7 @@ biosDepsAction l wdir (Just biosDepsCall) fp loadStyle = do
 biosDepsAction _ _ Nothing _ _ = return []
 
 biosAction
-  :: ResolvedCradles a
+  :: ([String] -> IO (CradleLoadResult String))
   -> FilePath
   -> Callable
   -> Maybe Callable
@@ -524,8 +506,8 @@ biosAction
   -> FilePath
   -> LoadStyle
   -> IO (CradleLoadResult ComponentOptions)
-biosAction rc wdir bios bios_deps l fp loadStyle = do
-  ghc_version <- liftIO $ runCachedIO $ ghcVersion $ cradleProgramVersions rc
+biosAction runGhcCmd wdir bios bios_deps l fp loadStyle = do
+  ghc_version <- getGhcVersion runGhcCmd
   determinedLoadStyle <- case ghc_version of
     Just ghc
       -- Multi-component supported from ghc 9.4
@@ -608,16 +590,13 @@ projectLocationOrDefault = \case
 -- Works for new-build by invoking `v2-repl`.
 cabalCradle :: LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath -> Maybe String -> CradleProjectConfig -> IO (CradleAction a)
 cabalCradle l cs wdir mc projectFile = do
-  res <- runCradleResultT $ callCabalPathForCompilerPath l (cradleProgramVersions cs) wdir projectFile
+  res <- runCradleResultT $ callCabalPathForCompilerPath l (cradleBuildToolVersions cs) wdir projectFile
   let
     ghcPath = case res of
       CradleSuccess path -> path
       _ -> Nothing
 
-  pure $ CradleAction
-    { actionName = Types.Cabal
-    , runCradle = \fp -> runCradleResultT . cabalAction cs wdir ghcPath mc l projectFile fp
-    , runGhcCmd = \args -> runCradleResultT $ do
+    runGhcCmd args = runCradleResultT $ do
         case ghcPath of
           Just p -> readProcessWithCwd_ l wdir p args ""
           Nothing -> do
@@ -628,6 +607,13 @@ cabalCradle l cs wdir mc projectFile = do
             -- Need to pass -v0 otherwise we get "resolving dependencies..."
             cabalProc <- cabalProcess l projectFile wdir Nothing "v2-exec" $ ["ghc", "-v0", "--"] ++ args
             readProcessWithCwd' l cabalProc ""
+
+  pure $ CradleAction
+    { actionName = Types.Cabal
+    , runCradle = \fp ls -> do
+        v <- getGhcVersion runGhcCmd
+        runCradleResultT $ cabalAction cs wdir ghcPath v mc l projectFile fp ls
+    , runGhcCmd = runGhcCmd
     }
 
 
@@ -868,9 +854,9 @@ cabalGhcDirs l cabalProject workDir = do
   where
     projectFileArgs = projectFileProcessArgs cabalProject
 
-callCabalPathForCompilerPath :: LogAction IO (WithSeverity Log) -> ProgramVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
+callCabalPathForCompilerPath :: LogAction IO (WithSeverity Log) -> BuildToolVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
 callCabalPathForCompilerPath l vs workDir projectFile = do
-  isCabalPathSupported vs >>= \case
+  case isCabalPathSupported vs of
     False -> pure Nothing
     True -> do
       let
@@ -885,32 +871,29 @@ callCabalPathForCompilerPath l vs workDir projectFile = do
           pure Nothing
         Right a -> pure a
 
-isCabalPathSupported :: MonadIO m => ProgramVersions -> m Bool
-isCabalPathSupported vs = do
-  v <- liftIO $ runCachedIO $ cabalVersion vs
-  pure $ maybe False (>= makeVersion [3,14]) v
+isCabalPathSupported :: BuildToolVersions -> Bool
+isCabalPathSupported = maybe False (>= makeVersion [3,14]) . cabalVersion
 
-isCabalMultipleCompSupported :: MonadIO m => ProgramVersions -> m Bool
-isCabalMultipleCompSupported vs = do
-  cabal_version <- liftIO $ runCachedIO $ cabalVersion vs
-  ghc_version <- liftIO $ runCachedIO $ ghcVersion vs
+isCabalMultipleCompSupported :: BuildToolVersions -> Maybe Version -> Bool
+isCabalMultipleCompSupported vs ghcVersion = do
   -- determine which load style is supported by this cabal cradle.
-  case (cabal_version, ghc_version) of
-    (Just cabal, Just ghc) -> pure $ ghc >= makeVersion [9, 4] && cabal >= makeVersion [3, 11]
-    _ -> pure False
+  case (cabalVersion vs, ghcVersion) of
+    (Just cabal, Just ghc) -> ghc >= makeVersion [9, 4] && cabal >= makeVersion [3, 11]
+    _ -> False
 
 cabalAction
   :: ResolvedCradles a
   -> FilePath
   -> Maybe FilePath
+  -> Maybe Version
   -> Maybe String
   -> LogAction IO (WithSeverity Log)
   -> CradleProjectConfig
   -> FilePath
   -> LoadStyle
   -> CradleLoadResultT IO ComponentOptions
-cabalAction (ResolvedCradles root cs vs) workDir ghcPath mc l projectFile fp loadStyle = do
-  multiCompSupport <- isCabalMultipleCompSupported vs
+cabalAction (ResolvedCradles root cs vs) workDir ghcPath ghcVersion mc l projectFile fp loadStyle = do
+  let multiCompSupport = isCabalMultipleCompSupported vs ghcVersion
   -- determine which load style is supported by this cabal cradle.
   determinedLoadStyle <- case loadStyle of
     LoadWithContext _ | not multiCompSupport -> do
