@@ -15,8 +15,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cabal: ['3.10.2.0', '3.14.1.0']
-        ghc: ['9.12.1', '9.10.1', '9.8.2', '9.6.5', '9.4.8', '9.2.8']
+        cabal: ['3.14.1.0', '3.10.2.0']
+        ghc: ['9.12.2', '9.10.1', '9.8.4', '9.6.7', '9.4.8']
         os: [ubuntu-latest, macOS-latest, windows-latest]
 
     steps:
@@ -25,7 +25,7 @@ jobs:
       uses: haskell-actions/setup@v2
       with:
         cabal-version: ${{ matrix.cabal }}
-        ghc-version: '8.10.7'
+        ghc-version: '9.2.8' # This needs to be in-sync with 'extraGhcVersion'
 
     - uses: haskell-actions/setup@v2
       with:
@@ -34,7 +34,8 @@ jobs:
         enable-stack: true
 
     - name: Print extra ghc version
-      run: ghc-8.10.7 --version
+      # Needs to be in sync with 'extraGhcVersion'
+      run: ghc-9.2.8 --version
 
     - name: Print normal ghc version
       run: ghc --version
@@ -59,7 +60,7 @@ jobs:
       run: cabal test parser-tests --test-show-details=direct
     - name: Test Bios
       # Run all tests in the project
-      run: cabal test bios-tests --test-show-details=direct --test-options="--ignore-tool-deps"
+      run: cabal test bios-tests --test-show-details=direct --test-options="--ignore-tool-deps --debug"
 
   sdist:
     runs-on: ubuntu-latest
