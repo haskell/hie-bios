@@ -1,4 +1,4 @@
 cradle:
   cabal:
-    cabalProject: "cabal.project.8.10.7"
+    cabalProject: "cabal.project.9.2.8"
     component: "hie-bios:hie"

@@ -62,11 +62,11 @@ main = defaultMain $
                                                                                ,("./tests", StackType (Just "parser-tests") Nothing)]))]))
     -- Assertions for cabal.project files
     assertParser "cabal-with-project.yaml"
-      (noDeps (Cabal $ CabalType Nothing (Just "cabal.project.8.10.7")))
+      (noDeps (Cabal $ CabalType Nothing (Just "cabal.project.9.2.8")))
     assertParser "cabal-with-both.yaml"
-      (noDeps (Cabal $ CabalType (Just "hie-bios:hie") (Just "cabal.project.8.10.7")))
+      (noDeps (Cabal $ CabalType (Just "hie-bios:hie") (Just "cabal.project.9.2.8")))
     assertParser "multi-cabal-with-project.yaml"
-      (noDeps (CabalMulti (CabalType Nothing (Just "cabal.project.8.10.7"))
+      (noDeps (CabalMulti (CabalType Nothing (Just "cabal.project.9.2.8"))
                           [("./src", CabalType (Just "lib:hie-bios") Nothing)
                           ,("./vendor", CabalType (Just "parser-tests") Nothing)]))
     -- Assertions for stack.yaml files
