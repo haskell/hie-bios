@@ -47,7 +47,7 @@ import Control.Monad.Extra (unlessM)
 import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Maybe
 import Control.Monad.IO.Class
-import Data.Aeson ((.:))
+import Data.Aeson ((.:), (.:?))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson
 import Data.Bifunctor (first)
@@ -592,9 +592,12 @@ cabalCradle :: LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath 
 cabalCradle l cs wdir mc projectFile = do
   res <- runCradleResultT $ callCabalPathForCompilerPath l (cradleBuildToolVersions cs) wdir projectFile
   let
-    ghcPath = case res of
-      CradleSuccess path -> path
+    cabalPathOutput = case res of
+      CradleSuccess out -> out
       _ -> Nothing
+
+    ghcPath = fst <$> cabalPathOutput
+    ghcVersion = snd =<< cabalPathOutput
 
     runGhcCmd args = runCradleResultT $ do
         case ghcPath of
@@ -611,7 +614,7 @@ cabalCradle l cs wdir mc projectFile = do
   pure $ CradleAction
     { actionName = Types.Cabal
     , runCradle = \fp ls -> do
-        v <- getGhcVersion runGhcCmd
+        v <- maybe (getGhcVersion runGhcCmd) (pure . Just) ghcVersion
         runCradleResultT $ cabalAction cs wdir ghcPath v mc l projectFile fp ls
     , runGhcCmd = runGhcCmd
     }
@@ -854,7 +857,7 @@ cabalGhcDirs l cabalProject workDir = do
   where
     projectFileArgs = projectFileProcessArgs cabalProject
 
-callCabalPathForCompilerPath :: LogAction IO (WithSeverity Log) -> BuildToolVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
+callCabalPathForCompilerPath :: LogAction IO (WithSeverity Log) -> BuildToolVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe (FilePath, Maybe Version))
 callCabalPathForCompilerPath l vs workDir projectFile = do
   case isCabalPathSupported vs of
     False -> pure Nothing
@@ -862,14 +865,22 @@ callCabalPathForCompilerPath l vs workDir projectFile = do
       let
         args = ["path", "--output-format=json"] <> projectFileProcessArgs projectFile
         bs = BS.fromStrict . T.encodeUtf8 . T.pack
-        parse_compiler_path = Aeson.parseEither ((.: "compiler") >=>  (.: "path")) <=< Aeson.eitherDecode
-
       compiler_info <- readProcessWithCwd_ l workDir "cabal" args ""
-      case parse_compiler_path (bs compiler_info) of
+      let
+        parsed = do
+          json <- Aeson.eitherDecode (bs compiler_info)
+          flip Aeson.parseEither json $ \o -> do
+            c <- o .: "compiler"
+            p <- c .: "path"
+            i <- c .:? "id"
+            let v = versionMaybe . T.unpack . T.takeWhileEnd (/= '-') . T.pack =<< i
+            pure (p, v)
+
+      case parsed of
         Left err -> do
           liftIO $ l <& WithSeverity (LogCabalPath $ T.pack err) Warning
           pure Nothing
-        Right a -> pure a
+        Right a -> pure $ Just a
 
 isCabalPathSupported :: BuildToolVersions -> Bool
 isCabalPathSupported = maybe False (>= makeVersion [3,14]) . cabalVersion
