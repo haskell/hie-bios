@@ -49,6 +49,12 @@ hie_bios_ghc_args = "HIE_BIOS_GHC_ARGS"
 hie_bios_arg :: String
 hie_bios_arg = "HIE_BIOS_ARG"
 
+-- | Environment variable pointing to the multiple source files location that
+-- caused the cradle action to be executed. Differs from hie_bios_arg for
+-- backwards compatibility.
+hie_bios_multi_arg :: String
+hie_bios_multi_arg = "HIE_BIOS_MULTI_ARG"
+
 -- | Environment variable pointing to a filepath to which dependencies
 -- of a cradle can be written to by the cradle action.
 hie_bios_deps :: String
