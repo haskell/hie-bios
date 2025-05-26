@@ -1,5 +1,8 @@
 # ChangeLog hie-bios
 
+* Rename `findFileUpwards` as `findFileUpwardsPredicate` and implement
+  `findFileUpward` which does have better performance guarantees.
+
 ## 2025-04-25 - 0.15.0
 
 * Use consistent logging for test cases [#461](https://github.com/haskell/hie-bios/pull/461)

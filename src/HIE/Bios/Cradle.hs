@@ -364,7 +364,7 @@ yamlConfig fp = do
   return (configDir </> configFileName)
 
 yamlConfigDirectory :: FilePath -> MaybeT IO FilePath
-yamlConfigDirectory = findFileUpwards (configFileName ==)
+yamlConfigDirectory = findFileUpwards configFileName
 
 readCradleConfig :: Yaml.FromJSON b => FilePath -> IO (CradleConfig b)
 readCradleConfig yamlHie = do
@@ -498,7 +498,7 @@ biosCradle l rc wdir biosCall biosDepsCall mbGhc
       }
 
 biosWorkDir :: FilePath -> MaybeT IO FilePath
-biosWorkDir = findFileUpwards (".hie-bios" ==)
+biosWorkDir = findFileUpwards ".hie-bios"
 
 biosDepsAction :: LogAction IO (WithSeverity Log) -> FilePath -> Maybe Callable -> FilePath -> LoadStyle -> IO [FilePath]
 biosDepsAction l wdir (Just biosDepsCall) fp loadStyle = do
@@ -1026,8 +1026,8 @@ removeVerbosityOpts = filter ((&&) <$> (/= "-v0") <*> (/= "-w"))
 
 cabalWorkDir :: FilePath -> MaybeT IO FilePath
 cabalWorkDir wdir =
-      findFileUpwards (== "cabal.project") wdir
-  <|> findFileUpwards (\fp -> takeExtension fp == ".cabal") wdir
+      findFileUpwards "cabal.project" wdir
+  <|> findFileUpwardsPredicate (\fp -> takeExtension fp == ".cabal") wdir
 
 
 ------------------------------------------------------------------------
@@ -1151,9 +1151,7 @@ stackExecutable :: MaybeT IO FilePath
 stackExecutable = MaybeT $ findExecutable "stack"
 
 stackWorkDir :: FilePath -> MaybeT IO FilePath
-stackWorkDir = findFileUpwards isStack
-  where
-    isStack name = name == "stack.yaml"
+stackWorkDir = findFileUpwards "stack.yaml"
 
 {-
 -- Support removed for 0.3 but should be added back in the future
@@ -1163,7 +1161,7 @@ stackWorkDir = findFileUpwards isStack
 --
 rulesHaskellWorkDir :: FilePath -> MaybeT IO FilePath
 rulesHaskellWorkDir fp =
-  findFileUpwards (== "WORKSPACE") fp
+  findFileUpwards "WORKSPACE" fp
 
 rulesHaskellCradle :: FilePath -> Cradle
 rulesHaskellCradle wdir =
@@ -1233,10 +1231,29 @@ obeliskAction workDir _fp = do
 -- Utilities
 
 
+-- | Searches upwards for the first directory containing a file.
+findFileUpwards :: FilePath -> FilePath -> MaybeT IO FilePath
+findFileUpwards filename dir = do
+  cnts <-
+    liftIO
+    $ handleJust
+        -- Catch permission errors
+        (\(e :: IOError) -> if isPermissionError e then Just False else Nothing)
+        pure
+        (doesFileExist (dir </> filename))
+  case cnts of
+    False | dir' == dir -> fail "No cabal files"
+            | otherwise   -> findFileUpwards filename dir'
+    True -> return dir
+  where dir' = takeDirectory dir
+
 -- | Searches upwards for the first directory containing a file to match
 -- the predicate.
-findFileUpwards :: (FilePath -> Bool) -> FilePath -> MaybeT IO FilePath
-findFileUpwards p dir = do
+--
+-- *WARNING*, this scans all the files of all the directories upward. If
+-- appliable, prefer to use 'findFileUpwards'
+findFileUpwardsPredicate :: (FilePath -> Bool) -> FilePath -> MaybeT IO FilePath
+findFileUpwardsPredicate p dir = do
   cnts <-
     liftIO
     $ handleJust
@@ -1247,7 +1264,7 @@ findFileUpwards p dir = do
 
   case cnts of
     [] | dir' == dir -> fail "No cabal files"
-            | otherwise   -> findFileUpwards p dir'
+            | otherwise   -> findFileUpwardsPredicate p dir'
     _ : _ -> return dir
   where dir' = takeDirectory dir
 
