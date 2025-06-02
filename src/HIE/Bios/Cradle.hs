@@ -635,15 +635,13 @@ cabalCradle l cs wdir mc projectFile
 -- queries, such as ghc version or location of the libdir.
 cabalProcess :: LogAction IO (WithSeverity Log) -> ProgramVersions -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
 cabalProcess l vs cabalProject workDir command args = do
-  (ghcDirs, ghcPkgPath) <- callCabalPathForCompilerPath l vs workDir cabalProject >>= \case
+  ghcDirs@(ghcBin, libdir) <- callCabalPathForCompilerPath l vs workDir cabalProject >>= \case
     Just p -> do
       libdir <- readProcessWithCwd_ l workDir p ["--print-libdir"] ""
-      pure ((p, trimEnd libdir), Nothing)
-    Nothing -> do
-      ghcDirs@(ghcBin, libdir) <- cabalGhcDirs l cabalProject workDir
-      ghcPkgPath <- liftIO $ withGhcPkgTool ghcBin libdir
-      pure (ghcDirs, Just ghcPkgPath)
+      pure (p, trimEnd libdir)
+    Nothing -> cabalGhcDirs l cabalProject workDir
 
+  ghcPkgPath <- liftIO $ withGhcPkgTool ghcBin libdir
   newEnvironment <- liftIO $ setupEnvironment ghcDirs
   cabalProc <- liftIO $ setupCabalCommand ghcPkgPath
   pure $ (cabalProc
@@ -660,20 +658,16 @@ cabalProcess l vs cabalProject workDir command args = do
       environment <- getCleanEnvironment
       pure $ processEnvironment ghcDirs ++ environment
 
-    setupCabalCommand :: Maybe FilePath -> IO CreateProcess
+    setupCabalCommand :: FilePath -> IO CreateProcess
     setupCabalCommand ghcPkgPath = do
       wrapper_fp <- withGhcWrapperTool l ("ghc", []) workDir
       buildDir <- cabalBuildDir workDir
-      let hcPkgArgs = case ghcPkgPath of
-            Nothing -> []
-            Just p -> ["--with-hc-pkg", p]
-
-          extraCabalArgs =
+      let extraCabalArgs =
             [ "--builddir=" <> buildDir
             , command
             , "--with-compiler", wrapper_fp
+            , "--with-hc-pkg", ghcPkgPath
             ]
-            <> hcPkgArgs
             <> projectFileProcessArgs cabalProject
       pure $ proc "cabal" (extraCabalArgs ++ args)
 
