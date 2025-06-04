@@ -319,8 +319,9 @@ isCabalMultipleCompSupported' :: TestM Bool
 isCabalMultipleCompSupported' = do
   cr <- askCradle
   root <- askRoot
-  versions <- liftIO $ makeVersions (cradleLogger cr) root ((runGhcCmd . cradleOptsProg) cr)
-  liftIO $ isCabalMultipleCompSupported versions
+  versions <- liftIO $ makeVersions (cradleLogger cr) root
+  v <- liftIO $ getGhcVersion ((runGhcCmd . cradleOptsProg) cr)
+  pure $ isCabalMultipleCompSupported (Just versions) v
 
 inCradleRootDir :: TestM a -> TestM a
 inCradleRootDir act = do
