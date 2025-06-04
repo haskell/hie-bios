@@ -321,7 +321,7 @@ isCabalMultipleCompSupported' = do
   root <- askRoot
   versions <- liftIO $ makeVersions (cradleLogger cr) root
   v <- liftIO $ getGhcVersion ((runGhcCmd . cradleOptsProg) cr)
-  pure $ isCabalMultipleCompSupported versions v
+  pure $ isCabalMultipleCompSupported (Just versions) v
 
 inCradleRootDir :: TestM a -> TestM a
 inCradleRootDir act = do

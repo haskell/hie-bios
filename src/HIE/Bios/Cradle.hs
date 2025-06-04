@@ -57,7 +57,8 @@ import qualified Data.Conduit.Combinators as C
 import qualified Data.Conduit as C
 import qualified Data.Conduit.Text as C
 import qualified Data.HashMap.Strict as Map
-import Data.Maybe (fromMaybe)
+import Data.Foldable (for_)
+import Data.Maybe (fromMaybe, isJust, maybe)
 import Data.List
 import Data.List.Extra (trimEnd, nubOrd)
 import Data.Ord (Down(..))
@@ -510,11 +511,10 @@ biosAction runGhcCmd wdir bios bios_deps l fp loadStyle = do
   ghc_version <- getGhcVersion runGhcCmd
   determinedLoadStyle <- case ghc_version of
     Just ghc
-      -- Multi-component supported from ghc 9.4
       -- We trust the assertion for a bios program, as we have no way of
       -- checking its version
       | LoadWithContext _ <- loadStyle ->
-          if ghc >= makeVersion [9,4]
+          if isCabalMultipleCompSupported Nothing (Just ghc)
             then pure loadStyle
             else do
               liftIO $ l <& WithSeverity
@@ -885,12 +885,11 @@ callCabalPathForCompilerPath l vs workDir projectFile = do
 isCabalPathSupported :: BuildToolVersions -> Bool
 isCabalPathSupported = maybe False (>= makeVersion [3,14]) . cabalVersion
 
-isCabalMultipleCompSupported :: BuildToolVersions -> Maybe Version -> Bool
-isCabalMultipleCompSupported vs ghcVersion = do
-  -- determine which load style is supported by this cabal cradle.
-  case (cabalVersion vs, ghcVersion) of
-    (Just cabal, Just ghc) -> ghc >= makeVersion [9, 4] && cabal >= makeVersion [3, 11]
-    _ -> False
+isCabalMultipleCompSupported :: Maybe BuildToolVersions -> Maybe Version -> Bool
+isCabalMultipleCompSupported mvs ghcVersion = isJust $ do
+  let atLeast v = guard . maybe False (makeVersion v <=)
+  atLeast [9,4] ghcVersion
+  for_ mvs $ \vs -> atLeast [3,11] $ cabalVersion vs -- Only gate on cabal version if known
 
 cabalAction
   :: ResolvedCradles a
@@ -904,7 +903,7 @@ cabalAction
   -> LoadStyle
   -> CradleLoadResultT IO ComponentOptions
 cabalAction (ResolvedCradles root cs vs) workDir ghcPath ghcVersion mc l projectFile fp loadStyle = do
-  let multiCompSupport = isCabalMultipleCompSupported vs ghcVersion
+  let multiCompSupport = isCabalMultipleCompSupported (Just vs) ghcVersion
   -- determine which load style is supported by this cabal cradle.
   determinedLoadStyle <- case loadStyle of
     LoadWithContext _ | not multiCompSupport -> do
