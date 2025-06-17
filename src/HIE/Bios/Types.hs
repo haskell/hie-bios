@@ -16,7 +16,7 @@ import qualified Control.Monad.Fail as Fail
 import           Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import           Prettyprinter
-import           System.Process.Extra (CreateProcess (env, cmdspec), CmdSpec (..))
+import           System.Process.Extra (CreateProcess (env, cmdspec), CmdSpec (..), showCommandForUser)
 
 ----------------------------------------------------------------
 -- Environment variables used by hie-bios.
@@ -106,6 +106,7 @@ data Log
   | LogComputedCradleLoadStyle !T.Text !LoadStyle
   | LogLoadWithContextUnsupported !T.Text !(Maybe T.Text)
   | LogCabalLoad !FilePath !(Maybe String) ![FilePath] ![FilePath]
+  | LogCabalLibraryTooOld [String]
   | LogCabalPath !T.Text
   deriving (Show)
 
@@ -148,6 +149,9 @@ instance Pretty Log where
           <> line <> indent 4 "from project: " <+> pretty projectFile
           <> line <> indent 4 "with prefixes:" <+> pretty prefixes
           <> line <> indent 4 "with actual loading files:" <+> pretty crs
+  pretty (LogCabalLibraryTooOld err) =
+    "'lib:Cabal' is too old to use '--with-repl' flag. Requires 'lib:Cabal' >= 3.15. Original error:" <> line
+      <> vcat (fmap pretty err)
   pretty (LogCabalPath err) =
     "Could not parse json output of 'cabal path': "
       <> line <> indent 4 (pretty err)
@@ -316,12 +320,18 @@ data ComponentOptions = ComponentOptions {
 -- | Prettify 'CmdSpec', so we can show the command to a user
 prettyCmdSpec :: CmdSpec -> String
 prettyCmdSpec (ShellCommand s) = s
-prettyCmdSpec (RawCommand cmd args) = cmd ++ " " ++ unwords args
+prettyCmdSpec (RawCommand cmd args) = showCommandForUser cmd args
 
 -- | Pretty print hie-bios's relevant environment variables.
 prettyProcessEnv :: CreateProcess -> [String]
 prettyProcessEnv p =
   [ key <> ": " <> value
+  | (key, value) <- hieBiosProcessEnv p
+  ]
+
+hieBiosProcessEnv :: CreateProcess -> [(String, String)]
+hieBiosProcessEnv p =
+  [ (key, value)
   | (key, value) <- fromMaybe [] (env p)
   , key `elem` [ hie_bios_output
                , hie_bios_ghc

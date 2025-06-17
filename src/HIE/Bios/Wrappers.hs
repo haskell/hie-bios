@@ -1,13 +1,15 @@
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE CPP #-}
-module HIE.Bios.Wrappers (cabalWrapper, cabalWrapperHs) where
+{-# LANGUAGE TemplateHaskell #-}
 
-import Data.FileEmbed
-#if __GLASGOW_HASKELL__ >= 903
-  hiding (makeRelativeToProject)
-#endif
-import Language.Haskell.TH.Syntax
+module HIE.Bios.Wrappers (
+  cabalWrapper,
+  cabalWithReplWrapper,
+  cabalWrapperHs,
+  cabalWithReplWrapperHs,
+) where
+
+import Data.FileEmbed ( embedStringFile )
+import Language.Haskell.TH.Syntax ( makeRelativeToProject )
 
 cabalWrapper :: String
 cabalWrapper = $(makeRelativeToProject "wrappers/cabal" >>= embedStringFile)
@@ -15,3 +17,8 @@ cabalWrapper = $(makeRelativeToProject "wrappers/cabal" >>= embedStringFile)
 cabalWrapperHs :: String
 cabalWrapperHs = $(makeRelativeToProject "wrappers/cabal.hs" >>= embedStringFile)
 
+cabalWithReplWrapper :: String
+cabalWithReplWrapper = $(makeRelativeToProject "wrappers/cabal-with-repl" >>= embedStringFile)
+
+cabalWithReplWrapperHs :: String
+cabalWithReplWrapperHs = $(makeRelativeToProject "wrappers/cabal-with-repl.hs" >>= embedStringFile)

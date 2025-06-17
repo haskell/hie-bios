@@ -15,18 +15,20 @@ Build-Type:             Simple
 extra-doc-files:        ChangeLog.md
 Extra-Source-Files:     README.md
                         wrappers/cabal
+                        wrappers/cabal-with-repl
                         wrappers/cabal.hs
+                        wrappers/cabal-with-repl.hs
                         tests/configs/*.yaml
                         tests/projects/cabal-with-ghc/cabal-with-ghc.cabal
                         tests/projects/cabal-with-ghc/cabal.project
                         tests/projects/cabal-with-ghc/hie.yaml
                         tests/projects/cabal-with-ghc/src/MyLib.hs
                         tests/projects/cabal-with-ghc-and-project/cabal-with-ghc.cabal
-                        tests/projects/cabal-with-ghc-and-project/cabal.project.9.2.8
+                        tests/projects/cabal-with-ghc-and-project/cabal.project.extra
                         tests/projects/cabal-with-ghc-and-project/hie.yaml
                         tests/projects/cabal-with-ghc-and-project/src/MyLib.hs
                         tests/projects/cabal-with-project/cabal-with-project.cabal
-                        tests/projects/cabal-with-project/cabal.project.9.2.8
+                        tests/projects/cabal-with-project/cabal.project.extra
                         tests/projects/cabal-with-project/hie.yaml
                         tests/projects/cabal-with-project/src/MyLib.hs
                         tests/projects/symlink-test/a/A.hs
@@ -47,7 +49,7 @@ Extra-Source-Files:     README.md
                         tests/projects/multi-cabal-with-project/appA/src/Lib.hs
                         tests/projects/multi-cabal-with-project/appB/appB.cabal
                         tests/projects/multi-cabal-with-project/appB/src/Lib.hs
-                        tests/projects/multi-cabal-with-project/cabal.project.9.2.8
+                        tests/projects/multi-cabal-with-project/cabal.project.extra
                         tests/projects/multi-cabal-with-project/hie.yaml
                         tests/projects/monorepo-cabal/cabal.project
                         tests/projects/monorepo-cabal/hie.yaml
@@ -144,7 +146,7 @@ Extra-Source-Files:     README.md
                         tests/projects/failing-multi-repl-cabal-project/multi-repl-cabal-fail/src/Lib.hs
                         tests/projects/failing-multi-repl-cabal-project/NotInPath.hs
 
-tested-with: GHC ==9.4.8 || ==9.6.7 || ==9.8.4 || ==9.10.1 || ==9.12.2
+tested-with: GHC ==9.6.7 || ==9.8.4 || ==9.10.1 || ==9.12.2
 
 Library
   Default-Language:     Haskell2010

@@ -18,9 +18,10 @@ import HIE.Bios.Cradle
 import Control.Monad ( forM_ )
 import Data.List ( sort, isPrefixOf )
 import Data.Typeable
+import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Directory
 import System.FilePath ((</>), makeRelative)
-import System.Exit (ExitCode(ExitSuccess, ExitFailure))
+import System.Info.Extra (isWindows)
 import Control.Monad.Extra (unlessM)
 import qualified HIE.Bios.Ghc.Gap as Gap
 import Control.Monad.IO.Class
@@ -34,7 +35,7 @@ argDynamic = ["-dynamic" | Gap.hostIsDynamic]
 -- If you change this version, make sure to also update 'cabal.project'
 -- in 'tests\/projects\/cabal-with-ghc'.
 extraGhcVersion :: String
-extraGhcVersion = "9.2.8"
+extraGhcVersion = "9.4.8"
 
 extraGhc :: String
 extraGhc = "ghc-" ++ extraGhcVersion
@@ -123,7 +124,11 @@ biosTestCases =
         cradleErrorExitCode @?= ExitSuccess
         cradleErrorDependencies `shouldMatchList` []
         length cradleErrorStderr @?= 1
-        "Couldn't execute myGhc" `isPrefixOf` head cradleErrorStderr @? "Error message should contain basic information"
+        let errorCtx = head cradleErrorStderr
+        -- On windows, this error message contains '"' around the executable name
+        if isWindows
+          then "Couldn't execute \"myGhc\"" `isPrefixOf` errorCtx @? "Error message should contain error information"
+          else "Couldn't execute myGhc"     `isPrefixOf` errorCtx @? "Error message should contain error information"
   , biosTestCase "simple-bios-shell" $ runTestEnv "./simple-bios-shell" $ do
       testDirectoryM isBiosCradle "B.hs"
   , biosTestCase "simple-bios-shell-deps" $ runTestEnv "./simple-bios-shell" $ do
@@ -242,6 +247,12 @@ cabalTestCases extraGhcDep =
           loadRuntimeGhcVersion
           assertGhcVersionIs extraGhcVersion
       ]
+    , biosTestCase "force older Cabal version in custom setup" $ runTestEnv "cabal-with-custom-setup" $ do
+        -- Specifically tests whether cabal 3.16 works as expected with
+        -- an older lib:Cabal version that doesn't support '--with-repl'.
+        -- This test doesn't hurt for other cases as well, so we enable it for
+        -- all configurations.
+        testDirectoryM isCabalCradle "src/MyLib.hs"
     ]
   ]
   where
@@ -357,7 +368,6 @@ biosTestCase :: TestName -> (Bool -> Assertion) -> TestTree
 biosTestCase name assertion = askOption @VerboseLogging (\case
   VerboseLogging verbose -> testCase name (assertion verbose)
   )
-
 
 -- ------------------------------------------------------------------
 -- Stack related helper functions
