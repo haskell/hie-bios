@@ -16,7 +16,7 @@ import qualified Control.Monad.Fail as Fail
 import           Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import           Prettyprinter
-import           System.Process.Extra (CreateProcess (env, cmdspec), CmdSpec (..))
+import           System.Process.Extra (CreateProcess (env, cmdspec), CmdSpec (..), showCommandForUser)
 
 ----------------------------------------------------------------
 -- Environment variables used by hie-bios.
@@ -316,7 +316,7 @@ data ComponentOptions = ComponentOptions {
 -- | Prettify 'CmdSpec', so we can show the command to a user
 prettyCmdSpec :: CmdSpec -> String
 prettyCmdSpec (ShellCommand s) = s
-prettyCmdSpec (RawCommand cmd args) = cmd ++ " " ++ unwords args
+prettyCmdSpec (RawCommand cmd args) = showCommandForUser cmd args
 
 -- | Pretty print hie-bios's relevant environment variables.
 prettyProcessEnv :: CreateProcess -> [String]

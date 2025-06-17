@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+function out(){
+  echo "$1" >> "$HIE_BIOS_OUTPUT"
+}
+
+out "$(pwd)"
+for arg in "$@"; do
+  out "$arg"
+done

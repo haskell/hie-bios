@@ -70,7 +70,7 @@ import qualified HIE.Bios.Types as Types
 import qualified HIE.Bios.Ghc.Gap as Gap
 
 import GHC.Fingerprint (fingerprintString)
-import GHC.ResponseFile (escapeArgs)
+import GHC.ResponseFile (escapeArgs, expandResponse)
 
 import Data.Version
 import Data.IORef
@@ -612,10 +612,64 @@ cabalCradle l cs wdir mc projectFile
             -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
             liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
             -- Need to pass -v0 otherwise we get "resolving dependencies..."
-            cabalProc <- cabalProcess l vs projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
+            cabalProc <- cabalExecGhc l vs projectFile wdir args
             Process.readProcessWithCwd' l cabalProc ""
     }
 
+cabalExecGhc :: LogAction IO (WithSeverity Log) -> ProgramVersions -> CradleProjectConfig -> FilePath -> [String] -> CradleLoadResultT IO CreateProcess
+cabalExecGhc l vs projectFile wdir args = do
+  cabalProcess l vs projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
+
+processCabalLoadStyle :: MonadIO m => LogAction IO (WithSeverity Log) -> ResolvedCradles a -> CradleProjectConfig -> [Char] -> Maybe FilePath -> [Char] -> LoadStyle -> m ([FilePath], [FilePath], [FilePath])
+processCabalLoadStyle l cradles projectFile workDir mc fp loadStyle = do
+  let fpModule = fromMaybe (fixTargetPath fp) mc
+  let (cabalArgs, loadingFiles, extraDeps) = case loadStyle of
+        LoadFile -> ([fpModule], [fp], [])
+        LoadWithContext fps ->
+          let allModulesFpsDeps = ((fpModule, fp, []) : moduleFilesFromSameProject fps)
+              allModules = nubOrd $ fst3 <$> allModulesFpsDeps
+              allFiles = nubOrd $ snd3 <$> allModulesFpsDeps
+              allFpsDeps = nubOrd $ concatMap thd3 allModulesFpsDeps
+           in (["--keep-temp-files", "--enable-multi-repl"] ++ allModules, allFiles, allFpsDeps)
+
+  liftIO $ l <& LogComputedCradleLoadStyle "cabal" loadStyle `WithSeverity` Info
+  liftIO $ l <& LogCabalLoad fp mc (prefix <$> resolvedCradles cradles) loadingFiles `WithSeverity` Debug
+  pure (cabalArgs, loadingFiles, extraDeps)
+  where
+    -- Need to make relative on Windows, due to a Cabal bug with how it
+    -- parses file targets with a C: drive in it. So we decide to make
+    -- the paths relative to the working directory.
+    fixTargetPath x
+      | isWindows && hasDrive x = makeRelative workDir x
+      | otherwise = x
+    moduleFilesFromSameProject fps =
+      [ (fromMaybe (fixTargetPath file) old_mc, file, deps)
+      | file <- fps,
+        -- Lookup the component for the old file
+        Just (ResolvedCradle {concreteCradle = ConcreteCabal ct, cradleDeps = deps}) <- [selectCradle prefix file (resolvedCradles cradles)],
+        -- Only include this file if the old component is in the same project
+        (projectConfigFromMaybe (cradleRoot cradles) (cabalProjectFile ct)) == projectFile,
+        let old_mc = cabalComponent ct
+      ]
+
+cabalLoadFilesBefore315 :: LogAction IO (WithSeverity Log) -> ProgramVersions -> CradleProjectConfig -> [Char] -> [String] -> CradleLoadResultT IO CreateProcess
+cabalLoadFilesBefore315 l progVersions projectFile workDir args = do
+  let cabalCommand = "v2-repl"
+
+  cabalProcess l progVersions projectFile workDir cabalCommand args `modCradleError` \err -> do
+    deps <- cabalCradleDependencies projectFile workDir workDir
+    pure $ err {cradleErrorDependencies = cradleErrorDependencies err ++ deps}
+
+cabalLoadFilesWithRepl :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> [String] -> CradleLoadResultT IO CreateProcess
+cabalLoadFilesWithRepl l projectFile workDir args = do
+  let cabalCommand = "v2-repl"
+
+  newEnvironment <- liftIO Process.getCleanEnvironment
+  wrapper_fp <- liftIO $ withReplWrapperTool l (proc "ghc") workDir
+  pure $ (proc "cabal" ([cabalCommand, "--keep-temp-files", "--with-repl", wrapper_fp] <> projectFileProcessArgs projectFile <> args))
+    { env = Just newEnvironment
+    , cwd = Just workDir
+    }
 
 -- | Execute a cabal process in our custom cache-build directory configured
 -- with the custom ghc executable.
@@ -653,7 +707,7 @@ cabalProcess l vs cabalProject workDir command args = do
 
     setupCabalCommand :: FilePath -> IO CreateProcess
     setupCabalCommand ghcPkgPath = do
-      wrapper_fp <- withGhcWrapperTool l ("ghc", []) workDir
+      wrapper_fp <- withGhcWrapperTool l (proc "ghc") workDir
       buildDir <- cabalBuildDir workDir
       let extraCabalArgs =
             [ "--builddir=" <> buildDir
@@ -688,7 +742,7 @@ withGhcPkgTool ghcPathAbs libdir = do
       ghcPkgPath = guessGhcPkgFromGhc ghcName
   if isWindows
     then pure ghcPkgPath
-    else withWrapperTool ghcPkgPath
+    else withGhcPkgShim ghcPkgPath
   where
     ghcDir = takeDirectory ghcPathAbs
 
@@ -707,7 +761,7 @@ withGhcPkgTool ghcPathAbs libdir = do
     --
     -- If we used the raw executable, i.e. not wrapped in a shim, then 'cabal'
     -- can not use the given 'ghc-pkg'.
-    withWrapperTool ghcPkg = do
+    withGhcPkgShim ghcPkg = do
       let globalPackageDb = libdir </> "package.conf.d"
           -- This is the same as the wrapper-shims ghc-pkg usually comes with.
           contents = unlines
@@ -762,32 +816,40 @@ processCabalWrapperArgs args =
             in Just (dir, final_args)
         _ -> Nothing
 
--- | GHC process information.
--- Consists of the filepath to the ghc executable and
--- arguments to the executable.
-type GhcProc = (FilePath, [String])
+-- | GHC process that accepts GHC arguments.
+type GhcProc = [String] -> CreateProcess
 
 -- | Generate a fake GHC that can be passed to cabal or stack
 -- when run with --interactive, it will print out its
 -- command-line arguments and exit
 withGhcWrapperTool :: LogAction IO (WithSeverity Log) -> GhcProc -> FilePath -> IO FilePath
-withGhcWrapperTool l (mbGhc, ghcArgs) wdir = do
-    let wrapperContents = if isWindows then cabalWrapperHs else cabalWrapper
-        withExtension fp = if isWindows then fp <.> "exe" else fp
-        srcHash = show (fingerprintString wrapperContents)
-    cacheFile (withExtension "wrapper") srcHash $ \wrapper_fp ->
-      if isWindows
-      then
-        withSystemTempDirectory "hie-bios" $ \ tmpDir -> do
-          let wrapper_hs = wrapper_fp -<.> "hs"
-          writeFile wrapper_hs wrapperContents
-          let ghcArgsWithExtras = ghcArgs ++ ["-rtsopts=ignore", "-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs]
-          let ghcProc = (proc mbGhc ghcArgsWithExtras)
-                      { cwd = Just wdir
-                      }
-          l <& LogCreateProcessRun ghcProc `WithSeverity` Debug
-          readCreateProcess ghcProc "" >>= putStr
-      else writeFile wrapper_fp wrapperContents
+withGhcWrapperTool l mkGhcCall wdir = do
+  withWrapperTool l mkGhcCall wdir "wrapper" cabalWrapperHs cabalWrapper
+
+-- | Generate a script/binary that can be passed to cabal's '--with-repl'.
+-- On windows, this compiles a Haskell file, while on other systems, we persist
+withReplWrapperTool :: LogAction IO (WithSeverity Log) -> GhcProc -> FilePath -> IO FilePath
+withReplWrapperTool l mkGhcCall wdir =
+  withWrapperTool l mkGhcCall wdir "repl-wrapper" cabalWithReplWrapperHs cabalWithReplWrapper
+
+withWrapperTool :: LogAction IO (WithSeverity Log) -> GhcProc -> String -> FilePath -> String -> String -> IO FilePath
+withWrapperTool l mkGhcCall wdir baseName windowsWrapper unixWrapper = do
+  let wrapperContents = if isWindows then windowsWrapper else unixWrapper
+      withExtension fp = if isWindows then fp <.> "exe" else fp
+      srcHash = show (fingerprintString wrapperContents)
+  cacheFile (withExtension baseName) srcHash $ \wrapper_fp ->
+    if isWindows
+    then
+      withSystemTempDirectory "hie-bios" $ \ tmpDir -> do
+        let wrapper_hs = wrapper_fp -<.> "hs"
+        writeFile wrapper_hs wrapperContents
+        let ghcArgs = ["-rtsopts=ignore", "-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs]
+        let ghcProc = (mkGhcCall ghcArgs)
+                    { cwd = Just wdir
+                    }
+        l <& LogCreateProcessRun ghcProc `WithSeverity` Debug
+        readCreateProcess ghcProc "" >>= putStr
+    else writeFile wrapper_fp wrapperContents
 
 -- | Create and cache a file in hie-bios's cache directory.
 --
@@ -885,6 +947,20 @@ isCabalMultipleCompSupported vs = do
     (Just cabal, Just ghc) -> pure $ ghc >= makeVersion [9, 4] && cabal >= makeVersion [3, 11]
     _ -> pure False
 
+data CabalLoadFeature
+  = CabalWithRepl
+  | CabalWithGhcShimWrapper
+
+determineCabalLoadFeature :: MonadIO m => ProgramVersions -> m CabalLoadFeature
+determineCabalLoadFeature vs = do
+  cabal_version <- liftIO $ runCachedIO $ cabalVersion vs
+  -- determine which load style is supported by this cabal cradle.
+  case cabal_version of
+    Just ver
+      | ver >= makeVersion [3, 15] -> pure CabalWithRepl
+      | otherwise -> pure CabalWithGhcShimWrapper
+    _ -> pure CabalWithGhcShimWrapper
+
 cabalAction
   :: ResolvedCradles a
   -> FilePath
@@ -895,7 +971,8 @@ cabalAction
   -> LoadStyle
   -> CradleLoadResultT IO ComponentOptions
 cabalAction cradles workDir mc l projectFile fp loadStyle = do
-  multiCompSupport <- isCabalMultipleCompSupported (cradleProgramVersions cradles)
+  let progVersions = cradleProgramVersions cradles
+  multiCompSupport <- isCabalMultipleCompSupported progVersions
   -- determine which load style is supported by this cabal cradle.
   determinedLoadStyle <- case loadStyle of
     LoadWithContext _ | not multiCompSupport -> do
@@ -909,25 +986,12 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
       pure LoadFile
     _ -> pure loadStyle
 
-  let fpModule = fromMaybe (fixTargetPath fp) mc
-  let (cabalArgs, loadingFiles, extraDeps) = case determinedLoadStyle of
-        LoadFile -> ([fpModule], [fp], [])
-        LoadWithContext fps ->
-          let allModulesFpsDeps = ((fpModule, fp, []) : moduleFilesFromSameProject fps)
-              allModules = nubOrd $ fst3 <$> allModulesFpsDeps
-              allFiles = nubOrd $ snd3 <$> allModulesFpsDeps
-              allFpsDeps = nubOrd $ concatMap thd3 allModulesFpsDeps
-           in (["--keep-temp-files", "--enable-multi-repl"] ++ allModules, allFiles, allFpsDeps)
+  (cabalArgs, loadingFiles, extraDeps) <- processCabalLoadStyle l cradles projectFile workDir mc fp determinedLoadStyle
 
-  liftIO $ l <& LogComputedCradleLoadStyle "cabal" determinedLoadStyle `WithSeverity` Info
-  liftIO $ l <& LogCabalLoad fp mc (prefix <$> resolvedCradles cradles) loadingFiles `WithSeverity` Debug
-
-  let cabalCommand = "v2-repl"
-
-  cabalProc <-
-    cabalProcess l (cradleProgramVersions cradles) projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
-      deps <- cabalCradleDependencies projectFile workDir workDir
-      pure $ err {cradleErrorDependencies = cradleErrorDependencies err ++ deps}
+  cabalFeatures <- determineCabalLoadFeature progVersions
+  cabalProc <- case cabalFeatures of
+    CabalWithRepl -> cabalLoadFilesWithRepl l projectFile workDir cabalArgs
+    CabalWithGhcShimWrapper -> cabalLoadFilesBefore315 l progVersions projectFile workDir cabalArgs
 
   (ex, output, stde, [(_, maybeArgs)]) <- liftIO $ Process.readProcessWithOutputs [hie_bios_output] l workDir cabalProc
   let args = fromMaybe [] maybeArgs
@@ -943,7 +1007,7 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
 
   when (ex /= ExitSuccess) $ do
     deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
-    let cmd = show (["cabal", cabalCommand] <> cabalArgs)
+    let cmd = prettyCmdSpec (cmdspec cabalProc)
     let errorMsg = "Failed to run " <> cmd <> " in directory \"" <> workDir <> "\". Consult the logs for full command and error."
     throwCE (CradleError deps ex ([errorMsg] <> errorDetails) loadingFiles)
 
@@ -954,25 +1018,17 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
       -- root of the component, so we are right in trivial cases at least.
       deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
       throwCE (CradleError (deps <> extraDeps) ex (["Failed to parse result of calling cabal"] <> errorDetails) loadingFiles)
-    Just (componentDir, final_args) -> do
+    Just (componentDir, ghc_args) -> do
       deps <- liftIO $ cabalCradleDependencies projectFile workDir componentDir
+      final_args <- case cabalFeatures of
+        CabalWithRepl -> liftIO $ processCabalGhcResponseFile ghc_args
+        CabalWithGhcShimWrapper -> pure ghc_args
       CradleLoadResultT $ pure $ makeCradleResult (ex, stde, componentDir, final_args) (deps <> extraDeps) loadingFiles
-  where
-    -- Need to make relative on Windows, due to a Cabal bug with how it
-    -- parses file targets with a C: drive in it. So we decide to make
-    -- the paths relative to the working directory.
-    fixTargetPath x
-      | isWindows && hasDrive x = makeRelative workDir x
-      | otherwise = x
-    moduleFilesFromSameProject fps =
-      [ (fromMaybe (fixTargetPath file) old_mc, file, deps)
-      | file <- fps,
-        -- Lookup the component for the old file
-        Just (ResolvedCradle {concreteCradle = ConcreteCabal ct, cradleDeps = deps}) <- [selectCradle prefix file (resolvedCradles cradles)],
-        -- Only include this file if the old component is in the same project
-        (projectConfigFromMaybe (cradleRoot cradles) (cabalProjectFile ct)) == projectFile,
-        let old_mc = cabalComponent ct
-      ]
+
+processCabalGhcResponseFile :: [String] -> IO [String]
+processCabalGhcResponseFile args = do
+  expanded_args <- expandResponse args
+  pure $ removeInteractive expanded_args
 
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
@@ -1086,9 +1142,9 @@ stackAction
   -> IO (CradleLoadResult ComponentOptions)
 stackAction workDir mc syaml l fp loadStyle = do
   logCradleHasNoSupportForLoadWithContext l loadStyle "stack"
-  let ghcProcArgs = ("stack", stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
+  let ghcProc args = proc "stack" (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
   -- Same wrapper works as with cabal
-  wrapper_fp <- withGhcWrapperTool l ghcProcArgs workDir
+  wrapper_fp <- withGhcWrapperTool l ghcProc workDir
   (ex1, _stdo, stde, [(_, maybeArgs)]) <-
     Process.readProcessWithOutputs [hie_bios_output] l workDir
       $ stackProcess syaml
