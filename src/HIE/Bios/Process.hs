@@ -1,7 +1,20 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module HIE.Bios.Process where
+module HIE.Bios.Process
+  ( CreateProcess(..)
+  -- * Run processes with extra environment variables
+  , readProcessWithCwd
+  , readProcessWithCwd_
+  , readProcessWithCwd'
+  , readProcessWithOutputs
+  , getCleanEnvironment
+  -- * Find file utilities
+  , findFileUpwards
+  , findFileUpwardsPredicate
+  , findFile
+  )
+  where
 
 import Control.Applicative (optional)
 import Control.DeepSeq
