@@ -15,7 +15,9 @@ Build-Type:             Simple
 extra-doc-files:        ChangeLog.md
 Extra-Source-Files:     README.md
                         wrappers/cabal
+                        wrappers/cabal-with-repl
                         wrappers/cabal.hs
+                        wrappers/cabal-with-repl.hs
                         tests/configs/*.yaml
                         tests/projects/cabal-with-ghc/cabal-with-ghc.cabal
                         tests/projects/cabal-with-ghc/cabal.project
@@ -157,6 +159,7 @@ Library
                         HIE.Bios.Environment
                         HIE.Bios.Internal.Debug
                         HIE.Bios.Flags
+                        HIE.Bios.Process
                         HIE.Bios.Types
                         HIE.Bios.Ghc.Api
                         HIE.Bios.Ghc.Check
