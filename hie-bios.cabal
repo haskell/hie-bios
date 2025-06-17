@@ -157,6 +157,7 @@ Library
                         HIE.Bios.Environment
                         HIE.Bios.Internal.Debug
                         HIE.Bios.Flags
+                        HIE.Bios.Process
                         HIE.Bios.Types
                         HIE.Bios.Ghc.Api
                         HIE.Bios.Ghc.Check
