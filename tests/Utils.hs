@@ -26,6 +26,7 @@ module Utils (
   -- * Ask for test environment
   askRoot,
   askStep,
+  askLogger,
   askCradle,
   askLoadResult,
   askOrLoadLibDir,
@@ -42,10 +43,12 @@ module Utils (
   initCradle,
   initImplicitCradle,
   loadComponentOptions,
+  loadComponentOptionsMultiStyle,
   loadRuntimeGhcLibDir,
   loadRuntimeGhcVersion,
   inCradleRootDir,
   loadFileGhc,
+  isCabalMultipleCompSupported',
 
   -- * Assertion helpers
   assertCradle,
@@ -80,12 +83,15 @@ import HIE.Bios.Flags
 import HIE.Bios.Ghc.Api
 import qualified HIE.Bios.Ghc.Gap as G
 import HIE.Bios.Ghc.Load
-import HIE.Bios.Types
+import HIE.Bios.Types as HIE
 import Prettyprinter
 import System.Directory
 import System.FilePath
 import System.IO.Temp
 import Test.Tasty.HUnit
+import Colog.Core
+import qualified Data.Text as Text
+import Data.Function ((&))
 
 -- ---------------------------------------------------------------------------
 -- Test configuration and information
@@ -96,6 +102,7 @@ type TestM a = StateT (TestEnv Void) IO a
 data TestConfig = TestConfig
   { useTemporaryDirectory :: Bool
   , testProjectRoots :: FilePath
+  , testVerbose :: Bool
   }
   deriving (Eq, Show, Ord)
 
@@ -105,20 +112,20 @@ data TestEnv ext = TestEnv
   , testLibDirResult :: Maybe (CradleLoadResult FilePath)
   , testGhcVersionResult :: Maybe (CradleLoadResult String)
   , testRootDir :: FilePath
-  , testStepFunction :: String -> IO ()
+  , testLogger :: L.LogAction IO (L.WithSeverity HIE.Log)
   }
 
 defConfig :: TestConfig
-defConfig = TestConfig True "./tests/projects"
+defConfig = TestConfig True "./tests/projects" False
 
-runTestEnv :: FilePath -> TestM a -> (String -> IO ()) -> IO a
-runTestEnv = runTestEnv' defConfig
+runTestEnv :: FilePath -> TestM a -> Bool -> IO a
+runTestEnv fp act verbose = runTestEnv' defConfig{testVerbose=verbose} fp act
 
-runTestEnvLocal :: FilePath -> TestM a -> (String -> IO ()) -> IO a
-runTestEnvLocal = runTestEnv' defConfig{useTemporaryDirectory = False}
+runTestEnvLocal :: FilePath -> TestM a -> Bool -> IO a
+runTestEnvLocal fp act verbose = runTestEnv' defConfig{useTemporaryDirectory = False,testVerbose=verbose} fp act
 
-runTestEnv' :: TestConfig -> FilePath -> TestM a -> (String -> IO ()) -> IO a
-runTestEnv' config root act stepF = do
+runTestEnv' :: TestConfig -> FilePath -> TestM a -> IO a
+runTestEnv' config root act = do
   -- We need to copy over the directory to somewhere outside the source tree
   -- when we test, since the cabal.project/stack.yaml/hie.yaml file in the root
   -- of this repository interferes with the test cradles!
@@ -133,12 +140,17 @@ runTestEnv' config root act stepF = do
           , testLibDirResult = Nothing
           , testGhcVersionResult = Nothing
           , testRootDir = root'
-          , testStepFunction = stepF
+          , testLogger = init_logger
           }
       realRoot = testProjectRoots config </> root
   wrapper realRoot $ \root' -> flip evalStateT (mkEnv root') $ do
     step $ "Run test in: " <> root'
     act
+  where
+    init_logger = L.logStringStderr
+      & L.cmap printLog
+      & L.filterBySeverity (if testVerbose config then Debug else Error) getSeverity
+    printLog (L.WithSeverity l sev) = "[" ++ show sev ++ "] " ++ show (pretty l)
 
 -- ---------------------------------------------------------------------------
 -- Modification helpers
@@ -170,7 +182,10 @@ askRoot :: TestM FilePath
 askRoot = gets testRootDir
 
 askStep :: TestM (String -> IO ())
-askStep = gets testStepFunction
+askStep = do
+  logger <- gets testLogger
+  pure $ \s ->
+    logger <& LogAny (Text.pack s) `WithSeverity` Info
 
 askCradle :: TestM (Cradle Void)
 askCradle =
@@ -225,13 +240,16 @@ askGhcVersionResult =
         assertFailure
           "No GHC version set, use 'loadRuntimeGhcVersion' before asking for it"
 
+askLogger :: TestM (L.LogAction IO (L.WithSeverity HIE.Log))
+askLogger = gets testLogger
+
 -- ---------------------------------------------------------------------------
 -- Test setup helpers
 -- ---------------------------------------------------------------------------
 
 step :: String -> TestM ()
 step msg = do
-  s <- gets testStepFunction
+  s <- askStep
   liftIO $ s msg
 
 normFile :: FilePath -> TestM FilePath
@@ -252,6 +270,7 @@ initCradle fp = do
   mcfg <- findCradleLoc a_fp
   relMcfg <- traverse relFile mcfg
   step $ "Loading Cradle: " <> show relMcfg
+  logger <- askLogger
   crd <- case mcfg of
     Just cfg -> liftIO $ loadCradle Nothing testLogger cfg
     Nothing -> liftIO $ loadImplicitCradle Nothing testLogger a_fp
@@ -261,7 +280,9 @@ initImplicitCradle :: FilePath -> TestM ()
 initImplicitCradle fp = do
   a_fp <- normFile fp
   step $ "Loading implicit Cradle for: " <> fp
-  crd <- liftIO $ loadImplicitCradle Nothing testLogger a_fp
+
+  logger <- askLogger
+  crd <- liftIO $ loadImplicitCradle Nothing logger a_fp
   setCradle crd
 
 loadComponentOptions :: FilePath -> TestM ()
@@ -270,6 +291,15 @@ loadComponentOptions fp = do
   crd <- askCradle
   step $ "Initialise flags for: " <> fp
   clr <- liftIO $ getCompilerOptions a_fp LoadFile crd
+  setLoadResult clr
+
+loadComponentOptionsMultiStyle :: FilePath -> [FilePath] -> TestM ()
+loadComponentOptionsMultiStyle fp fps = do
+  a_fp <- normFile fp
+  a_fps <- mapM normFile fps
+  crd <- askCradle
+  step $ "Initialise flags for: " <> fp <> " and " <> show fps
+  clr <- liftIO $ getCompilerOptions a_fp (LoadWithContext a_fps) crd
   setLoadResult clr
 
 loadRuntimeGhcLibDir :: TestM ()
@@ -286,9 +316,12 @@ loadRuntimeGhcVersion = do
   ghcVersionRes <- liftIO $ getRuntimeGhcVersion crd
   setGhcVersionResult ghcVersionRes
 
-testLogger :: forall a . Pretty a => L.LogAction IO (L.WithSeverity a)
-testLogger = L.cmap printLog L.logStringStderr
-  where printLog (L.WithSeverity l sev) = "[" ++ show sev ++ "] " ++ show (pretty l)
+isCabalMultipleCompSupported' :: TestM Bool
+isCabalMultipleCompSupported' = do
+  cr <- askCradle
+  root <- askRoot
+  versions <- liftIO $ makeVersions (cradleLogger cr) root ((runGhcCmd . cradleOptsProg) cr)
+  liftIO $ isCabalMultipleCompSupported versions
 
 inCradleRootDir :: TestM a -> TestM a
 inCradleRootDir act = do
@@ -380,7 +413,7 @@ assertCradleLoadSuccess :: CradleLoadResult a -> TestM a
 assertCradleLoadSuccess = \case
   (CradleSuccess x) -> pure x
   CradleNone -> liftIO $ assertFailure "Unexpected none-Cradle"
-  (CradleFail (CradleError _deps _ex stde)) ->
+  (CradleFail (CradleError _deps _ex stde _err_loading_files)) ->
     liftIO $ assertFailure ("Unexpected cradle fail" <> unlines stde)
 
 assertCradleLoadError :: CradleLoadResult a -> TestM CradleError

@@ -87,7 +87,7 @@ main = do
           res <- forM files $ \fp -> do
                   res <- getCompilerOptions fp LoadFile cradle
                   case res of
-                      CradleFail (CradleError _deps _ex err) ->
+                      CradleFail (CradleError _deps _ex err _fps) ->
                         return $ "Failed to show flags for \""
                                                   ++ fp
                                                   ++ "\": " ++ show err

@@ -1,6 +1,6 @@
 cradle:
   cabal:
-    cabalProject: "cabal.project.8.10.7"
+    cabalProject: "cabal.project.9.2.8"
     components:
       - path: "./src"
         component: "lib:hie-bios"

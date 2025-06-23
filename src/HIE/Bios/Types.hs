@@ -49,6 +49,12 @@ hie_bios_ghc_args = "HIE_BIOS_GHC_ARGS"
 hie_bios_arg :: String
 hie_bios_arg = "HIE_BIOS_ARG"
 
+-- | Environment variable pointing to the multiple source files location that
+-- caused the cradle action to be executed. Differs from hie_bios_arg for
+-- backwards compatibility.
+hie_bios_multi_arg :: String
+hie_bios_multi_arg = "HIE_BIOS_MULTI_ARG"
+
 -- | Environment variable pointing to a filepath to which dependencies
 -- of a cradle can be written to by the cradle action.
 hie_bios_deps :: String
@@ -99,6 +105,8 @@ data Log
   | LogRequestedCradleLoadStyle !T.Text !LoadStyle
   | LogComputedCradleLoadStyle !T.Text !LoadStyle
   | LogLoadWithContextUnsupported !T.Text !(Maybe T.Text)
+  | LogCabalLoad !FilePath !(Maybe String) ![FilePath] ![FilePath]
+  | LogCabalPath !T.Text
   deriving (Show)
 
 instance Pretty Log where
@@ -135,6 +143,14 @@ instance Pretty Log where
         Nothing -> "."
         Just reason -> ", because:" <+> pretty reason <> "."
       <+> "Falling back loading to single file mode."
+  pretty (LogCabalLoad file prefixes projectFile crs) =
+    "Cabal Loading file" <+> pretty file
+          <> line <> indent 4 "from project: " <+> pretty projectFile
+          <> line <> indent 4 "with prefixes:" <+> pretty prefixes
+          <> line <> indent 4 "with actual loading files:" <+> pretty crs
+  pretty (LogCabalPath err) =
+    "Could not parse json output of 'cabal path': "
+      <> line <> indent 4 (pretty err)
 
 -- | The 'LoadStyle' instructs a cradle on how to load a given file target.
 data LoadStyle
@@ -266,6 +282,10 @@ data CradleError = CradleError
   , cradleErrorStderr :: [String]
   -- ^ Standard error output that can be shown to users to explain
   -- the loading error.
+  , cradleErrorLoadingFiles :: [FilePath]
+  -- ^ files that were attempted to be loaded by the cradle.
+  -- This can be useful if we are loading multiple files at once,
+  -- e.g. in a cabal cradle with the multi-repl feature.
   }
   deriving (Show, Eq)
 

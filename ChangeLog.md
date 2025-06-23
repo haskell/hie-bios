@@ -1,5 +1,16 @@
 # ChangeLog hie-bios
 
+* Rename `findFileUpwards` as `findFileUpwardsPredicate` and implement
+  `findFileUpward` which does have better performance guarantees.
+
+## 2025-04-25 - 0.15.0
+
+* Use consistent logging for test cases [#461](https://github.com/haskell/hie-bios/pull/461)
+* Use cabal path when available [#458](https://github.com/haskell/hie-bios/pull/458)
+* Keep track of not loaded files for cabal [#453](https://github.com/haskell/hie-bios/pull/453)
+* Allow GHC 9.12 [#449](https://github.com/haskell/hie-bios/pull/449)
+* Fix cabal check [#448](https://github.com/haskell/hie-bios/pull/448)
+
 ## 2024-05-20 - 0.14.1
 
 * Allow building with GHC 9.10.1 [#435](https://github.com/haskell/hie-bios/pull/435)

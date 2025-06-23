@@ -19,7 +19,7 @@ import Control.Monad ( forM_ )
 import Data.List ( sort, isPrefixOf )
 import Data.Typeable
 import System.Directory
-import System.FilePath ((</>))
+import System.FilePath ((</>), makeRelative)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import Control.Monad.Extra (unlessM)
 import qualified HIE.Bios.Ghc.Gap as Gap
@@ -34,11 +34,24 @@ argDynamic = ["-dynamic" | Gap.hostIsDynamic]
 -- If you change this version, make sure to also update 'cabal.project'
 -- in 'tests\/projects\/cabal-with-ghc'.
 extraGhcVersion :: String
-extraGhcVersion = "8.10.7"
+extraGhcVersion = "9.2.8"
 
 extraGhc :: String
 extraGhc = "ghc-" ++ extraGhcVersion
 
+-- | To get all logs, run the tests via:
+--
+-- @
+-- cabal run test:bios-tests --test-options="--debug"
+-- @
+--
+-- or
+--
+-- @
+-- TASTY_DEBUG=TRUE cabal test test:bios-tests
+-- @
+--
+-- to avoid recompilation.
 main :: IO ()
 main = do
   writeStackYamlFiles
@@ -46,7 +59,7 @@ main = do
   cabalDep <- checkToolIsAvailable "cabal"
   extraGhcDep <- checkToolIsAvailable extraGhc
 
-  defaultMainWithIngredients (ignoreToolTests:defaultIngredients) $
+  defaultMainWithIngredients (ignoreToolTests:verboseLogging:defaultIngredients) $
     testGroup "Bios-tests"
       [ testGroup "Find cradle" findCradleTests
       , testGroup "Symlink" symbolicLinkTests
@@ -60,7 +73,7 @@ main = do
 
 symbolicLinkTests :: [TestTree]
 symbolicLinkTests =
-  [ testCaseSteps "Can load base module" $ runTestEnv "./symlink-test" $ do
+  [ biosTestCase "Can load base module" $ runTestEnv "./symlink-test" $ do
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
@@ -69,7 +82,7 @@ symbolicLinkTests =
         assertComponentOptions $ \opts ->
           componentOptions opts `shouldMatchList` ["a"] <> argDynamic
 
-  , testCaseSteps "Can load symlinked module" $ runTestEnv "./symlink-test" $ do
+  , biosTestCase "Can load symlinked module" $ runTestEnv "./symlink-test" $ do
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
@@ -80,7 +93,7 @@ symbolicLinkTests =
         loadComponentOptions "./b/A.hs"
         assertComponentOptions $ \opts ->
           componentOptions opts `shouldMatchList` ["b"] <> argDynamic
-  , testCaseSteps "Can not load symlinked module that is ignored" $ runTestEnv "./symlink-test" $ do
+  , biosTestCase "Can not load symlinked module that is ignored" $ runTestEnv "./symlink-test" $ do
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
@@ -94,14 +107,14 @@ symbolicLinkTests =
 
 biosTestCases :: [TestTree]
 biosTestCases =
-  [ testCaseSteps "failing-bios" $ runTestEnv "./failing-bios" $ do
+  [ biosTestCase "failing-bios" $ runTestEnv "./failing-bios" $ do
       initCradle "B.hs"
       assertCradle isBiosCradle
       loadComponentOptions "B.hs"
       assertCradleError $ \CradleError {..} -> do
         cradleErrorExitCode @?= ExitFailure 1
         cradleErrorDependencies `shouldMatchList` ["hie.yaml"]
-  , testCaseSteps "failing-bios-ghc" $ runTestEnv "./failing-bios-ghc" $ do
+  , biosTestCase "failing-bios-ghc" $ runTestEnv "./failing-bios-ghc" $ do
       initCradle "B.hs"
       assertCradle isBiosCradle
       loadRuntimeGhcVersion
@@ -111,9 +124,9 @@ biosTestCases =
         cradleErrorDependencies `shouldMatchList` []
         length cradleErrorStderr @?= 1
         "Couldn't execute myGhc" `isPrefixOf` head cradleErrorStderr @? "Error message should contain basic information"
-  , testCaseSteps "simple-bios-shell" $ runTestEnv "./simple-bios-shell" $ do
+  , biosTestCase "simple-bios-shell" $ runTestEnv "./simple-bios-shell" $ do
       testDirectoryM isBiosCradle "B.hs"
-  , testCaseSteps "simple-bios-shell-deps" $ runTestEnv "./simple-bios-shell" $ do
+  , biosTestCase "simple-bios-shell-deps" $ runTestEnv "./simple-bios-shell" $ do
       biosCradleDeps "B.hs" ["hie.yaml"]
   ] <> concat [linuxTestCases | False] -- TODO(fendor), enable again
   where
@@ -126,26 +139,40 @@ biosTestCases =
         deps @?= componentDependencies opts
 
     linuxTestCases =
-      [ testCaseSteps "simple-bios" $ runTestEnv "./simple-bios" $
+      [ biosTestCase "simple-bios" $ runTestEnv "./simple-bios" $
           testDirectoryM isBiosCradle "B.hs"
-      , testCaseSteps "simple-bios-ghc" $ runTestEnv "./simple-bios-ghc" $
+      , biosTestCase "simple-bios-ghc" $ runTestEnv "./simple-bios-ghc" $
           testDirectoryM isBiosCradle  "B.hs"
-      , testCaseSteps "simple-bios-deps" $ runTestEnv "./simple-bios" $ do
+      , biosTestCase "simple-bios-deps" $ runTestEnv "./simple-bios" $ do
           biosCradleDeps "B.hs" ["hie-bios.sh", "hie.yaml"]
-      , testCaseSteps "simple-bios-deps-new" $ runTestEnv "./deps-bios-new" $ do
+      , biosTestCase "simple-bios-deps-new" $ runTestEnv "./deps-bios-new" $ do
           biosCradleDeps "B.hs" ["hie-bios.sh", "hie.yaml"]
       ]
 
 cabalTestCases :: ToolDependency -> [TestTree]
 cabalTestCases extraGhcDep =
-  [ testCaseSteps "failing-cabal" $ runTestEnv "./failing-cabal" $ do
+  [
+    biosTestCase "failing-cabal" $ runTestEnv "./failing-cabal" $ do
       cabalAttemptLoad "MyLib.hs"
       assertCradleError (\CradleError {..} -> do
         cradleErrorExitCode @?= ExitFailure 1
         cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
-  , testCaseSteps "simple-cabal" $ runTestEnv "./simple-cabal" $ do
+  , biosTestCase "failing-cabal-multi-repl-with-shrink-error-files" $ runTestEnv "./failing-multi-repl-cabal-project" $ do
+      cabalAttemptLoadFiles "multi-repl-cabal-fail/app/Main.hs" ["multi-repl-cabal-fail/src/Lib.hs", "multi-repl-cabal-fail/src/Fail.hs", "NotInPath.hs"]
+      root <- askRoot
+      multiSupported <- isCabalMultipleCompSupported'
+      if multiSupported
+        then
+          assertCradleError (\CradleError {..} -> do
+            cradleErrorExitCode @?= ExitFailure 1
+            cradleErrorDependencies `shouldMatchList` ["cabal.project","cabal.project.local","multi-repl-cabal-fail.cabal"]
+            -- NotInPath.hs does not match the cradle for `app/Main.hs`, so it should not be tried.
+            (makeRelative root <$> cradleErrorLoadingFiles) `shouldMatchList` ["multi-repl-cabal-fail/app/Main.hs","multi-repl-cabal-fail/src/Fail.hs","multi-repl-cabal-fail/src/Lib.hs"])
+        else assertLoadSuccess >>= \ComponentOptions {} -> do
+          return ()
+  , biosTestCase "simple-cabal" $ runTestEnv "./simple-cabal" $ do
       testDirectoryM isCabalCradle "B.hs"
-  , testCaseSteps "nested-cabal" $ runTestEnv "./nested-cabal" $ do
+  , biosTestCase "nested-cabal" $ runTestEnv "./nested-cabal" $ do
       cabalAttemptLoad "sub-comp/Lib.hs"
       assertComponentOptions $ \opts -> do
         componentDependencies opts `shouldMatchList`
@@ -153,7 +180,7 @@ cabalTestCases extraGhcDep =
           , "cabal.project"
           , "cabal.project.local"
           ]
-  , testCaseSteps "nested-cabal2" $ runTestEnv "./nested-cabal" $ do
+  , biosTestCase "nested-cabal2" $ runTestEnv "./nested-cabal" $ do
       cabalAttemptLoad "MyLib.hs"
       assertComponentOptions $ \opts -> do
         componentDependencies opts `shouldMatchList`
@@ -161,24 +188,24 @@ cabalTestCases extraGhcDep =
           , "cabal.project"
           , "cabal.project.local"
           ]
-  , testCaseSteps "multi-cabal" $ runTestEnv "./multi-cabal" $ do
+  , biosTestCase "multi-cabal" $ runTestEnv "./multi-cabal" $ do
       {- tests if both components can be loaded -}
       testDirectoryM isCabalCradle "app/Main.hs"
       testDirectoryM isCabalCradle "src/Lib.hs"
   , {- issue https://github.com/mpickering/hie-bios/issues/200 -}
-    testCaseSteps "monorepo-cabal" $ runTestEnv "./monorepo-cabal" $ do
+    biosTestCase "monorepo-cabal" $ runTestEnv "./monorepo-cabal" $ do
       testDirectoryM isCabalCradle "A/Main.hs"
       testDirectoryM isCabalCradle "B/MyLib.hs"
   , testGroup "Implicit cradle tests" $
-      [ testCaseSteps "implicit-cabal" $ runTestEnv "./implicit-cabal" $ do
+      [ biosTestCase "implicit-cabal" $ runTestEnv "./implicit-cabal" $ do
           testImplicitDirectoryM isCabalCradle "Main.hs"
-      , testCaseSteps "implicit-cabal-no-project" $ runTestEnv "./implicit-cabal-no-project" $ do
+      , biosTestCase "implicit-cabal-no-project" $ runTestEnv "./implicit-cabal-no-project" $ do
           testImplicitDirectoryM isCabalCradle "Main.hs"
-      , testCaseSteps "implicit-cabal-deep-project" $ runTestEnv "./implicit-cabal-deep-project" $ do
+      , biosTestCase "implicit-cabal-deep-project" $ runTestEnv "./implicit-cabal-deep-project" $ do
           testImplicitDirectoryM isCabalCradle "foo/Main.hs"
       ]
   , testGroupWithDependency extraGhcDep
-    [ testCaseSteps "Appropriate ghc and libdir" $ runTestEnvLocal "./cabal-with-ghc" $ do
+    [ biosTestCase "Appropriate ghc and libdir" $ runTestEnvLocal "./cabal-with-ghc" $ do
         initCradle "src/MyLib.hs"
         assertCradle isCabalCradle
         loadRuntimeGhcLibDir
@@ -187,14 +214,14 @@ cabalTestCases extraGhcDep =
         assertGhcVersionIs extraGhcVersion
     ]
   , testGroup "Cabal cabalProject"
-    [ testCaseSteps "cabal-with-project, options propagated" $ runTestEnv "cabal-with-project" $ do
+    [ biosTestCase "cabal-with-project, options propagated" $ runTestEnv "cabal-with-project" $ do
         opts <- cabalLoadOptions "src/MyLib.hs"
         liftIO $ do
           "-O2" `elem` componentOptions opts
             @? "Options must contain '-O2'"
-    , testCaseSteps "cabal-with-project, load" $ runTestEnv "cabal-with-project" $ do
+    , biosTestCase "cabal-with-project, load" $ runTestEnv "cabal-with-project" $ do
         testDirectoryM isCabalCradle "src/MyLib.hs"
-    , testCaseSteps "multi-cabal-with-project, options propagated" $ runTestEnv "multi-cabal-with-project" $ do
+    , biosTestCase "multi-cabal-with-project, options propagated" $ runTestEnv "multi-cabal-with-project" $ do
         optsAppA <- cabalLoadOptions "appA/src/Lib.hs"
         liftIO $ do
           "-O2" `elem` componentOptions optsAppA
@@ -203,11 +230,11 @@ cabalTestCases extraGhcDep =
         liftIO $ do
           "-O2" `notElem` componentOptions optsAppB
             @? "Options must not contain '-O2'"
-    , testCaseSteps "multi-cabal-with-project, load" $ runTestEnv "multi-cabal-with-project" $ do
+    , biosTestCase "multi-cabal-with-project, load" $ runTestEnv "multi-cabal-with-project" $ do
         testDirectoryM isCabalCradle "appB/src/Lib.hs"
         testDirectoryM isCabalCradle "appB/src/Lib.hs"
     , testGroupWithDependency extraGhcDep
-      [ testCaseSteps "Honours extra ghc setting" $ runTestEnv "cabal-with-ghc-and-project" $ do
+      [ biosTestCase "Honours extra ghc setting" $ runTestEnv "cabal-with-ghc-and-project" $ do
           initCradle "src/MyLib.hs"
           assertCradle isCabalCradle
           loadRuntimeGhcLibDir
@@ -224,6 +251,12 @@ cabalTestCases extraGhcDep =
       assertCradle isCabalCradle
       loadComponentOptions fp
 
+    cabalAttemptLoadFiles :: FilePath -> [FilePath] -> TestM ()
+    cabalAttemptLoadFiles fp fps = do
+      initCradle fp
+      assertCradle isCabalCradle
+      loadComponentOptionsMultiStyle fp fps
+
     cabalLoadOptions :: FilePath -> TestM ComponentOptions
     cabalLoadOptions fp = do
       initCradle fp
@@ -234,42 +267,42 @@ cabalTestCases extraGhcDep =
 stackTestCases :: [TestTree]
 stackTestCases =
   [ expectFailBecause "stack repl does not fail on an invalid cabal file" $
-      testCaseSteps "failing-stack" $ runTestEnv "./failing-stack" $ do
+      biosTestCase "failing-stack" $ runTestEnv "./failing-stack" $ do
         stackAttemptLoad "src/Lib.hs"
         assertCradleError $ \CradleError {..} -> do
             cradleErrorExitCode @?= ExitFailure 1
             cradleErrorDependencies `shouldMatchList` ["failing-stack.cabal", "stack.yaml", "package.yaml"]
-  , testCaseSteps "simple-stack" $ runTestEnv "./simple-stack" $ do
+  , biosTestCase "simple-stack" $ runTestEnv "./simple-stack" $ do
       testDirectoryM isStackCradle "B.hs"
-  , testCaseSteps "multi-stack" $ runTestEnv "./multi-stack" $ do {- tests if both components can be loaded -}
+  , biosTestCase "multi-stack" $ runTestEnv "./multi-stack" $ do {- tests if both components can be loaded -}
       testDirectoryM isStackCradle "app/Main.hs"
       testDirectoryM isStackCradle "src/Lib.hs"
-  , testCaseSteps "nested-stack" $ runTestEnv "./nested-stack" $ do
+  , biosTestCase "nested-stack" $ runTestEnv "./nested-stack" $ do
       stackAttemptLoad "sub-comp/Lib.hs"
       assertComponentOptions $ \opts ->
         componentDependencies opts `shouldMatchList` ["sub-comp" </> "sub-comp.cabal", "sub-comp" </> "package.yaml", "stack.yaml"]
-  , testCaseSteps "nested-stack2" $ runTestEnv "./nested-stack" $ do
+  , biosTestCase "nested-stack2" $ runTestEnv "./nested-stack" $ do
       stackAttemptLoad "MyLib.hs"
       assertComponentOptions $ \opts ->
         componentDependencies opts `shouldMatchList` ["nested-stack.cabal", "package.yaml", "stack.yaml"]
-  , testCaseSteps "stack-with-yaml" $ runTestEnv "./stack-with-yaml" $ do
+  , biosTestCase "stack-with-yaml" $ runTestEnv "./stack-with-yaml" $ do
       {- tests if both components can be loaded -}
       testDirectoryM isStackCradle "app/Main.hs"
       testDirectoryM isStackCradle "src/Lib.hs"
-  , testCaseSteps "multi-stack-with-yaml" $ runTestEnv "./multi-stack-with-yaml" $ do
+  , biosTestCase "multi-stack-with-yaml" $ runTestEnv "./multi-stack-with-yaml" $ do
       {- tests if both components can be loaded -}
       testDirectoryM isStackCradle "appA/src/Lib.hs"
       testDirectoryM isStackCradle "appB/src/Lib.hs"
   ,
     -- Test for special characters in the path for parsing of the ghci-scripts.
     -- Issue https://github.com/mpickering/hie-bios/issues/162
-    testCaseSteps "space stack" $ runTestEnv "./space stack" $ do
+    biosTestCase "space stack" $ runTestEnv "./space stack" $ do
       testDirectoryM isStackCradle "A.hs"
       testDirectoryM isStackCradle "B.hs"
   , testGroup "Implicit cradle tests"
-      [ testCaseSteps "implicit-stack" $ runTestEnv "./implicit-stack" $
+      [ biosTestCase "implicit-stack" $ runTestEnv "./implicit-stack" $
           testImplicitDirectoryM isStackCradle "Main.hs"
-      , testCaseSteps "implicit-stack-multi" $ runTestEnv "./implicit-stack-multi" $ do
+      , biosTestCase "implicit-stack-multi" $ runTestEnv "./implicit-stack-multi" $ do
           testImplicitDirectoryM isStackCradle "Main.hs"
           testImplicitDirectoryM isStackCradle "other-package/Main.hs"
       ]
@@ -283,9 +316,9 @@ stackTestCases =
 
 directTestCases :: [TestTree]
 directTestCases =
-  [ testCaseSteps "simple-direct" $ runTestEnv  "./simple-direct" $ do
+  [ biosTestCase "simple-direct" $ runTestEnv  "./simple-direct" $ do
       testDirectoryM isDirectCradle "B.hs"
-  , testCaseSteps "multi-direct" $ runTestEnv "./multi-direct" $ do
+  , biosTestCase "multi-direct" $ runTestEnv "./multi-direct" $ do
       {- tests if both components can be loaded -}
       testDirectoryM isMultiCradle "A.hs"
       testDirectoryM isMultiCradle "B.hs"
@@ -307,7 +340,7 @@ findCradleTests =
   ]
   where
     cradleFileTest :: String -> FilePath -> FilePath -> Maybe FilePath -> TestTree
-    cradleFileTest testName dir fpTarget result = testCaseSteps testName $ do
+    cradleFileTest testName dir fpTarget result = biosTestCase testName $ do
       runTestEnv dir $ do
         findCradleForModuleM fpTarget result
 
@@ -319,6 +352,12 @@ shouldMatchList :: (Show a, Ord a) => [a] -> [a] -> Assertion
 shouldMatchList xs ys = sort xs @?= sort ys
 
 infix 1 `shouldMatchList`
+
+biosTestCase :: TestName -> (Bool -> Assertion) -> TestTree
+biosTestCase name assertion = askOption @VerboseLogging (\case
+  VerboseLogging verbose -> testCase name (assertion verbose)
+  )
+
 
 -- ------------------------------------------------------------------
 -- Stack related helper functions
@@ -350,10 +389,12 @@ stackYaml resolver pkgs = unlines
 
 stackYamlResolver :: String
 stackYamlResolver =
-#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,8,0,0)))
-  "nightly-2024-05-19" -- GHC 9.8.2
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,10,0,0)))
+  "nightly-2025-04-24" -- GHC 9.10.1
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,8,0,0)))
+  "lts-23.19" -- GHC 9.8.4
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)))
-  "lts-22.22" -- GHC 9.6.5
+  "lts-22.43" -- GHC 9.6.6
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,4,0,0)))
   "lts-21.25" -- GHC 9.4.8
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)))
@@ -417,15 +458,28 @@ ignoreToolTests :: Tasty.Ingredient
 ignoreToolTests = Tasty.TestManager [Tasty.Option (Proxy :: Proxy IgnoreToolDeps)] $
   \_opts _tree -> Nothing
 
+newtype VerboseLogging = VerboseLogging Bool
+
+instance Tasty.IsOption VerboseLogging where
+  defaultValue = VerboseLogging False
+  parseValue = fmap VerboseLogging . Tasty.safeReadBool
+  optionName = pure "debug"
+  optionHelp = pure "Run the tests with verbose logging"
+  optionCLParser = Tasty.flagCLParser Nothing (VerboseLogging True)
+
+-- | The ingredient that provides the "ignore missing run-time dependencies" functionality
+verboseLogging :: Tasty.Ingredient
+verboseLogging = Tasty.TestManager [Tasty.Option (Proxy :: Proxy VerboseLogging)] $
+  \_opts _tree -> Nothing
+
 -- ------------------------------------------------------------------
--- Ignore test group if built with GHC 9.2.1 until GHC 9.2.4
--- or GHC 9.8.1 or newer.
+-- Ignore test group if built with GHC 9.6.7 and GHC 9.12.2
 -- ------------------------------------------------------------------
 
 ignoreOnUnsupportedGhc :: TestTree -> TestTree
 ignoreOnUnsupportedGhc tt =
-#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,1,0) && !MIN_VERSION_GLASGOW_HASKELL(9,2,4,0)) || (MIN_VERSION_GLASGOW_HASKELL(9,8,1,0)))
-  ignoreTestBecause "Not supported on GHC >= 9.2.1 && < 9.2.4 || >= 9.8.1"
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,6,7,0) && !MIN_VERSION_GLASGOW_HASKELL(9,6,8,0)) || (MIN_VERSION_GLASGOW_HASKELL(9,12,2,0) && !MIN_VERSION_GLASGOW_HASKELL(9,12,3,0)))
+  ignoreTestBecause "Not supported on 9.6.7 and 9.12.2"
 #endif
   tt
 

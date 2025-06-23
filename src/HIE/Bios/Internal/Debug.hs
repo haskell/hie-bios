@@ -48,11 +48,13 @@ debugInfo fp cradle = unlines <$> do
           , "Cradle:                " ++ crdl
           , "Dependencies:          " ++ unwords deps
           ]
-      CradleFail (CradleError deps ext stderr) ->
+      CradleFail (CradleError deps ext stderr extraFiles) ->
         return ["Cradle failed to load"
                , "Deps: " ++ show deps
                , "Exit Code: " ++ show ext
-               , "Stderr: " ++ unlines stderr]
+               , "Stderr: " ++ unlines stderr
+               , "Failed: " ++ unlines extraFiles
+               ]
       CradleNone ->
         return ["No cradle"]
   where

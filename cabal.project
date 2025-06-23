@@ -1,4 +1,2 @@
 packages: .
 
-allow-newer:
-  co-log-core:base

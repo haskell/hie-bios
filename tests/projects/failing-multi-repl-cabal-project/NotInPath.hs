@@ -1,4 +1,4 @@
-module Lib where
+module NotInPath where
 
 import System.FilePath ((</>))
 
