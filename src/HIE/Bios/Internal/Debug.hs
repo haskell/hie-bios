@@ -97,8 +97,8 @@ findCradle' :: LogAction IO (WithSeverity Log) -> FilePath -> IO String
 findCradle' l fp =
   findCradle fp >>= \case
     Just yaml -> do
-      crdl <- loadCradle l yaml
+      crdl <- loadCradle Nothing l yaml
       return $ show crdl
     Nothing -> do
-      crdl <- loadImplicitCradle l fp :: IO (Cradle Void)
+      crdl <- loadImplicitCradle Nothing l fp :: IO (Cradle Void)
       return $ show crdl

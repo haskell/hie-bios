@@ -72,8 +72,8 @@ main = do
     cradle <-
         -- find cradle does a takeDirectory on the argument, so make it into a file
         findCradle (cwd </> "File.hs") >>= \case
-          Just yaml -> loadCradle logger yaml
-          Nothing -> loadImplicitCradle logger (cwd </> "File.hs")
+          Just yaml -> loadCradle Nothing logger yaml
+          Nothing -> loadImplicitCradle Nothing logger (cwd </> "File.hs")
 
     res <- case cmd of
       Check targetFiles -> checkSyntax logger cradle targetFiles

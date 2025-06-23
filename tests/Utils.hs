@@ -272,16 +272,17 @@ initCradle fp = do
   step $ "Loading Cradle: " <> show relMcfg
   logger <- askLogger
   crd <- case mcfg of
-    Just cfg -> liftIO $ loadCradle logger cfg
-    Nothing -> liftIO $ loadImplicitCradle logger a_fp
+    Just cfg -> liftIO $ loadCradle Nothing testLogger cfg
+    Nothing -> liftIO $ loadImplicitCradle Nothing testLogger a_fp
   setCradle crd
 
 initImplicitCradle :: FilePath -> TestM ()
 initImplicitCradle fp = do
   a_fp <- normFile fp
   step $ "Loading implicit Cradle for: " <> fp
+
   logger <- askLogger
-  crd <- liftIO $ loadImplicitCradle logger a_fp
+  crd <- liftIO $ loadImplicitCradle Nothing logger a_fp
   setCradle crd
 
 loadComponentOptions :: FilePath -> TestM ()
