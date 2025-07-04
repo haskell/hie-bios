@@ -156,6 +156,11 @@ Library
                         HIE.Bios.Config
                         HIE.Bios.Config.YAML
                         HIE.Bios.Cradle
+                        HIE.Bios.Cradle.Cabal
+                        HIE.Bios.Cradle.ProgramVersions
+                        HIE.Bios.Cradle.ProjectConfig
+                        HIE.Bios.Cradle.Resolved
+                        HIE.Bios.Cradle.Utils
                         HIE.Bios.Environment
                         HIE.Bios.Internal.Debug
                         HIE.Bios.Flags
