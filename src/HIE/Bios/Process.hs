@@ -9,6 +9,8 @@ module HIE.Bios.Process
   , readProcessWithCwd'
   , readProcessWithOutputs
   , getCleanEnvironment
+  -- * File Caching
+  , cacheFile
   -- * Find file utilities
   , findFileUpwards
   , findFileUpwardsPredicate
@@ -40,6 +42,9 @@ import System.IO.Error (isPermissionError)
 import System.IO.Temp
 
 import HIE.Bios.Types
+import Control.Monad.Extra (unlessM)
+import System.PosixCompat (setFileMode, accessModes)
+import HIE.Bios.Environment (getCacheDir)
 
 -- | Wrapper around 'readCreateProcess' that sets the working directory and
 -- clears the environment, suitable for invoking cabal/stack and raw ghc commands.
@@ -134,6 +139,31 @@ readProcessWithOutputs outputNames l workDir cp = flip runContT return $ do
             hClose h
             removeFileIfExists file
             action (name, file)
+
+-- | Create and cache a file in hie-bios's cache directory.
+--
+-- @'cacheFile' fpName srcHash populate@. 'fpName' is the pattern name of the
+-- cached file you want to create. 'srcHash' is the hash that is appended to
+-- the file pattern and is expected to change whenever you want to invalidate
+-- the cache.
+--
+-- If the cached file's 'srcHash' changes, then a new file is created, but
+-- the old cached file name will not be deleted.
+--
+-- If the file does not exist yet, 'populate' is invoked with cached file
+-- location and it is expected that the caller persists the given filepath in
+-- the File System.
+cacheFile :: FilePath -> String -> (FilePath -> IO ()) -> IO FilePath
+cacheFile fpName srcHash populate = do
+  cacheDir <- getCacheDir ""
+  createDirectoryIfMissing True cacheDir
+  let newFpName = cacheDir </> (dropExtensions fpName <> "-" <> srcHash) <.> takeExtensions fpName
+  unlessM (doesFileExist newFpName) $ do
+    populate newFpName
+    setMode newFpName
+  pure newFpName
+  where
+    setMode wrapper_fp = setFileMode wrapper_fp accessModes
 
 ------------------------------------------------------------------------------
 -- Utilities
