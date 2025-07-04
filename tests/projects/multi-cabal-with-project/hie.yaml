@@ -6,11 +6,11 @@ cradle:
           cabal:
             - path: appA/src
               component: appA:lib
-              cabalProject: cabal.project.9.2.8
+              cabalProject: cabal.project.extra
     - path: "appB"
       config:
         cradle:
           cabal:
             - path: appB/src
               component: appB:lib
-              cabalProject: cabal.project.9.2.8
+              cabalProject: cabal.project.extra

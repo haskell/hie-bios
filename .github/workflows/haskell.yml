@@ -15,9 +15,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cabal: ['3.14.1.0', '3.10.2.0']
-        ghc: ['9.12.2', '9.10.1', '9.8.4', '9.6.7', '9.4.8']
+        cabal: ['head', '3.14.1.0', '3.10.2.0']
+        ghc: ['9.12.2', '9.10.1', '9.8.4', '9.6.7']
         os: [ubuntu-latest, macOS-latest, windows-latest]
+        exclude:
+          - cabal: 'head'
+            os: macOS-latest
+          - cabal: '3.10.2.0'
+            ghc: '9.12.2'
 
     steps:
     - uses: actions/checkout@v4
@@ -25,7 +30,7 @@ jobs:
       uses: haskell-actions/setup@v2
       with:
         cabal-version: ${{ matrix.cabal }}
-        ghc-version: '9.2.8' # This needs to be in-sync with 'extraGhcVersion'
+        ghc-version: '9.4.8' # This needs to be in-sync with 'extraGhcVersion'
 
     - uses: haskell-actions/setup@v2
       with:
@@ -35,7 +40,7 @@ jobs:
 
     - name: Print extra ghc version
       # Needs to be in sync with 'extraGhcVersion'
-      run: ghc-9.2.8 --version
+      run: ghc-9.4.8 --version
 
     - name: Print normal ghc version
       run: ghc --version
@@ -93,3 +98,6 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
     - name: Compile Windows wrapper
       run: ghc -hide-all-packages -package base -package directory -package process -Wall -Werror wrappers/cabal.hs -o CabalWrapper
+
+    - name: Compile `--with-repl` Windows wrapper
+      run: ghc -hide-all-packages -package base -package directory -package process -Wall -Werror wrappers/cabal-with-repl.hs -o CabalWithReplWrapper
