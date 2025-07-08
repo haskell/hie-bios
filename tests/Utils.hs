@@ -142,7 +142,7 @@ runTestEnv' config root act = do
           , testRootDir = root'
           , testLogger = init_logger
           }
-      realRoot = testProjectRoots config </> root
+  realRoot <- makeAbsolute $ testProjectRoots config </> root
   wrapper realRoot $ \root' -> flip evalStateT (mkEnv root') $ do
     step $ "Run test in: " <> root'
     act

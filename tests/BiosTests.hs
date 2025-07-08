@@ -212,6 +212,10 @@ cabalTestCases extraGhcDep =
         assertLibDirVersionIs extraGhcVersion
         loadRuntimeGhcVersion
         assertGhcVersionIs extraGhcVersion
+        step "Find Component Options"
+        loadComponentOptions "src/MyLib.hs"
+        _ <- assertLoadSuccess
+        pure ()
     ]
   , testGroup "Cabal cabalProject"
     [ biosTestCase "cabal-with-project, options propagated" $ runTestEnv "cabal-with-project" $ do
@@ -241,6 +245,10 @@ cabalTestCases extraGhcDep =
           assertLibDirVersionIs extraGhcVersion
           loadRuntimeGhcVersion
           assertGhcVersionIs extraGhcVersion
+          step "Find Component Options"
+          loadComponentOptions "src/MyLib.hs"
+          _ <- assertLoadSuccess
+          pure ()
       ]
     ]
   ]
