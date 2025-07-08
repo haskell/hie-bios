@@ -51,27 +51,84 @@ import HIE.Bios.Process
 import GHC.Fingerprint (fingerprintString)
 import GHC.ResponseFile (escapeArgs)
 
+{- Note [Finding ghc-options with cabal]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+We want to know how to compile a cabal component with GHC.
+There are two main ways to obtain the ghc-options:
+
+1. `cabal --with-ghc <ghc-shim>` (for exe:cabal <3.15 or lib:Cabal <3.15)
+
+In this approach, we generate a <ghc-shim> which is passed to the exe:cabal process.
+If a package needs to be compiled, we compile the package with the same GHC process that
+exe:cabal would have used.
+
+If the first argument is `--interactive`, then we do not launch the GHCi process,
+but record all the arguments for later processing.
+
+2. `cabal --with-repl <repl-shim>` (for exe:cabal >=3.15 and lib:Cabal >=3.15)
+
+The <repl-shim> is notably simpler than the <ghc-shim>, as `--with-repl` invokes
+<repl-shim> *only* as the final GHCi process, not for compiling dependencies or
+executing preprocessors.
+
+Thus, <repl-shim> merely needs to log all arguments that are passed to <repl-shim>.
+
+This is the simpler, more maintainable approach, with fewer unintended side-effects.
+
+=== Finding the GHC process cabal uses to compile a project with
+
+We want HLS and hie-bios to honour the `with-compiler` field in `cabal.project` files.
+Again, we identify two ways to find the exact GHC program that is going to be invoked by cabal.
+
+1. `cabal exec -- ghc --interactive -e System.Environment.getExecutablePath` (for exe:cabal <3.14)
+
+Ignoring a couple of details, we can get the path to the raw executable by asking
+the GHCi process for its executable path.
+The issue is that on linux, the executable path is insufficient, the GHC executable
+invoked by the user is "wrapped" in a shim that specifies the libdir location, e.g.:
+
+    > cat /home/hugin/.ghcup/bin/ghc
+    #!/bin/sh
+    exedir="/home/hugin/.ghcup/ghc/9.6.7/lib/ghc-9.6.7/bin"
+    exeprog="./ghc-9.6.7"
+    executablename="/home/hugin/.ghcup/ghc/9.6.7/lib/ghc-9.6.7/bin/./ghc-9.6.7"
+    bindir="/home/hugin/.ghcup/ghc/9.6.7/bin"
+    libdir="/home/hugin/.ghcup/ghc/9.6.7/lib/ghc-9.6.7/lib"
+    docdir="/home/hugin/.ghcup/ghc/9.6.7/share/doc/ghc-9.6.7"
+    includedir="/home/hugin/.ghcup/ghc/9.6.7/include"
+
+    exec "$executablename" -B"$libdir" ${1+"$@"}
+
+We find the libdir by asking GHC via `cabal exec -- ghc --print-libdir`.
+Once we have these two paths, we also need to find the `ghc-pkg` location,
+otherwise cabal will use the `ghc-pkg` that is found on PATH, which is not correct
+if the user overwrites the compiler field via `with-compiler`.
+
+To find `ghc-pkg`, we assume it is going to be located next to the `libdir`, and then
+reconstruct the wrapper shim for `ghc-pkg`.
+
+Then we reconstructed both the ghc and ghc-pkg program that is going to be used by cabal
+and can use it in the <ghc-shim> and `cabal repl --with-compiler <ghc-shim> --with-hc-pkg <hc-pkg-shim>`.
+
+Calling `cabal exec` can be very slow on a large codebase, over 1 second per invocation.
+
+2. `cabal path` (for exe:cabal >= 3.14)
+
+We can skip the reconstruction of the GHC shim by using the output of `cabal path --compiler-info`.
+This gives us the location of the GHC executable shim, so we don't need to reconstruct any shims.
+
+However, we still have to reconstruct the ghc-pkg shim when using `cabal repl --with-compiler`.
+
+`cabal path` is incredibly fast to invoke, as it circumvents running the cabal solver.
+It is easier to maintain as well.
+-}
+
 -- | Main entry point into the cabal cradle invocation.
 --
 -- This function does a lot of work, supporting multiple cabal-install versions and
 -- different ways of obtaining the component options.
 --
--- Generally, there are three different, supported ways to obtain the ghc-options:
---
--- * For cabal <3.14.
---    The oldest supported way, we are doing roughly the following:
---    1. Find the 'ghc' version used by the cabal project (might be overwritten by a @cabal.project@ file)
---    2. Guess the libdir location and ghc-pkg version
---    3. Create wrapper shims for ghc-pkg (<ghc-pkg-shim>) and ghc (<ghc-shim>).
---    4. call @cabal repl --with-compiler <ghc-shim> --with-hc-pkg <ghc-pkg-shim>@ and log the ghc-options
--- * For cabal >=3.14, we can use the new @cabal path@ command to speed up step 1. and 2. of the previous approach.
--- * For cabal >=3.15, cabal supports the @--with-repl@ flag.
---    This allows us to skip step 1-2 entirely, and we simply need to create a shell program
---    which can be passed to @cabal repl --with-repl@, which records the final ghc-options.
---
--- However, this last approach doesn't work, if the user uses a custom-setup forcing a @lib:Cabal <3.15@.
--- If this is the case, we fall back to @cabal path@ and creating wrapper shims.
---
+-- See Note [Finding ghc-options with cabal] for a detailed elaboration.
 cabalAction ::
   ResolvedCradles a ->
   FilePath ->
@@ -149,7 +206,7 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
   where
     -- | Run the given cabal process to obtain ghc options.
     -- In the special case of 'cabal >= 3.15' but 'lib:Cabal <3.15' (via custom-setups),
-    -- we gracefully fall back to the given action to create an alterantive cabal process which
+    -- we gracefully fall back to the given action to create an alternative cabal process which
     -- we use to find the ghc options.
     runCabalToGetGhcOptions ::
       Process.CreateProcess ->
@@ -434,6 +491,10 @@ withGhcWrapperTool l mkGhcCall wdir = do
 
 -- | Generate a script/binary that can be passed to cabal's '--with-repl'.
 -- On windows, this compiles a Haskell file, while on other systems, we persist
+-- a haskell source file and ad-hoc compile it with 'GhcProc'.
+--
+-- 'GhcProc' is unused on other platforms.
+--
 withReplWrapperTool :: LogAction IO (WithSeverity Log) -> GhcProc -> FilePath -> IO FilePath
 withReplWrapperTool l mkGhcCall wdir =
   withWrapperTool l mkGhcCall wdir "repl-wrapper" cabalWithReplWrapperHs cabalWithReplWrapper
