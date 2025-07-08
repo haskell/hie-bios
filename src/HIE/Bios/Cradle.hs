@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
@@ -20,70 +19,45 @@ module HIE.Bios.Cradle (
     , isDefaultCradle
     , isOtherCradle
     , getCradle
-    , readProcessWithOutputs
-    , readProcessWithCwd
+    , Process.readProcessWithOutputs
+    , Process.readProcessWithCwd
     , makeCradleResult
     -- | Cradle project configuration types
     , CradleProjectConfig(..)
-
-    -- expose to tests
-    , makeVersions
-    , isCabalMultipleCompSupported
-    , ProgramVersions
   ) where
 
-import Control.Applicative ((<|>), optional)
-import Control.DeepSeq
-import Control.Exception (handleJust)
-import qualified Data.Yaml as Yaml
-import Data.Void
-import Data.Char (isSpace)
-import System.Exit
-import System.Directory hiding (findFile)
 import Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&))
+import Control.Applicative ((<|>))
 import Control.Monad
-import Control.Monad.Extra (unlessM)
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Cont
 import Control.Monad.Trans.Maybe
-import Control.Monad.IO.Class
-import Data.Aeson ((.:))
-import qualified Data.Aeson as Aeson
-import qualified Data.Aeson.Types as Aeson
+import qualified Data.Yaml as Yaml
+import Data.Version
+import Data.Void
 import Data.Bifunctor (first)
-import qualified Data.ByteString as BS
 import Data.Conduit.Process
-import qualified Data.Conduit.Combinators as C
-import qualified Data.Conduit as C
-import qualified Data.Conduit.Text as C
-import qualified Data.HashMap.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.List
-import Data.List.Extra (trimEnd, nubOrd)
 import Data.Ord (Down(..))
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import System.Environment
+import System.Exit
 import System.FilePath
-import System.PosixCompat.Files
-import System.Info.Extra (isWindows)
-import System.IO (hClose, hGetContents, hPutStr, hSetBuffering, BufferMode(LineBuffering), withFile, IOMode(..))
-import System.IO.Error (isPermissionError)
+import System.Directory
+import System.IO (hClose, hPutStr)
 import System.IO.Temp
 
 import HIE.Bios.Config
-import HIE.Bios.Environment (getCacheDir)
 import HIE.Bios.Types hiding (ActionName(..))
-import HIE.Bios.Wrappers
+import qualified HIE.Bios.Process as Process
 import qualified HIE.Bios.Types as Types
 import qualified HIE.Bios.Ghc.Gap as Gap
-
-import GHC.Fingerprint (fingerprintString)
-import GHC.ResponseFile (escapeArgs)
-
-import Data.Version
-import Data.IORef
-import Text.ParserCombinators.ReadP (readP_to_S)
-import Data.Tuple.Extra (fst3, snd3, thd3)
+import HIE.Bios.Cradle.ProjectConfig
+import HIE.Bios.Cradle.Utils
+import HIE.Bios.Cradle.Cabal as Cabal
+import HIE.Bios.Cradle.Resolved
+import HIE.Bios.Cradle.ProgramVersions
 
 ----------------------------------------------------------------
 
@@ -128,93 +102,6 @@ getCradle l buildCustomCradle (cc, wdir) = do
     resolvedCradlesToCradle l buildCustomCradle wdir rcs
   where
     cs = resolveCradleTree wdir cc
-
-
--- | The actual type of action we will be using to process a file
-data ConcreteCradle a
-  = ConcreteCabal CabalType
-  | ConcreteStack StackType
-  | ConcreteBios Callable (Maybe Callable) (Maybe FilePath)
-  | ConcreteDirect [String]
-  | ConcreteNone
-  | ConcreteOther a
-  deriving Show
-
-
--- | ConcreteCradle augmented with information on which file the
--- cradle applies
-data ResolvedCradle a
- = ResolvedCradle
- { prefix :: FilePath -- ^ the prefix to match files
- , cradleDeps :: [FilePath] -- ^ accumulated dependencies
- , concreteCradle :: ConcreteCradle a
- } deriving Show
-
--- | The final cradle config that specifies the cradle for
--- each prefix we know how to handle
-data ResolvedCradles a
- = ResolvedCradles
- { cradleRoot :: FilePath
- , resolvedCradles :: [ResolvedCradle a] -- ^ In order of decreasing specificity
- , cradleProgramVersions :: ProgramVersions
- }
-
-data ProgramVersions =
-  ProgramVersions { cabalVersion  :: CachedIO (Maybe Version)
-                  , stackVersion  :: CachedIO (Maybe Version)
-                  , ghcVersion    :: CachedIO (Maybe Version)
-                  }
-
-newtype CachedIO a = CachedIO (IORef (Either (IO a) a))
-
-makeCachedIO :: IO a -> IO (CachedIO a)
-makeCachedIO act = CachedIO <$> newIORef (Left act)
-
-runCachedIO :: CachedIO a -> IO a
-runCachedIO (CachedIO ref) =
-  readIORef ref >>= \case
-    Right x -> pure x
-    Left act -> do
-      x <- act
-      writeIORef ref (Right x)
-      pure x
-
-makeVersions :: LogAction IO (WithSeverity Log) -> FilePath -> ([String] -> IO (CradleLoadResult String)) -> IO ProgramVersions
-makeVersions l wdir ghc = do
-  cabalVersion <- makeCachedIO $ getCabalVersion l wdir
-  stackVersion <- makeCachedIO $ getStackVersion l wdir
-  ghcVersion   <- makeCachedIO $ getGhcVersion ghc
-  pure ProgramVersions{..}
-
-getCabalVersion :: LogAction IO (WithSeverity Log) -> FilePath -> IO (Maybe Version)
-getCabalVersion l wdir = do
-  res <- readProcessWithCwd l wdir "cabal" ["--numeric-version"] ""
-  case res of
-    CradleSuccess stdo ->
-      pure $ versionMaybe stdo
-    _ -> pure Nothing
-
-getStackVersion :: LogAction IO (WithSeverity Log) -> FilePath -> IO (Maybe Version)
-getStackVersion l wdir = do
-  res <- readProcessWithCwd l wdir "stack" ["--numeric-version"] ""
-  case res of
-    CradleSuccess stdo ->
-      pure $ versionMaybe stdo
-    _ -> pure Nothing
-
-getGhcVersion :: ([String] -> IO (CradleLoadResult String)) -> IO (Maybe Version)
-getGhcVersion ghc = do
-  res <- ghc ["--numeric-version"]
-  case res of
-    CradleSuccess stdo ->
-      pure $ versionMaybe stdo
-    _ -> pure Nothing
-
-versionMaybe :: String -> Maybe Version
-versionMaybe xs = case reverse $ readP_to_S parseVersion xs of
-  [] -> Nothing
-  (x:_) -> Just (fst x)
-
 
 addActionDeps :: [FilePath] -> CradleLoadResult ComponentOptions -> CradleLoadResult ComponentOptions
 addActionDeps deps =
@@ -364,7 +251,7 @@ yamlConfig fp = do
   return (configDir </> configFileName)
 
 yamlConfigDirectory :: FilePath -> MaybeT IO FilePath
-yamlConfigDirectory = findFileUpwards configFileName
+yamlConfigDirectory = Process.findFileUpwards configFileName
 
 readCradleConfig :: Yaml.FromJSON b => FilePath -> IO (CradleConfig b)
 readCradleConfig yamlHie = do
@@ -454,7 +341,7 @@ noneCradle =
 
 ---------------------------------------------------------------
 -- | The multi cradle selects a cradle based on the filepath
-
+--
 -- Canonicalize the relative paths present in the multi-cradle and
 -- also order the paths by most specific first. In the cradle selection
 -- function we want to choose the most specific cradle possible.
@@ -462,14 +349,6 @@ canonicalizeResolvedCradles :: FilePath -> [ResolvedCradle a] -> IO [ResolvedCra
 canonicalizeResolvedCradles cur_dir cs =
   sortOn (Down . prefix)
     <$> mapM (\c -> (\abs_fp -> c {prefix = abs_fp}) <$> makeAbsolute (cur_dir </> prefix c)) cs
-
-selectCradle :: (a -> FilePath) -> FilePath -> [a] -> Maybe a
-selectCradle _ _ [] = Nothing
-selectCradle k cur_fp (c: css) =
-    if k c `isPrefixOf` cur_fp
-      then Just c
-      else selectCradle k cur_fp css
-
 
 -------------------------------------------------------------------------
 
@@ -494,11 +373,11 @@ biosCradle l rc wdir biosCall biosDepsCall mbGhc
   = CradleAction
       { actionName = Types.Bios
       , runCradle = biosAction rc wdir biosCall biosDepsCall l
-      , runGhcCmd = \args -> readProcessWithCwd l wdir (fromMaybe "ghc" mbGhc) args ""
+      , runGhcCmd = \args -> Process.readProcessWithCwd l wdir (fromMaybe "ghc" mbGhc) args ""
       }
 
 biosWorkDir :: FilePath -> MaybeT IO FilePath
-biosWorkDir = findFileUpwards ".hie-bios"
+biosWorkDir = Process.findFileUpwards ".hie-bios"
 
 biosDepsAction :: LogAction IO (WithSeverity Log) -> FilePath -> Maybe Callable -> FilePath -> LoadStyle -> IO [FilePath]
 biosDepsAction l wdir (Just biosDepsCall) fp loadStyle = do
@@ -507,7 +386,7 @@ biosDepsAction l wdir (Just biosDepsCall) fp loadStyle = do
         LoadWithContext old_fps -> fp : old_fps
   (ex, sout, serr, [(_, args)]) <-
     runContT (withCallableToProcess biosDepsCall fps) $ \biosDeps' ->
-      readProcessWithOutputs [hie_bios_output] l wdir biosDeps'
+      Process.readProcessWithOutputs [hie_bios_output] l wdir biosDeps'
   case ex of
     ExitFailure _ ->  error $ show (ex, sout, serr)
     ExitSuccess -> return $ fromMaybe [] args
@@ -545,7 +424,7 @@ biosAction rc wdir bios bios_deps l fp loadStyle = do
         LoadWithContext old_fps -> fp : old_fps
   (ex, _stdo, std, [(_, res),(_, mb_deps)]) <-
     runContT (withCallableToProcess bios fps) $ \bios' ->
-      readProcessWithOutputs [hie_bios_output, hie_bios_deps] l wdir bios'
+      Process.readProcessWithOutputs [hie_bios_output, hie_bios_deps] l wdir bios'
 
   deps <- case mb_deps of
     Just x  -> return x
@@ -574,7 +453,7 @@ withCallableToProcess (Program path) files = ContT $ \action -> do
   old_env <- getEnvironment
   case files of
     [] -> action $ (proc canon_path []){env = Nothing}
-    (x : _) -> 
+    (x : _) ->
       runContT (withHieBiosMultiArg files) $ \multi_file -> do
         let updated_env = Just $
               (hie_bios_multi_arg, multi_file) : old_env
@@ -593,15 +472,6 @@ withHieBiosMultiArg files = ContT $ \action -> do
 
 ------------------------------------------------------------------------
 
-projectFileProcessArgs :: CradleProjectConfig -> [String]
-projectFileProcessArgs (ExplicitConfig prjFile) = ["--project-file", prjFile]
-projectFileProcessArgs NoExplicitConfig = []
-
-projectLocationOrDefault :: CradleProjectConfig -> [FilePath]
-projectLocationOrDefault = \case
-  NoExplicitConfig -> ["cabal.project", "cabal.project.local"]
-  (ExplicitConfig prjFile) -> [prjFile, prjFile <.> "local"]
-
 -- |Cabal Cradle
 -- Works for new-build by invoking `v2-repl`.
 cabalCradle :: LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath -> Maybe String -> CradleProjectConfig -> CradleAction a
@@ -609,436 +479,13 @@ cabalCradle l cs wdir mc projectFile
   = CradleAction
     { actionName = Types.Cabal
     , runCradle = \fp -> runCradleResultT . cabalAction cs wdir mc l projectFile fp
-    , runGhcCmd = \args -> runCradleResultT $ do
-        let vs = cradleProgramVersions cs
-        callCabalPathForCompilerPath l vs wdir projectFile >>= \case
-          Just p -> readProcessWithCwd_ l wdir p args ""
-          Nothing -> do
-            buildDir <- liftIO $ cabalBuildDir wdir
-            -- Workaround for a cabal-install bug on 3.0.0.0:
-            -- ./dist-newstyle/tmp/environment.-24811: createDirectory: does not exist (No such file or directory)
-            liftIO $ createDirectoryIfMissing True (buildDir </> "tmp")
-            -- Need to pass -v0 otherwise we get "resolving dependencies..."
-            cabalProc <- cabalProcess l vs projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
-            readProcessWithCwd' l cabalProc ""
+    , runGhcCmd = runCabalGhcCmd cs wdir l projectFile
     }
-
-
--- | Execute a cabal process in our custom cache-build directory configured
--- with the custom ghc executable.
--- The created process has its working directory set to the given working directory.
---
--- Invokes the cabal process in the given directory.
--- Finds the appropriate @ghc@ version as a fallback and provides the path
--- to the custom ghc wrapper via 'hie_bios_ghc' environment variable which
--- the custom ghc wrapper may use as a fallback if it can not respond to certain
--- queries, such as ghc version or location of the libdir.
-cabalProcess :: LogAction IO (WithSeverity Log) -> ProgramVersions -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
-cabalProcess l vs cabalProject workDir command args = do
-  ghcDirs@(ghcBin, libdir) <- callCabalPathForCompilerPath l vs workDir cabalProject >>= \case
-    Just p -> do
-      libdir <- readProcessWithCwd_ l workDir p ["--print-libdir"] ""
-      pure (p, trimEnd libdir)
-    Nothing -> cabalGhcDirs l cabalProject workDir
-
-  ghcPkgPath <- liftIO $ withGhcPkgTool ghcBin libdir
-  newEnvironment <- liftIO $ setupEnvironment ghcDirs
-  cabalProc <- liftIO $ setupCabalCommand ghcPkgPath
-  pure $ (cabalProc
-      { env = Just newEnvironment
-      , cwd = Just workDir
-      })
-  where
-    processEnvironment :: (FilePath, FilePath) -> [(String, String)]
-    processEnvironment (ghcBin, libdir) =
-      [(hie_bios_ghc, ghcBin), (hie_bios_ghc_args,  "-B" ++ libdir)]
-
-    setupEnvironment :: (FilePath, FilePath) -> IO [(String, String)]
-    setupEnvironment ghcDirs = do
-      environment <- getCleanEnvironment
-      pure $ processEnvironment ghcDirs ++ environment
-
-    setupCabalCommand :: FilePath -> IO CreateProcess
-    setupCabalCommand ghcPkgPath = do
-      wrapper_fp <- withGhcWrapperTool l ("ghc", []) workDir
-      buildDir <- cabalBuildDir workDir
-      let extraCabalArgs =
-            [ "--builddir=" <> buildDir
-            , command
-            , "--with-compiler", wrapper_fp
-            , "--with-hc-pkg", ghcPkgPath
-            ]
-            <> projectFileProcessArgs cabalProject
-      pure $ proc "cabal" (extraCabalArgs ++ args)
-
--- | Discovers the location of 'ghc-pkg' given the absolute path to 'ghc'
--- and its '$libdir' (obtainable by running @ghc --print-libdir@).
---
--- @'withGhcPkgTool' ghcPathAbs libdir@ guesses the location by looking at
--- the filename of 'ghcPathAbs' and expects that 'ghc-pkg' is right next to it,
--- which is guaranteed by the ghc build system. Most OS's follow this
--- convention.
---
--- On unix, there is a high-chance that the obtained 'ghc' location is the
--- "unwrapped" executable, e.g. the executable without a shim that specifies
--- the '$libdir' and other important constants.
--- As such, the executable 'ghc-pkg' is similarly without a wrapper shim and
--- is lacking certain constants such as 'global-package-db'. It is, therefore,
--- not suitable to pass in to other consumers, such as 'cabal'.
---
--- Here, we restore the wrapper-shims, if necessary, thus the returned filepath
--- can be passed to 'cabal' without further modifications.
-withGhcPkgTool :: FilePath -> FilePath -> IO FilePath
-withGhcPkgTool ghcPathAbs libdir = do
-  let ghcName = takeFileName ghcPathAbs
-      -- TODO: check for existence
-      ghcPkgPath = guessGhcPkgFromGhc ghcName
-  if isWindows
-    then pure ghcPkgPath
-    else withWrapperTool ghcPkgPath
-  where
-    ghcDir = takeDirectory ghcPathAbs
-
-    guessGhcPkgFromGhc ghcName =
-      let ghcPkgName = T.replace "ghc" "ghc-pkg" (T.pack ghcName)
-      in ghcDir </> T.unpack ghcPkgName
-
-    -- Only on unix, creates a wrapper script that's hopefully identical
-    -- to the wrapper script 'ghc-pkg' usually comes with.
-    --
-    -- 'ghc-pkg' needs to know the 'global-package-db' location which is
-    -- passed in via a wrapper shim that basically wraps 'ghc-pkg' and
-    -- only passes in the correct 'global-package-db'.
-    -- For an example on how the wrapper script is supposed to look like, take
-    -- a look at @cat $(which ghc-pkg)@, assuming 'ghc-pkg' is on your $PATH.
-    --
-    -- If we used the raw executable, i.e. not wrapped in a shim, then 'cabal'
-    -- can not use the given 'ghc-pkg'.
-    withWrapperTool ghcPkg = do
-      let globalPackageDb = libdir </> "package.conf.d"
-          -- This is the same as the wrapper-shims ghc-pkg usually comes with.
-          contents = unlines
-            [ "#!/bin/sh"
-            , unwords ["exec", escapeFilePath ghcPkg
-                      , "--global-package-db", escapeFilePath globalPackageDb
-                      , "${1+\"$@\"}"
-                      ]
-            ]
-          srcHash = show (fingerprintString contents)
-      cacheFile "ghc-pkg" srcHash $ \wrapperFp -> writeFile wrapperFp contents
-
-    -- Escape the filepath and trim excess newlines added by 'escapeArgs'
-    escapeFilePath fp = trimEnd $ escapeArgs [fp]
-
--- | @'cabalCradleDependencies' projectFile rootDir componentDir@.
--- Compute the dependencies of the cabal cradle based
--- on cabal project configuration, the cradle root and the component directory.
---
--- The @projectFile@ and @projectFile <> ".local"@ are always added to the list
--- of dependencies.
---
--- Directory 'componentDir' is a sub-directory where we look for
--- package specific cradle dependencies, such as a '.cabal' file.
---
--- Found dependencies are relative to 'rootDir'.
-cabalCradleDependencies :: CradleProjectConfig -> FilePath -> FilePath -> IO [FilePath]
-cabalCradleDependencies projectFile rootDir componentDir = do
-    let relFp = makeRelative rootDir componentDir
-    cabalFiles' <- findCabalFiles componentDir
-    let cabalFiles = map (relFp </>) cabalFiles'
-    return $ map normalise $ cabalFiles ++ projectLocationOrDefault projectFile
-
--- |Find .cabal files in the given directory.
---
--- Might return multiple results,biosAction as we can not know in advance
--- which one is important to the user.
-findCabalFiles :: FilePath -> IO [FilePath]
-findCabalFiles wdir = do
-  dirContent <- listDirectory wdir
-  return $ filter ((== ".cabal") . takeExtension) dirContent
-
-
-processCabalWrapperArgs :: [String] -> Maybe (FilePath, [String])
-processCabalWrapperArgs args =
-    case args of
-        (dir: ghc_args) ->
-            let final_args =
-                    removeVerbosityOpts
-                    $ removeRTS
-                    $ removeInteractive ghc_args
-            in Just (dir, final_args)
-        _ -> Nothing
-
--- | GHC process information.
--- Consists of the filepath to the ghc executable and
--- arguments to the executable.
-type GhcProc = (FilePath, [String])
-
--- | Generate a fake GHC that can be passed to cabal or stack
--- when run with --interactive, it will print out its
--- command-line arguments and exit
-withGhcWrapperTool :: LogAction IO (WithSeverity Log) -> GhcProc -> FilePath -> IO FilePath
-withGhcWrapperTool l (mbGhc, ghcArgs) wdir = do
-    let wrapperContents = if isWindows then cabalWrapperHs else cabalWrapper
-        withExtension fp = if isWindows then fp <.> "exe" else fp
-        srcHash = show (fingerprintString wrapperContents)
-    cacheFile (withExtension "wrapper") srcHash $ \wrapper_fp ->
-      if isWindows
-      then
-        withSystemTempDirectory "hie-bios" $ \ tmpDir -> do
-          let wrapper_hs = wrapper_fp -<.> "hs"
-          writeFile wrapper_hs wrapperContents
-          let ghcArgsWithExtras = ghcArgs ++ ["-rtsopts=ignore", "-outputdir", tmpDir, "-o", wrapper_fp, wrapper_hs]
-          let ghcProc = (proc mbGhc ghcArgsWithExtras)
-                      { cwd = Just wdir
-                      }
-          l <& LogCreateProcessRun ghcProc `WithSeverity` Debug
-          readCreateProcess ghcProc "" >>= putStr
-      else writeFile wrapper_fp wrapperContents
-
--- | Create and cache a file in hie-bios's cache directory.
---
--- @'cacheFile' fpName srcHash populate@. 'fpName' is the pattern name of the
--- cached file you want to create. 'srcHash' is the hash that is appended to
--- the file pattern and is expected to change whenever you want to invalidate
--- the cache.
---
--- If the cached file's 'srcHash' changes, then a new file is created, but
--- the old cached file name will not be deleted.
---
--- If the file does not exist yet, 'populate' is invoked with cached file
--- location and it is expected that the caller persists the given filepath in
--- the File System.
-cacheFile :: FilePath -> String -> (FilePath -> IO ()) -> IO FilePath
-cacheFile fpName srcHash populate = do
-  cacheDir <- getCacheDir ""
-  createDirectoryIfMissing True cacheDir
-  let newFpName = cacheDir </> (dropExtensions fpName <> "-" <> srcHash) <.> takeExtensions fpName
-  unlessM (doesFileExist newFpName) $ do
-    populate newFpName
-    setMode newFpName
-  pure newFpName
-  where
-    setMode wrapper_fp = setFileMode wrapper_fp accessModes
-
--- | Given the root directory, get the build dir we are using for cabal
--- In the `hie-bios` cache directory
-cabalBuildDir :: FilePath -> IO FilePath
-cabalBuildDir workDir = do
-  abs_work_dir <- makeAbsolute workDir
-  let dirHash = show (fingerprintString abs_work_dir)
-  getCacheDir ("dist-" <> filter (not . isSpace) (takeBaseName abs_work_dir)<>"-"<>dirHash)
-
--- | Discover the location of the ghc binary 'cabal' is going to use together
--- with its libdir location.
--- The ghc executable is an absolute path, but not necessarily canonicalised
--- or normalised. Additionally, the ghc path returned is likely to be the raw
--- executable, i.e. without the usual wrapper shims on non-windows systems.
--- If you want to use the given ghc executable, you should invoke
--- 'withGhcWrapperTool'.
---
--- If cabal can not figure it out, a 'CradleError' is returned.
-cabalGhcDirs :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> CradleLoadResultT IO (FilePath, FilePath)
-cabalGhcDirs l cabalProject workDir = do
-  libdir <- readProcessWithCwd_ l workDir "cabal"
-      (["exec"] ++
-       projectFileArgs ++
-       ["-v0", "--", "ghc", "--print-libdir"]
-      )
-      ""
-  exe <- readProcessWithCwd_ l workDir "cabal"
-      -- DON'T TOUCH THIS CODE
-      -- This works with 'NoImplicitPrelude', with 'RebindableSyntax' and other shenanigans.
-      -- @-package-env=-@ doesn't work with ghc prior 8.4.x
-      ([ "exec"] ++
-       projectFileArgs ++
-       [ "-v0", "--" , "ghc", "-package-env=-", "-ignore-dot-ghci", "-e"
-       , "Control.Monad.join (Control.Monad.fmap System.IO.putStr System.Environment.getExecutablePath)"
-       ]
-      )
-      ""
-  pure (trimEnd exe, trimEnd libdir)
-  where
-    projectFileArgs = projectFileProcessArgs cabalProject
-
-callCabalPathForCompilerPath :: LogAction IO (WithSeverity Log) -> ProgramVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
-callCabalPathForCompilerPath l vs workDir projectFile = do
-  isCabalPathSupported vs >>= \case
-    False -> pure Nothing
-    True -> do
-      let
-        args = ["path", "--output-format=json"] <> projectFileProcessArgs projectFile
-        bs = BS.fromStrict . T.encodeUtf8 . T.pack
-        parse_compiler_path = Aeson.parseEither ((.: "compiler") >=>  (.: "path")) <=< Aeson.eitherDecode
-
-      compiler_info <- readProcessWithCwd_ l workDir "cabal" args ""
-      case parse_compiler_path (bs compiler_info) of
-        Left err -> do
-          liftIO $ l <& WithSeverity (LogCabalPath $ T.pack err) Warning
-          pure Nothing
-        Right a -> pure a
-
-isCabalPathSupported :: MonadIO m => ProgramVersions -> m Bool
-isCabalPathSupported vs = do
-  v <- liftIO $ runCachedIO $ cabalVersion vs
-  pure $ maybe False (>= makeVersion [3,14]) v
-
-isCabalMultipleCompSupported :: MonadIO m => ProgramVersions -> m Bool
-isCabalMultipleCompSupported vs = do
-  cabal_version <- liftIO $ runCachedIO $ cabalVersion vs
-  ghc_version <- liftIO $ runCachedIO $ ghcVersion vs
-  -- determine which load style is supported by this cabal cradle.
-  case (cabal_version, ghc_version) of
-    (Just cabal, Just ghc) -> pure $ ghc >= makeVersion [9, 4] && cabal >= makeVersion [3, 11]
-    _ -> pure False
-
-cabalAction
-  :: ResolvedCradles a
-  -> FilePath
-  -> Maybe String
-  -> LogAction IO (WithSeverity Log)
-  -> CradleProjectConfig
-  -> FilePath
-  -> LoadStyle
-  -> CradleLoadResultT IO ComponentOptions
-cabalAction (ResolvedCradles root cs vs) workDir mc l projectFile fp loadStyle = do
-  multiCompSupport <- isCabalMultipleCompSupported vs
-  -- determine which load style is supported by this cabal cradle.
-  determinedLoadStyle <- case loadStyle of
-    LoadWithContext _ | not multiCompSupport -> do
-      liftIO $
-        l
-          <& WithSeverity
-            ( LogLoadWithContextUnsupported "cabal" $
-                Just "cabal or ghc version is too old. We require `cabal >= 3.11` and `ghc >= 9.4`"
-            )
-            Warning
-      pure LoadFile
-    _ -> pure loadStyle
-
-  let fpModule = fromMaybe (fixTargetPath fp) mc
-  let (cabalArgs, loadingFiles, extraDeps) = case determinedLoadStyle of
-        LoadFile -> ([fpModule], [fp], [])
-        LoadWithContext fps ->
-          let allModulesFpsDeps = ((fpModule, fp, []) : moduleFilesFromSameProject fps)
-              allModules = nubOrd $ fst3 <$> allModulesFpsDeps
-              allFiles = nubOrd $ snd3 <$> allModulesFpsDeps
-              allFpsDeps = nubOrd $ concatMap thd3 allModulesFpsDeps
-           in (["--keep-temp-files", "--enable-multi-repl"] ++ allModules, allFiles, allFpsDeps)
-
-  liftIO $ l <& LogComputedCradleLoadStyle "cabal" determinedLoadStyle `WithSeverity` Info
-  liftIO $ l <& LogCabalLoad fp mc (prefix <$> cs) loadingFiles `WithSeverity` Debug
-
-  let cabalCommand = "v2-repl"
-
-  cabalProc <-
-    cabalProcess l vs projectFile workDir cabalCommand cabalArgs `modCradleError` \err -> do
-      deps <- cabalCradleDependencies projectFile workDir workDir
-      pure $ err {cradleErrorDependencies = cradleErrorDependencies err ++ deps}
-
-  (ex, output, stde, [(_, maybeArgs)]) <- liftIO $ readProcessWithOutputs [hie_bios_output] l workDir cabalProc
-  let args = fromMaybe [] maybeArgs
-
-  let errorDetails =
-        [ "Failed command: " <> prettyCmdSpec (cmdspec cabalProc),
-          unlines output,
-          unlines stde,
-          unlines args,
-          "Process Environment:"
-        ]
-          <> prettyProcessEnv cabalProc
-
-  when (ex /= ExitSuccess) $ do
-    deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
-    let cmd = show (["cabal", cabalCommand] <> cabalArgs)
-    let errorMsg = "Failed to run " <> cmd <> " in directory \"" <> workDir <> "\". Consult the logs for full command and error."
-    throwCE (CradleError deps ex ([errorMsg] <> errorDetails) loadingFiles)
-
-  case processCabalWrapperArgs args of
-    Nothing -> do
-      -- Provide some dependencies an IDE can look for to trigger a reload.
-      -- Best effort. Assume the working directory is the
-      -- root of the component, so we are right in trivial cases at least.
-      deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
-      throwCE (CradleError (deps <> extraDeps) ex (["Failed to parse result of calling cabal"] <> errorDetails) loadingFiles)
-    Just (componentDir, final_args) -> do
-      deps <- liftIO $ cabalCradleDependencies projectFile workDir componentDir
-      CradleLoadResultT $ pure $ makeCradleResult (ex, stde, componentDir, final_args) (deps <> extraDeps) loadingFiles
-  where
-    -- Need to make relative on Windows, due to a Cabal bug with how it
-    -- parses file targets with a C: drive in it. So we decide to make
-    -- the paths relative to the working directory.
-    fixTargetPath x
-      | isWindows && hasDrive x = makeRelative workDir x
-      | otherwise = x
-    moduleFilesFromSameProject fps =
-      [ (fromMaybe (fixTargetPath file) old_mc, file, deps)
-      | file <- fps,
-        -- Lookup the component for the old file
-        Just (ResolvedCradle {concreteCradle = ConcreteCabal ct, cradleDeps = deps}) <- [selectCradle prefix file cs],
-        -- Only include this file if the old component is in the same project
-        (projectConfigFromMaybe root (cabalProjectFile ct)) == projectFile,
-        let old_mc = cabalComponent ct
-      ]
-
-removeInteractive :: [String] -> [String]
-removeInteractive = filter (/= "--interactive")
-
--- | Strip out any ["+RTS", ..., "-RTS"] sequences in the command string list.
-data InRTS = OutsideRTS | InsideRTS
-
--- | Strip out any ["+RTS", ..., "-RTS"] sequences in the command string list.
---
--- >>> removeRTS ["option1", "+RTS -H32m -RTS", "option2"]
--- ["option1", "option2"]
---
--- >>> removeRTS ["option1", "+RTS", "-H32m", "-RTS", "option2"]
--- ["option1", "option2"]
---
--- >>> removeRTS ["option1", "+RTS -H32m"]
--- ["option1"]
---
--- >>> removeRTS ["option1", "+RTS -H32m", "-RTS", "option2"]
--- ["option1", "option2"]
---
--- >>> removeRTS ["option1", "+RTS -H32m", "-H32m -RTS", "option2"]
--- ["option1", "option2"]
-removeRTS :: [String] -> [String]
-removeRTS = go OutsideRTS
-  where
-    go :: InRTS -> [String] -> [String]
-    go _ [] = []
-    go OutsideRTS (y:ys)
-      | "+RTS" `isPrefixOf` y = go (if "-RTS" `isSuffixOf` y then OutsideRTS else InsideRTS) ys
-      | otherwise = y : go OutsideRTS ys
-    go InsideRTS (y:ys) = go (if "-RTS" `isSuffixOf` y then OutsideRTS else InsideRTS) ys
-
-
-removeVerbosityOpts :: [String] -> [String]
-removeVerbosityOpts = filter ((&&) <$> (/= "-v0") <*> (/= "-w"))
-
 
 cabalWorkDir :: FilePath -> MaybeT IO FilePath
 cabalWorkDir wdir =
-      findFileUpwards "cabal.project" wdir
-  <|> findFileUpwardsPredicate (\fp -> takeExtension fp == ".cabal") wdir
-
-
-------------------------------------------------------------------------
-
--- | Explicit data-type for project configuration location.
--- It is basically a 'Maybe' type, but helps to document the API
--- and helps to avoid incorrect usage.
-data CradleProjectConfig
-  = NoExplicitConfig
-  | ExplicitConfig FilePath
-  deriving (Eq, Show)
-
--- | Create an explicit project configuration. Expects a working directory
--- followed by an optional name of the project configuration.
-projectConfigFromMaybe :: FilePath -> Maybe FilePath -> CradleProjectConfig
-projectConfigFromMaybe _wdir Nothing = NoExplicitConfig
-projectConfigFromMaybe wdir (Just fp) = ExplicitConfig (wdir </> fp)
+      Process.findFileUpwards "cabal.project" wdir
+  <|> Process.findFileUpwardsPredicate (\fp -> takeExtension fp == ".cabal") wdir
 
 ------------------------------------------------------------------------
 
@@ -1060,8 +507,8 @@ stackCradle l wdir mc syaml =
     , runGhcCmd = \args -> runCradleResultT $ do
         -- Setup stack silently, since stack might print stuff to stdout in some cases (e.g. on Win)
         -- Issue 242 from HLS: https://github.com/haskell/haskell-language-server/issues/242
-        _ <- readProcessWithCwd_ l wdir "stack" (stackYamlProcessArgs syaml <> ["setup", "--silent"]) ""
-        readProcessWithCwd_ l wdir "stack"
+        _ <- Process.readProcessWithCwd_ l wdir "stack" (stackYamlProcessArgs syaml <> ["setup", "--silent"]) ""
+        Process.readProcessWithCwd_ l wdir "stack"
           (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
           ""
     }
@@ -1093,17 +540,17 @@ stackAction
   -> IO (CradleLoadResult ComponentOptions)
 stackAction workDir mc syaml l fp loadStyle = do
   logCradleHasNoSupportForLoadWithContext l loadStyle "stack"
-  let ghcProcArgs = ("stack", stackYamlProcessArgs syaml <> ["exec", "ghc", "--"])
+  let ghcProc args = proc "stack" (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
   -- Same wrapper works as with cabal
-  wrapper_fp <- withGhcWrapperTool l ghcProcArgs workDir
+  wrapper_fp <- withGhcWrapperTool l ghcProc workDir
   (ex1, _stdo, stde, [(_, maybeArgs)]) <-
-    readProcessWithOutputs [hie_bios_output] l workDir
+    Process.readProcessWithOutputs [hie_bios_output] l workDir
       $ stackProcess syaml
           $  ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
           <> [ comp | Just comp <- [mc] ]
 
   (ex2, pkg_args, stdr, _) <-
-    readProcessWithOutputs [hie_bios_output] l workDir
+    Process.readProcessWithOutputs [hie_bios_output] l workDir
       $ stackProcess syaml ["path", "--ghc-package-path"]
 
   let split_pkgs = concatMap splitSearchPath pkg_args
@@ -1145,7 +592,7 @@ stackExecutable :: MaybeT IO FilePath
 stackExecutable = MaybeT $ findExecutable "stack"
 
 stackWorkDir :: FilePath -> MaybeT IO FilePath
-stackWorkDir = findFileUpwards "stack.yaml"
+stackWorkDir = Process.findFileUpwards "stack.yaml"
 
 {-
 -- Support removed for 0.3 but should be added back in the future
@@ -1221,124 +668,6 @@ obeliskAction workDir _fp = do
   return (makeCradleResult (ex, stde, words args) o_deps )
 
 -}
-------------------------------------------------------------------------------
--- Utilities
-
-
--- | Searches upwards for the first directory containing a file.
-findFileUpwards :: FilePath -> FilePath -> MaybeT IO FilePath
-findFileUpwards filename dir = do
-  cnts <-
-    liftIO
-    $ handleJust
-        -- Catch permission errors
-        (\(e :: IOError) -> if isPermissionError e then Just False else Nothing)
-        pure
-        (doesFileExist (dir </> filename))
-  case cnts of
-    False | dir' == dir -> fail "No cabal files"
-            | otherwise   -> findFileUpwards filename dir'
-    True -> return dir
-  where dir' = takeDirectory dir
-
--- | Searches upwards for the first directory containing a file to match
--- the predicate.
---
--- *WARNING*, this scans all the files of all the directories upward. If
--- appliable, prefer to use 'findFileUpwards'
-findFileUpwardsPredicate :: (FilePath -> Bool) -> FilePath -> MaybeT IO FilePath
-findFileUpwardsPredicate p dir = do
-  cnts <-
-    liftIO
-    $ handleJust
-        -- Catch permission errors
-        (\(e :: IOError) -> if isPermissionError e then Just [] else Nothing)
-        pure
-        (findFile p dir)
-
-  case cnts of
-    [] | dir' == dir -> fail "No cabal files"
-            | otherwise   -> findFileUpwardsPredicate p dir'
-    _ : _ -> return dir
-  where dir' = takeDirectory dir
-
--- | Sees if any file in the directory matches the predicate
-findFile :: (FilePath -> Bool) -> FilePath -> IO [FilePath]
-findFile p dir = do
-  b <- doesDirectoryExist dir
-  if b then getFiles >>= filterM doesPredFileExist else return []
-  where
-    getFiles = filter p <$> getDirectoryContents dir
-    doesPredFileExist file = doesFileExist $ dir </> file
-
--- | Some environments (e.g. stack exec) include GHC_PACKAGE_PATH.
--- Cabal v2 *will* complain, even though or precisely because it ignores them.
--- Unset them from the environment to sidestep this
-getCleanEnvironment :: IO [(String, String)]
-getCleanEnvironment = do
-  Map.toList . Map.delete "GHC_PACKAGE_PATH" . Map.fromList <$> getEnvironment
-
-type Outputs = [OutputName]
-type OutputName = String
-
--- | Call a given process with temp files for the process to write to.
--- * The process can discover the temp files paths by reading the environment.
--- * The contents of the temp files are returned by this function, if any.
--- * The logging function is called every time the process emits anything to stdout or stderr.
--- it can be used to report progress of the process to a user.
--- * The process is executed in the given directory.
-readProcessWithOutputs
-  :: Outputs  -- ^ Names of the outputs produced by this process
-  -> LogAction IO (WithSeverity Log) -- ^ Output of the process is emitted as logs.
-  -> FilePath -- ^ Working directory. Process is executed in this directory.
-  -> CreateProcess -- ^ Parameters for the process to be executed.
-  -> IO (ExitCode, [String], [String], [(OutputName, Maybe [String])])
-readProcessWithOutputs outputNames l workDir cp = flip runContT return $ do
-  old_env <- liftIO getCleanEnvironment
-  output_files <- traverse (withOutput old_env) outputNames
-
-  let process = cp { env = Just $ output_files ++ fromMaybe old_env (env cp),
-                     cwd = Just workDir
-                    }
-
-    -- Windows line endings are not converted so you have to filter out `'r` characters
-  let loggingConduit = C.decodeUtf8  C..| C.lines C..| C.filterE (/= '\r')
-        C..| C.map T.unpack C..| C.iterM (\msg -> l <& LogProcessOutput msg `WithSeverity` Debug) C..| C.sinkList
-  liftIO $ l <& LogCreateProcessRun process `WithSeverity` Info
-  (ex, stdo, stde) <- liftIO $ sourceProcessWithStreams process mempty loggingConduit loggingConduit
-
-  res <- forM output_files $ \(name,path) ->
-          liftIO $ (name,) <$> readOutput path
-
-  return (ex, stdo, stde, res)
-
-    where
-      readOutput :: FilePath -> IO (Maybe [String])
-      readOutput path = do
-        haveFile <- doesFileExist path
-        if haveFile
-          then withFile path ReadMode $ \handle -> do
-            hSetBuffering handle LineBuffering
-            !res <- force <$> hGetContents handle
-            return $ Just $ lines $ filter (/= '\r') res
-          else
-            return Nothing
-
-      withOutput :: [(String,String)] -> OutputName -> ContT a IO (OutputName, String)
-      withOutput env' name =
-        case lookup name env' of
-          Just file@(_:_) -> ContT $ \action -> do
-            removeFileIfExists file
-            action (name, file)
-          _ -> ContT $ \action -> withSystemTempFile name $ \ file h -> do
-            hClose h
-            removeFileIfExists file
-            action (name, file)
-
-removeFileIfExists :: FilePath -> IO ()
-removeFileIfExists f = do
-  yes <- doesFileExist f
-  when yes (removeFile f)
 
 makeCradleResult :: (ExitCode, [String], FilePath, [String]) -> [FilePath] -> [FilePath] -> CradleLoadResult ComponentOptions
 makeCradleResult (ex, err, componentDir, gopts) deps loadingFiles =
@@ -1350,38 +679,7 @@ makeCradleResult (ex, err, componentDir, gopts) deps loadingFiles =
 
 -- | Calls @ghc --print-libdir@, with just whatever's on the PATH.
 runGhcCmdOnPath :: LogAction IO (WithSeverity Log) -> FilePath -> [String] -> IO (CradleLoadResult String)
-runGhcCmdOnPath l wdir args = readProcessWithCwd l wdir "ghc" args ""
-  -- case mResult of
-  --   Nothing
-
--- | Wrapper around 'readCreateProcess' that sets the working directory and
--- clears the environment, suitable for invoking cabal/stack and raw ghc commands.
-readProcessWithCwd :: LogAction IO (WithSeverity Log) -> FilePath -> FilePath -> [String] -> String -> IO (CradleLoadResult String)
-readProcessWithCwd l dir cmd args stdin = runCradleResultT $ readProcessWithCwd_ l dir cmd args stdin
-
-readProcessWithCwd_ :: LogAction IO (WithSeverity Log) -> FilePath -> FilePath -> [String] -> String -> CradleLoadResultT IO String
-readProcessWithCwd_ l dir cmd args stdin = do
-  cleanEnv <- liftIO getCleanEnvironment
-  let createdProc' = (proc cmd args) { cwd = Just dir, env = Just cleanEnv }
-  readProcessWithCwd' l createdProc' stdin
-
--- | Wrapper around 'readCreateProcessWithExitCode', wrapping the result in
--- a 'CradleLoadResult'. Provides better error messages than raw 'readCreateProcess'.
-readProcessWithCwd' :: LogAction IO (WithSeverity Log) -> CreateProcess -> String -> CradleLoadResultT IO String
-readProcessWithCwd' l createdProcess stdin = do
-  mResult <- liftIO $ optional $ readCreateProcessWithExitCode createdProcess stdin
-  liftIO $ l <& LogCreateProcessRun createdProcess `WithSeverity` Debug
-  let cmdString = prettyCmdSpec $ cmdspec createdProcess
-  case mResult of
-    Just (ExitSuccess, stdo, _) -> pure stdo
-    Just (exitCode, stdo, stde) -> throwCE $
-      CradleError [] exitCode
-        (["Error when calling " <> cmdString, stdo, stde] <> prettyProcessEnv createdProcess)
-        []
-    Nothing -> throwCE $
-      CradleError [] ExitSuccess
-        (["Couldn't execute " <> cmdString] <> prettyProcessEnv createdProcess)
-        []
+runGhcCmdOnPath l wdir args = Process.readProcessWithCwd l wdir "ghc" args ""
 
 -- | Log that the cradle has no supported for loading with context, if and only if
 -- 'LoadWithContext' was requested.

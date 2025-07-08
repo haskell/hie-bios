@@ -78,6 +78,8 @@ import Data.List
 import Data.Void
 import qualified GHC as G
 import HIE.Bios.Cradle
+import HIE.Bios.Cradle.Cabal (isCabalMultipleCompSupported)
+import HIE.Bios.Cradle.ProgramVersions (makeVersions)
 import HIE.Bios.Environment
 import HIE.Bios.Flags
 import HIE.Bios.Ghc.Api
