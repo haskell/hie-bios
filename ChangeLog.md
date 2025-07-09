@@ -3,6 +3,19 @@
 * Rename `findFileUpwards` as `findFileUpwardsPredicate` and implement
   `findFileUpward` which does have better performance guarantees.
 
+## 2025-08-07 - 0.16.0
+
+### Bugfix
+
+* Always specify '--with-hc-pkg' with cabal [#465](https://github.com/haskell/hie-bios/pull/465)
+
+### Changes
+
+* Add regression test for [hie-bios/pull/465](https://github.com/haskell/hie-bios/pull/465) [#468](https://github.com/haskell/hie-bios/pull/468)
+* Cabal cradle needs to use --with-repl option [#466](https://github.com/haskell/hie-bios/pull/466)
+* fix: rewrite findFileUpwards as a non predicate function [#464](https://github.com/haskell/hie-bios/pull/464)
+* Add support for bios multi-cradles [#437](https://github.com/haskell/hie-bios/pull/437)
+
 ## 2025-04-25 - 0.15.0
 
 * Use consistent logging for test cases [#461](https://github.com/haskell/hie-bios/pull/461)
