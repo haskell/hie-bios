@@ -3,7 +3,7 @@
 * Rename `findFileUpwards` as `findFileUpwardsPredicate` and implement
   `findFileUpward` which does have better performance guarantees.
 
-## 2025-08-07 - 0.16.0
+## 2025-07-09 - 0.16.0
 
 ### Bugfix
 
