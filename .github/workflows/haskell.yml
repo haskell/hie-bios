@@ -15,14 +15,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cabal: ['head', '3.14.1.0', '3.10.2.0']
-        ghc: ['9.12.2', '9.10.1', '9.8.4', '9.6.7']
+        cabal: ['head', '3.16.0.0', '3.14.1.0']
+        ghc: ['9.12.2', '9.10.2', '9.8.4', '9.6.7']
         os: [ubuntu-latest, macOS-latest, windows-latest]
         exclude:
+          # Reduce the number of jobs for cabal HEAD, macos is likely redundant
           - cabal: 'head'
             os: macOS-latest
-          - cabal: '3.10.2.0'
-            ghc: '9.12.2'
+          # Make sure we test 3.16 series with recent GHC versions.
+          # In theory, we want to test with all GHC versions, but it is just
+          # too many jobs.
+          - cabal: '3.16.0.0'
+            ghc: '9.8.4'
+          - cabal: '3.16.0.0'
+            ghc: '9.6.7'
 
     steps:
     - uses: actions/checkout@v4

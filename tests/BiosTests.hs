@@ -407,12 +407,14 @@ stackYaml resolver pkgs = unlines
 
 stackYamlResolver :: String
 stackYamlResolver =
-#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,10,0,0)))
-  "nightly-2025-04-24" -- GHC 9.10.1
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,12,0,0)))
+  "nightly-2025-08-07" -- GHC 9.12.2
+#elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,10,0,0)))
+  "lts-24.3" -- GHC 9.10.2
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,8,0,0)))
   "lts-23.19" -- GHC 9.8.4
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)))
-  "lts-22.43" -- GHC 9.6.6
+  "lts-22.44" -- GHC 9.6.7
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,4,0,0)))
   "lts-21.25" -- GHC 9.4.8
 #elif (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)))
@@ -491,13 +493,11 @@ verboseLogging = Tasty.TestManager [Tasty.Option (Proxy :: Proxy VerboseLogging)
   \_opts _tree -> Nothing
 
 -- ------------------------------------------------------------------
--- Ignore test group if built with GHC 9.6.7 and GHC 9.12.2
+-- Ignore test group if not supported by any stackage snapshot
 -- ------------------------------------------------------------------
 
 ignoreOnUnsupportedGhc :: TestTree -> TestTree
 ignoreOnUnsupportedGhc tt =
-#if (defined(MIN_VERSION_GLASGOW_HASKELL) && (MIN_VERSION_GLASGOW_HASKELL(9,6,7,0) && !MIN_VERSION_GLASGOW_HASKELL(9,6,8,0)) || (MIN_VERSION_GLASGOW_HASKELL(9,12,2,0) && !MIN_VERSION_GLASGOW_HASKELL(9,12,3,0)))
-  ignoreTestBecause "Not supported on 9.6.7 and 9.12.2"
-#endif
+  -- Currently, all GHC versions are supported! Yay!
   tt
 
