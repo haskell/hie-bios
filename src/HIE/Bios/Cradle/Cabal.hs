@@ -194,9 +194,10 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
             }
         Just (componentDir, ghc_args) -> do
           deps <- liftIO $ cabalCradleDependencies projectFile workDir componentDir
-          final_args <- case cabalFeatures of
-            CabalWithRepl -> liftIO $ expandGhcOptionResponseFile ghc_args
-            CabalWithGhcShimWrapper -> pure ghc_args
+          usesResponseFiles <- usesResponseFilesForAllGhcOptions progVersions
+          final_args <- case usesResponseFiles of
+            True -> liftIO $ expandGhcOptionResponseFile ghc_args
+            False -> pure ghc_args
           CradleLoadResultT $ pure $ CradleSuccess
             ComponentOptions
               { componentOptions = final_args
@@ -594,6 +595,37 @@ determineCabalLoadFeature vs = do
       | ver >= makeVersion [3, 15] -> pure CabalWithRepl
       | otherwise -> pure CabalWithGhcShimWrapper
     _ -> pure CabalWithGhcShimWrapper
+
+-- | As `cabal repl` started to hit maximum cli invocation length, we changed how repl arguments are
+-- passed to GHC. In `cabal 3.15`, `cabal 3.16.0.0`, `cabal 3.17` and onwards, ghc options are
+-- passed to GHC via response files.
+--
+-- This breaks HLS release binary distributions before 2.12, as neither HLS nor hie-bios are capable of handling
+-- response files at the top-level.
+--
+-- In particular, `cabal 3.16.0.0` was released with this change and no HLS bindist before 2.12 works
+-- with `cabal 3.16.0.0`.
+-- To make `cabal 3.16.*` series compatible with released HLS binaries, we reverted the response file
+-- change for the ghc options. This change will apply once `cabal 3.16.1.*` is released.
+-- Note, in `cabal 3.17`, i.e. cabal HEAD, we still pass the arguments via response files and will do that for the
+-- `cabal 3.18` release.
+--
+-- So, we have a weird matrix now, between some commit in `cabal 3.15` and `cabal 3.16`, ghc arguments
+-- are supplied encoded in a response file, while in `>= cabal 3.16.1`, the arguments are passed verbatim.
+-- Then, later on in `cabal-3.17`, we use response files again.
+--
+-- 'usesResponseFilesForAllGhcOptions' encodes all of this history.
+usesResponseFilesForAllGhcOptions :: MonadIO m => ProgramVersions -> m Bool
+usesResponseFilesForAllGhcOptions vs = do
+  cabal_version <- liftIO $ runCachedIO $ cabalVersion vs
+  -- determine which load style is supported by this cabal cradle.
+  case cabal_version of
+    Just ver
+      | ver >= makeVersion [3, 15] && ver <= makeVersion [3, 16, 0, 0] -> pure True
+      | ver >= makeVersion [3, 17] -> pure True
+      | otherwise -> pure False
+    _ -> pure False
+
 
 -- | When @cabal repl --with-repl@ is called in a project with a custom setup which forces
 -- an older @lib:Cabal@ version, then the error message looks roughly like:
