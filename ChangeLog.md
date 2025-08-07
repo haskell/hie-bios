@@ -1,7 +1,8 @@
 # ChangeLog hie-bios
 
-* Rename `findFileUpwards` as `findFileUpwardsPredicate` and implement
-  `findFileUpward` which does have better performance guarantees.
+## 2025-08-07 - 0.17.0
+
+* Add support for cabal 3.16.1.0 [#470](https://github.com/haskell/hie-bios/pull/470)
 
 ## 2025-07-09 - 0.16.0
 
