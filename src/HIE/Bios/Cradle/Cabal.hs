@@ -263,7 +263,7 @@ processCabalLoadStyle l cradles projectFile workDir mc fp loadStyle = do
               allModules = nubOrd $ fst3 <$> allModulesFpsDeps
               allFiles = nubOrd $ snd3 <$> allModulesFpsDeps
               allFpsDeps = nubOrd $ concatMap thd3 allModulesFpsDeps
-           in (["--keep-temp-files", "--enable-multi-repl"] ++ allModules, allFiles, allFpsDeps)
+           in (["--enable-multi-repl"] ++ allModules, allFiles, allFpsDeps)
 
   liftIO $ l <& LogComputedCradleLoadStyle "cabal" loadStyle `WithSeverity` Info
   liftIO $ l <& LogCabalLoad fp mc (prefix <$> resolvedCradles cradles) loadingFiles `WithSeverity` Debug
