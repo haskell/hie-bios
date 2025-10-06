@@ -48,6 +48,7 @@ module Utils (
   loadRuntimeGhcVersion,
   inCradleRootDir,
   loadFileGhc,
+  loadFileGhcMultiStyle,
   isCabalMultipleCompSupported',
 
   -- * Assertion helpers
@@ -297,7 +298,7 @@ loadComponentOptions fp = do
 loadComponentOptionsMultiStyle :: FilePath -> [FilePath] -> TestM ()
 loadComponentOptionsMultiStyle fp fps = do
   a_fp <- normFile fp
-  a_fps <- mapM normFile fps
+  a_fps <- traverse normFile fps
   crd <- askCradle
   step $ "Initialise flags for: " <> fp <> " and " <> show fps
   clr <- liftIO $ getCompilerOptions a_fp (LoadWithContext a_fps) crd
@@ -340,6 +341,25 @@ loadFileGhc fp = do
   stepF <- askStep
   step "Cradle load"
   loadComponentOptions fp
+  opts <- assertLoadSuccess
+  liftIO $
+    G.runGhc (Just libdir) $ do
+      let (ini, _) = initSessionWithMessage (Just G.batchMsg) opts
+      sf <- ini
+      case sf of
+        -- Test resetting the targets
+        Succeeded -> do
+          liftIO $ stepF "Set target files"
+          setTargetFiles mempty [(a_fp, a_fp)]
+        Failed -> liftIO $ assertFailure "Module loading failed"
+
+loadFileGhcMultiStyle :: FilePath -> [FilePath] -> TestM ()
+loadFileGhcMultiStyle fp extraFps = do
+  libdir <- askOrLoadLibDir
+  a_fp <- normFile fp
+  stepF <- askStep
+  step "Cradle load"
+  loadComponentOptionsMultiStyle fp extraFps
   opts <- assertLoadSuccess
   liftIO $
     G.runGhc (Just libdir) $ do

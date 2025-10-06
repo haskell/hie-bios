@@ -261,6 +261,20 @@ cabalTestCases extraGhcDep =
         -- This test doesn't hurt for other cases as well, so we enable it for
         -- all configurations.
         testDirectoryM isCabalCradle "src/MyLib.hs"
+    , biosTestCase "force older Cabal version in custom setup with multi mode" $ runTestEnv "cabal-with-custom-setup" $ do
+        -- Specifically tests whether cabal 3.16 works as expected with
+        -- an older lib:Cabal version that doesn't support '--with-repl'.
+        -- This test doesn't hurt for other cases as well, so we enable it for
+        -- all configurations.
+        let target = "src/MyLib.hs"
+        initCradle target
+        assertCradle isCabalCradle
+        loadRuntimeGhcLibDir
+        assertLibDirVersion
+        loadRuntimeGhcVersion
+        assertGhcVersion
+        -- suffices to force loading cabal's `--enable-multi-repl` codepath
+        loadFileGhcMultiStyle target []
     ]
   ]
   where
