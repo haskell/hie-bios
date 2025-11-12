@@ -78,7 +78,7 @@ symbolicLinkTests =
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
-      inCradleRootDir $ do
+      do
         loadComponentOptions "./a/A.hs"
         assertComponentOptions $ \opts ->
           componentOptions opts `shouldMatchList` ["a"] <> argDynamic
@@ -87,20 +87,25 @@ symbolicLinkTests =
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
-      inCradleRootDir $ do
-        liftIO $ createDirectoryLink "./a" "./b"
-        liftIO $ unlessM (doesFileExist "./b/A.hs") $
+      do
+        cradle <- askCradle
+        let rooted = (cradleRootDir cradle </>)
+        liftIO $ createDirectoryLink (rooted "a") (rooted "./b")
+        liftIO $ unlessM (doesFileExist $ rooted "b/A.hs") $
           assertFailure "Test invariant broken, this file must exist."
         loadComponentOptions "./b/A.hs"
         assertComponentOptions $ \opts ->
           componentOptions opts `shouldMatchList` ["b"] <> argDynamic
+
   , biosTestCase "Can not load symlinked module that is ignored" $ runTestEnv "./symlink-test" $ do
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
-      inCradleRootDir $ do
-        liftIO $ createDirectoryLink "./a" "./c"
-        liftIO $ unlessM (doesFileExist "./c/A.hs") $
+      do
+        cradle <- askCradle
+        let rooted = (cradleRootDir cradle </>)
+        liftIO $ createDirectoryLink (rooted "./a") (rooted "./c")
+        liftIO $ unlessM (doesFileExist $ rooted "c/A.hs") $
           assertFailure "Test invariant broken, this file must exist."
         loadComponentOptions "./c/A.hs"
         assertLoadNone
