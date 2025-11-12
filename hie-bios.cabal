@@ -253,9 +253,13 @@ test-suite bios-tests
       ghc
 
   hs-source-dirs: tests/
-  ghc-options: -threaded -Wall
   main-is: BiosTests.hs
   other-modules: Utils
+
+  ghc-options: -threaded -Wall
+  -- There seems to be a race condition on windows
+  if !os(windows)
+    ghc-options: -rtsopts "-with-rtsopts=-N"
 
 Source-Repository head
   Type:                 git
