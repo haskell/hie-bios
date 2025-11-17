@@ -332,8 +332,13 @@ processCabalWrapperArgs args =
 -- ----------------------------------------------------------------------------
 
 cabalLoadFilesBefore315 :: LogAction IO (WithSeverity Log) -> ProgramVersions -> CradleProjectConfig -> [Char] -> [String] -> CradleLoadResultT IO CreateProcess
-cabalLoadFilesBefore315 l progVersions projectFile workDir args = do
+cabalLoadFilesBefore315 l progVersions projectFile workDir args' = do
   let cabalCommand = "v2-repl"
+  cabal_version <- liftIO $ runCachedIO $ cabalVersion progVersions
+
+  let args = case cabal_version of
+        Just v | v < makeVersion [3,15] -> "--keep-temp-files" : args'
+        _ -> args'
   cabalProcess l progVersions projectFile workDir cabalCommand args `modCradleError` \err -> do
     deps <- cabalCradleDependencies projectFile workDir workDir
     pure $ err {cradleErrorDependencies = cradleErrorDependencies err ++ deps}
