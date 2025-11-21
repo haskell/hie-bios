@@ -20,6 +20,7 @@ import System.Exit
 import System.Directory
 import Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&))
 import Control.Monad
+import Control.Monad.Extra (concatMapM)
 import Control.Monad.IO.Class
 import Data.Aeson ((.:))
 import qualified Data.Aeson as Aeson
@@ -35,7 +36,6 @@ import System.FilePath
 import System.Info.Extra (isWindows)
 import System.IO.Temp
 import Data.Version
-import Data.Tuple.Extra (fst3, snd3, thd3)
 
 import HIE.Bios.Config
 import HIE.Bios.Environment (getCacheDir)
@@ -174,7 +174,7 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
       let cmd = prettyCmdSpec (cmdspec cabalProc)
       let errorMsg = "Failed to run " <> cmd <> " in directory \"" <> workDir <> "\". Consult the logs for full command and error."
       throwCE CradleError
-        { cradleErrorDependencies = deps <> extraDeps
+        { cradleErrorDependencies = nubOrd (deps <> extraDeps)
         , cradleErrorExitCode = ExitFailure code
         , cradleErrorStderr = [errorMsg] <> prettyProcessErrorDetails errorDetails
         , cradleErrorLoadingFiles = loadingFiles
@@ -187,7 +187,7 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
           -- root of the component, so we are right in trivial cases at least.
           deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
           throwCE CradleError
-            { cradleErrorDependencies = deps <> extraDeps
+            { cradleErrorDependencies = nubOrd (deps <> extraDeps)
             , cradleErrorExitCode = ExitSuccess
             , cradleErrorStderr = ["Failed to parse result of calling cabal"] <> prettyProcessErrorDetails errorDetails
             , cradleErrorLoadingFiles = loadingFiles
@@ -202,7 +202,7 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
             ComponentOptions
               { componentOptions = final_args
               , componentRoot = componentDir
-              , componentDependencies = deps <> extraDeps
+              , componentDependencies = nubOrd (deps <> extraDeps)
               }
   where
     -- | Run the given cabal process to obtain ghc options.
@@ -256,14 +256,14 @@ runCabalGhcCmd cs wdir l projectFile args = runCradleResultT $ do
 processCabalLoadStyle :: MonadIO m => LogAction IO (WithSeverity Log) -> ResolvedCradles a -> CradleProjectConfig -> [Char] -> Maybe FilePath -> [Char] -> LoadStyle -> m ([FilePath], [FilePath], [FilePath])
 processCabalLoadStyle l cradles projectFile workDir mc fp loadStyle = do
   let fpModule = fromMaybe (fixTargetPath fp) mc
-  let (cabalArgs, loadingFiles, extraDeps) = case loadStyle of
-        LoadFile -> ([fpModule], [fp], [])
-        LoadWithContext fps ->
-          let allModulesFpsDeps = ((fpModule, fp, []) : moduleFilesFromSameProject fps)
-              allModules = nubOrd $ fst3 <$> allModulesFpsDeps
-              allFiles = nubOrd $ snd3 <$> allModulesFpsDeps
-              allFpsDeps = nubOrd $ concatMap thd3 allModulesFpsDeps
-           in (["--enable-multi-repl"] ++ allModules, allFiles, allFpsDeps)
+  (cabalArgs, loadingFiles, extraDeps) <- case loadStyle of
+        LoadFile -> pure ([fpModule], [fp], [])
+        LoadWithContext fps -> do
+          (modPairs, mergedDeps) <- moduleFilesFromSameProject fps
+          let allModPairs = nubOrd $ (fpModule, fp) : modPairs
+              allModules  = nubOrd $ fmap fst allModPairs
+              allFiles    = nubOrd $ fmap snd allModPairs
+          pure (["--enable-multi-repl"] ++ allModules, allFiles, mergedDeps)
 
   liftIO $ l <& LogComputedCradleLoadStyle "cabal" loadStyle `WithSeverity` Info
   liftIO $ l <& LogCabalLoad fp mc (prefix <$> resolvedCradles cradles) loadingFiles `WithSeverity` Debug
@@ -275,15 +275,24 @@ processCabalLoadStyle l cradles projectFile workDir mc fp loadStyle = do
     fixTargetPath x
       | isWindows && hasDrive x = makeRelative workDir x
       | otherwise = x
-    moduleFilesFromSameProject fps =
-      [ (fromMaybe (fixTargetPath file) old_mc, file, deps)
-      | file <- fps,
-        -- Lookup the component for the old file
-        Just (ResolvedCradle {concreteCradle = ConcreteCabal ct, cradleDeps = deps}) <- [selectCradle prefix file (resolvedCradles cradles)],
-        -- Only include this file if the old component is in the same project
-        (projectConfigFromMaybe (cradleRoot cradles) (cabalProjectFile ct)) == projectFile,
-        let old_mc = cabalComponent ct
-      ]
+    -- Return (moduleTarget,file) pairs for each context file, plus a merged dependency list across all of them.
+    moduleFilesFromSameProject :: MonadIO m => [FilePath] -> m ([(FilePath, FilePath)], [FilePath])
+    moduleFilesFromSameProject fps = do
+      -- First, select eligible files and collect their componentDir and YAML deps
+      let selected =
+            [ (file, depsYaml, prefix rc, cabalComponent ct)
+            | file <- fps
+            , Just rc@(ResolvedCradle {concreteCradle = ConcreteCabal ct, cradleDeps = depsYaml}) <- [selectCradle prefix file (resolvedCradles cradles)]
+            , (projectConfigFromMaybe (cradleRoot cradles) (cabalProjectFile ct)) == projectFile
+            ]
+      -- Compute dynamic deps
+      let compDirs = nubOrd $ takeDirectory fp : [ takeDirectory f | (f, _, _, _) <- selected ]
+      dynDeps <- concatMapM (liftIO . cabalCradleDependenciesEnclosing projectFile (cradleRoot cradles)) compDirs
+      -- Combine YAML deps with dynamic deps
+      let mergedDeps = nubOrd $ dynDeps ++ concat [ depsYaml | (_, depsYaml, _ , _) <- selected ]
+      let modPairs = [ (fromMaybe (fixTargetPath file) old_mc, file)
+                     | (file, _, _, old_mc) <- selected ]
+      pure (modPairs, mergedDeps)
 
 cabalLoadFilesWithRepl :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> [String] -> CradleLoadResultT IO CreateProcess
 cabalLoadFilesWithRepl l projectFile workDir args = do
@@ -314,6 +323,43 @@ cabalCradleDependencies projectFile rootDir componentDir = do
     let cabalFiles = map (relFp </>) cabalFiles'
     return $ map normalise $ cabalFiles ++ projectLocationOrDefault projectFile
 
+-- | @'cabalCradleDependenciesEnclosing' projectFile rootDir startDir@.
+-- Find cradle dependency files by walking upwards from a starting directory.
+--
+-- This is similar to 'cabalCradleDependencies', but instead of looking only in a
+-- specific component directory, it searches for @.cabal@ files in @startDir@ and
+-- its ancestor directories, stopping at (and not traversing above) @rootDir@ or
+-- the filesystem root. All discovered @.cabal@ files are returned relative to
+-- @rootDir@, along with the cabal project configuration files determined by
+-- 'projectLocationOrDefault'.
+--
+-- Inputs
+-- - projectFile: the cradle's cabal project configuration (explicit file or default).
+-- - rootDir: absolute cradle root; used as the boundary for the upward search and
+--   to relativize returned paths.
+-- - startDir: directory from which to begin searching for enclosing @.cabal@ files.
+--
+-- Output
+-- - A list of normalised, relative file paths that should be watched to trigger
+--   a reload when changed.
+cabalCradleDependenciesEnclosing :: CradleProjectConfig -> FilePath -> FilePath -> IO [FilePath]
+cabalCradleDependenciesEnclosing projectFile rootDir fp = do
+    cabalFiles' <- findCabalFilesEnclosing fp
+    let relCabalFiles = map (makeRelative rootDir) cabalFiles'
+    return $ map normalise $ relCabalFiles ++ projectLocationOrDefault projectFile
+    where
+      -- find the cabal file upwards from fp to rootDir
+      findCabalFilesEnclosing :: FilePath -> IO [FilePath]
+      findCabalFilesEnclosing dir = do
+            cfs <- map (dir </>) <$> findCabalFiles dir
+            if not (null cfs)
+              then return cfs
+              else
+                let parentDir = takeDirectory dir
+                in if parentDir == dir || length parentDir < length rootDir
+                   then return []
+                   else findCabalFilesEnclosing parentDir
+
 processCabalWrapperArgs :: [String] -> Maybe (FilePath, [String])
 processCabalWrapperArgs args =
     case args of
@@ -332,8 +378,13 @@ processCabalWrapperArgs args =
 -- ----------------------------------------------------------------------------
 
 cabalLoadFilesBefore315 :: LogAction IO (WithSeverity Log) -> ProgramVersions -> CradleProjectConfig -> [Char] -> [String] -> CradleLoadResultT IO CreateProcess
-cabalLoadFilesBefore315 l progVersions projectFile workDir args = do
+cabalLoadFilesBefore315 l progVersions projectFile workDir args' = do
   let cabalCommand = "v2-repl"
+  cabal_version <- liftIO $ runCachedIO $ cabalVersion progVersions
+
+  let args = case cabal_version of
+        Just v | v < makeVersion [3,15] -> "--keep-temp-files" : args'
+        _ -> args'
   cabalProcess l progVersions projectFile workDir cabalCommand args `modCradleError` \err -> do
     deps <- cabalCradleDependencies projectFile workDir workDir
     pure $ err {cradleErrorDependencies = cradleErrorDependencies err ++ deps}

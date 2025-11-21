@@ -193,6 +193,47 @@ cabalTestCases extraGhcDep =
           , "cabal.project"
           , "cabal.project.local"
           ]
+  , biosTestCase "nested-cabal multi-mode includes enclosing deps for extra files" $ runTestEnv "./nested-cabal" $ do
+      -- Initialize cradle first, since capability checks use the current cradle.
+      initCradle "sub-comp/Lib.hs"
+      assertCradle isCabalCradle
+      multiSupported <- isCabalMultipleCompSupported'
+      if multiSupported
+        then do
+          loadComponentOptionsMultiStyle "sub-comp/Lib.hs" ["MyLib.hs"]
+          assertComponentOptions $ \opts -> do
+            -- Expect both the main component's cabal file and the enclosing cabal for the extra file,
+            -- plus project files.
+            componentDependencies opts `shouldMatchList`
+              [ "sub-comp" </> "sub-comp.cabal"
+              , "nested-cabal.cabal"
+              , "cabal.project"
+              , "cabal.project.local"
+              ]
+        else do
+          -- On older cabal/ghc combos, multi-repl isn't supported; just ensure load succeeds.
+          loadComponentOptions "sub-comp/Lib.hs"
+          _ <- assertLoadSuccess
+          pure ()
+  , biosTestCase "nested-cabal multi-mode includes enclosing deps when extra file is subcomp" $ runTestEnv "./nested-cabal" $ do
+      -- Initialize cradle at the top level, then treat the sub-component file as an extra file.
+      initCradle "MyLib.hs"
+      assertCradle isCabalCradle
+      multiSupported <- isCabalMultipleCompSupported'
+      if multiSupported
+        then do
+          loadComponentOptionsMultiStyle "MyLib.hs" ["sub-comp/Lib.hs"]
+          assertComponentOptions $ \opts -> do
+            componentDependencies opts `shouldMatchList`
+              [ "nested-cabal.cabal"
+              , "sub-comp" </> "sub-comp.cabal"
+              , "cabal.project"
+              , "cabal.project.local"
+              ]
+        else do
+          loadComponentOptions "MyLib.hs"
+          _ <- assertLoadSuccess
+          pure ()
   , biosTestCase "multi-cabal" $ runTestEnv "./multi-cabal" $ do
       {- tests if both components can be loaded -}
       testDirectoryM isCabalCradle "app/Main.hs"
