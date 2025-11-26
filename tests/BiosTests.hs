@@ -124,11 +124,11 @@ biosTestCases =
         cradleErrorExitCode @?= ExitSuccess
         cradleErrorDependencies `shouldMatchList` []
         length cradleErrorStderr @?= 1
-        let errorCtx = head cradleErrorStderr
-        -- On windows, this error message contains '"' around the executable name
-        if isWindows
-          then "Couldn't execute \"myGhc\"" `isPrefixOf` errorCtx @? "Error message should contain error information"
-          else "Couldn't execute myGhc"     `isPrefixOf` errorCtx @? "Error message should contain error information"
+        forM_ cradleErrorStderr $ \errorCtx ->
+          -- On windows, this error message contains '"' around the executable name
+          if isWindows
+            then "Couldn't execute \"myGhc\"" `isPrefixOf` errorCtx @? "Error message should contain error information"
+            else "Couldn't execute myGhc"     `isPrefixOf` errorCtx @? "Error message should contain error information"
   , biosTestCase "simple-bios-shell" $ runTestEnv "./simple-bios-shell" $ do
       testDirectoryM isBiosCradle "B.hs"
   , biosTestCase "simple-bios-shell-deps" $ runTestEnv "./simple-bios-shell" $ do
@@ -519,7 +519,7 @@ testGroupWithDependency td tc = askOption @IgnoreToolDeps (\case
 -- | This option, when set to 'True', specifies that we should run in the
 -- «list tests» mode
 newtype IgnoreToolDeps = IgnoreToolDeps Bool
-  deriving (Eq, Ord, Typeable)
+  deriving (Eq, Ord)
 
 instance Tasty.IsOption IgnoreToolDeps where
   defaultValue = IgnoreToolDeps False
@@ -555,4 +555,3 @@ ignoreOnUnsupportedGhc :: TestTree -> TestTree
 ignoreOnUnsupportedGhc tt =
   -- Currently, all GHC versions are supported! Yay!
   tt
-
