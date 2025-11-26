@@ -7,6 +7,7 @@ module HIE.Bios.Ghc.Api (
   , withDynFlags
   -- For test purposes
   , initSessionWithMessage
+  , initSessionWithMessage'
   ) where
 
 import GHC (LoadHowMuch(..), DynFlags, GhcMonad)
@@ -48,8 +49,15 @@ initSessionWithMessage :: (GhcMonad m)
             => Maybe G.Messager
             -> ComponentOptions
             -> (m G.SuccessFlag, ComponentOptions)
-initSessionWithMessage msg compOpts = (do
-    targets <- initSession compOpts
+initSessionWithMessage = initSessionWithMessage' False
+
+initSessionWithMessage' :: (GhcMonad m)
+            => Bool
+            -> Maybe G.Messager
+            -> ComponentOptions
+            -> (m G.SuccessFlag, ComponentOptions)
+initSessionWithMessage' workAroundThreadUnsafety msg compOpts = (do
+    targets <- initSession' workAroundThreadUnsafety compOpts
     G.setTargets targets
     -- Get the module graph using the function `getModuleGraph`
     mod_graph <- G.depanal [] True

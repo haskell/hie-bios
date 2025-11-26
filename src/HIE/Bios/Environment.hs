@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, CPP #-}
-module HIE.Bios.Environment (initSession, getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, getCacheDir, addCmdOpts) where
+module HIE.Bios.Environment (initSession, initSession', getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, getCacheDir, addCmdOpts) where
 
 import GHC (GhcMonad)
 import qualified GHC as G
@@ -28,11 +28,21 @@ import qualified HIE.Bios.Ghc.Gap as Gap
 initSession :: (GhcMonad m)
     => ComponentOptions
     -> m [G.Target]
-initSession  ComponentOptions {..} = do
+initSession = initSession' False
+
+initSession' :: (GhcMonad m)
+    => Bool
+    -> ComponentOptions
+    -> m [G.Target]
+initSession' workAroundThreadUnsafety ComponentOptions {..} = do
     df <- G.getSessionDynFlags
     -- Create a unique folder per set of different GHC options, assuming that each different set of
     -- GHC options will create incompatible interface files.
-    let opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init (map B.pack componentOptions)
+    let
+      -- There seems to be a race condition when writing interface files
+      hash_args = (if workAroundThreadUnsafety then (componentRoot :) else id) componentOptions
+      opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init $ map B.pack hash_args
+
     cache_dir <- liftIO $ getCacheDir opts_hash
     -- Add the user specified options to a fresh GHC session.
     (df', targets) <- addCmdOpts componentOptions df
