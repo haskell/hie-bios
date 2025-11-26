@@ -15,16 +15,19 @@ import qualified Test.Tasty.Options as Tasty
 import qualified Test.Tasty.Ingredients as Tasty
 import HIE.Bios
 import HIE.Bios.Cradle
-import Control.Monad ( forM_ )
+import Control.Monad (forM_)
+import Control.Monad.Extra (unlessM)
+import Control.Monad.IO.Class
+import Data.Foldable (for_)
 import Data.List ( sort, isPrefixOf )
 import Data.Typeable
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Directory
 import System.FilePath ((</>), makeRelative)
 import System.Info.Extra (isWindows)
-import Control.Monad.Extra (unlessM)
+import System.IO (BufferMode (LineBuffering), hSetBuffering, stderr, stdout)
 import qualified HIE.Bios.Ghc.Gap as Gap
-import Control.Monad.IO.Class
+
 
 argDynamic :: [String]
 argDynamic = ["-dynamic" | Gap.hostIsDynamic]
@@ -55,6 +58,7 @@ extraGhc = "ghc-" ++ extraGhcVersion
 -- to avoid recompilation.
 main :: IO ()
 main = do
+  for_ [stderr, stdout] (`hSetBuffering` LineBuffering)
   writeStackYamlFiles
   stackDep <- checkToolIsAvailable "stack"
   cabalDep <- checkToolIsAvailable "cabal"
