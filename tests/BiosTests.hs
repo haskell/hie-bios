@@ -15,16 +15,19 @@ import qualified Test.Tasty.Options as Tasty
 import qualified Test.Tasty.Ingredients as Tasty
 import HIE.Bios
 import HIE.Bios.Cradle
-import Control.Monad ( forM_ )
+import Control.Monad (forM_)
+import Control.Monad.Extra (unlessM)
+import Control.Monad.IO.Class
+import Data.Foldable (for_)
 import Data.List ( sort, isPrefixOf )
 import Data.Typeable
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Directory
 import System.FilePath ((</>), makeRelative)
 import System.Info.Extra (isWindows)
-import Control.Monad.Extra (unlessM)
+import System.IO (BufferMode (LineBuffering), hSetBuffering, stderr, stdout)
 import qualified HIE.Bios.Ghc.Gap as Gap
-import Control.Monad.IO.Class
+
 
 argDynamic :: [String]
 argDynamic = ["-dynamic" | Gap.hostIsDynamic]
@@ -55,6 +58,7 @@ extraGhc = "ghc-" ++ extraGhcVersion
 -- to avoid recompilation.
 main :: IO ()
 main = do
+  for_ [stderr, stdout] (`hSetBuffering` LineBuffering)
   writeStackYamlFiles
   stackDep <- checkToolIsAvailable "stack"
   cabalDep <- checkToolIsAvailable "cabal"
@@ -78,7 +82,7 @@ symbolicLinkTests =
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
-      inCradleRootDir $ do
+      do
         loadComponentOptions "./a/A.hs"
         assertComponentOptions $ \opts ->
           componentOptions opts `shouldMatchList` ["a"] <> argDynamic
@@ -87,20 +91,25 @@ symbolicLinkTests =
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
-      inCradleRootDir $ do
-        liftIO $ createDirectoryLink "./a" "./b"
-        liftIO $ unlessM (doesFileExist "./b/A.hs") $
+      do
+        cradle <- askCradle
+        let rooted = (cradleRootDir cradle </>)
+        liftIO $ createDirectoryLink (rooted "a") (rooted "./b")
+        liftIO $ unlessM (doesFileExist $ rooted "b/A.hs") $
           assertFailure "Test invariant broken, this file must exist."
         loadComponentOptions "./b/A.hs"
         assertComponentOptions $ \opts ->
           componentOptions opts `shouldMatchList` ["b"] <> argDynamic
+
   , biosTestCase "Can not load symlinked module that is ignored" $ runTestEnv "./symlink-test" $ do
       initCradle "doesNotExist.hs"
       assertCradle isMultiCradle
       step "Attempt to load symlinked module A"
-      inCradleRootDir $ do
-        liftIO $ createDirectoryLink "./a" "./c"
-        liftIO $ unlessM (doesFileExist "./c/A.hs") $
+      do
+        cradle <- askCradle
+        let rooted = (cradleRootDir cradle </>)
+        liftIO $ createDirectoryLink (rooted "./a") (rooted "./c")
+        liftIO $ unlessM (doesFileExist $ rooted "c/A.hs") $
           assertFailure "Test invariant broken, this file must exist."
         loadComponentOptions "./c/A.hs"
         assertLoadNone

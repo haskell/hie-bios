@@ -46,7 +46,6 @@ module Utils (
   loadComponentOptionsMultiStyle,
   loadRuntimeGhcLibDir,
   loadRuntimeGhcVersion,
-  inCradleRootDir,
   loadFileGhc,
   loadFileGhcMultiStyle,
   isCabalMultipleCompSupported',
@@ -325,15 +324,6 @@ isCabalMultipleCompSupported' = do
   versions <- liftIO $ makeVersions (cradleLogger cr) root ((runGhcCmd . cradleOptsProg) cr)
   liftIO $ isCabalMultipleCompSupported versions
 
-inCradleRootDir :: TestM a -> TestM a
-inCradleRootDir act = do
-  crd <- askCradle
-  prev <- liftIO getCurrentDirectory
-  liftIO $ setCurrentDirectory (cradleRootDir crd)
-  a <- act
-  liftIO $ setCurrentDirectory prev
-  pure a
-
 loadFileGhc :: FilePath -> TestM ()
 loadFileGhc fp = do
   libdir <- askOrLoadLibDir
@@ -344,7 +334,7 @@ loadFileGhc fp = do
   opts <- assertLoadSuccess
   liftIO $
     G.runGhc (Just libdir) $ do
-      let (ini, _) = initSessionWithMessage (Just G.batchMsg) opts
+      let (ini, _) = initSessionWithMessage' True (Just G.batchMsg) opts
       sf <- ini
       case sf of
         -- Test resetting the targets
@@ -363,7 +353,7 @@ loadFileGhcMultiStyle fp extraFps = do
   opts <- assertLoadSuccess
   liftIO $
     G.runGhc (Just libdir) $ do
-      let (ini, _) = initSessionWithMessage (Just G.batchMsg) opts
+      let (ini, _) = initSessionWithMessage' True (Just G.batchMsg) opts
       sf <- ini
       case sf of
         -- Test resetting the targets
