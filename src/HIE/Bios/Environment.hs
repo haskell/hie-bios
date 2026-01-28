@@ -21,6 +21,8 @@ import Text.ParserCombinators.ReadP hiding (optional)
 
 import HIE.Bios.Types
 import qualified HIE.Bios.Ghc.Gap as Gap
+import qualified System.OsPath as OsPath
+
 
 -- | Start a GHC session and set some sensible options for tooling to use.
 -- Creates a folder in the cache directory to cache interface files to make
@@ -171,16 +173,20 @@ makeDynFlagsAbsolute root df =
   $ df
     { G.importPaths = map makeAbs (G.importPaths df)
     , G.packageDBFlags =
-        map (Gap.overPkgDbRef makeAbs) (G.packageDBFlags df)
+        map (Gap.overPkgDbRef makeAbsOs) (G.packageDBFlags df)
     }
   where
     makeAbs =
-#if __GLASGOW_HASKELL__ >= 903
       case G.workingDirectory df of
         Just fp -> ((root </> fp) </>)
         Nothing ->
-#endif
           (root </>)
+
+    makeAbsOs p =
+      case G.workingDirectory df of
+        Just fp -> Gap.unsafeEncodeUtf (root </> fp) OsPath.</> p
+        Nothing ->
+          Gap.unsafeEncodeUtf root OsPath.</> p
 
 -- --------------------------------------------------------
 
