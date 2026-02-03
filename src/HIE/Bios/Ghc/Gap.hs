@@ -76,13 +76,13 @@ import GHC.Platform.Ways (Way(WayDyn))
 import qualified GHC.Platform.Ways as Platform
 import qualified GHC.Runtime.Loader as DynamicLoading (initializePlugins)
 import qualified GHC.Tc.Types as Tc
+import GHC.Unit.Types (UnitId)
 import GHC.Utils.Logger
 import GHC.Utils.Outputable
 import qualified GHC.Utils.Ppr as Ppr
 import qualified GHC.Driver.Make as G
 import System.OsPath (OsPath)
 import qualified System.OsPath as OsPath
-import GHC.Unit.Types (UnitId)
 import Data.Maybe (fromMaybe)
 import GHC.Stack.Types (HasCallStack)
 
@@ -156,7 +156,17 @@ overPkgDbRef _f db = db
 ----------------------------------------------------------------
 
 guessTarget :: GhcMonad m => String -> Maybe UnitId -> Maybe G.Phase -> m G.Target
+<<<<<<< HEAD
 guessTarget = G.guessTarget
+||||||| parent of a2a283ab (Drop support for GHC 9.2)
+guessTarget a b c = G.guessTarget a b c
+#else
+guessTarget :: GhcMonad m => String -> a -> Maybe G.Phase -> m G.Target
+guessTarget a _ b = G.guessTarget a b
+#endif
+=======
+guessTarget a b c = G.guessTarget a b c
+>>>>>>> a2a283ab (Drop support for GHC 9.2)
 
 ----------------------------------------------------------------
 
@@ -199,11 +209,7 @@ unsetLogAction = do
     setSession env
 
 noopLogger :: LogAction
-#if __GLASGOW_HASKELL__ >= 903
 noopLogger = (\_wr _s _ss _m -> return ())
-#else
-noopLogger = (\_df _wr _s _ss _m -> return ())
-#endif
 
 -- --------------------------------------------------------
 -- Doc Compat functions
@@ -221,11 +227,7 @@ oneLineMode = Ppr.OneLineMode
 -- --------------------------------------------------------
 
 numLoadedPlugins :: HscEnv -> Int
-#if __GLASGOW_HASKELL__ >= 903
 numLoadedPlugins = length . Plugins.pluginsWithArgs . hsc_plugins
-#else
-numLoadedPlugins = length . Plugins.plugins
-#endif
 
 initializePluginsForModSummary :: HscEnv -> ModSummary -> IO (Int, [G.ModuleName], ModSummary)
 initializePluginsForModSummary hsc_env' mod_summary = do

@@ -24,10 +24,8 @@ import HIE.Bios.Ghc.Doc (showPage, getStyle)
 import HIE.Bios.Ghc.Api (withDynFlags)
 import qualified HIE.Bios.Ghc.Gap as Gap
 
-#if __GLASGOW_HASKELL__ >= 903
 import GHC.Types.Error
 import GHC.Driver.Errors.Types
-#endif
 
 ----------------------------------------------------------------
 
@@ -46,9 +44,7 @@ readAndClearLogRef (LogRef ref) = do
 
 appendLogRef :: DynFlags -> Gap.PprStyle -> LogRef -> LogAction
 appendLogRef df style (LogRef ref) _
-#if __GLASGOW_HASKELL__ < 903
-    _ sev
-#elif __GLASGOW_HASKELL__ < 905
+#if __GLASGOW_HASKELL__ < 905
     (MCDiagnostic sev _)
 #else
     (MCDiagnostic sev _ _)
@@ -56,6 +52,7 @@ appendLogRef df style (LogRef ref) _
   src msg = do
         let !l = ppMsg src sev df style msg
         modifyIORef ref (\b -> b . (l:))
+appendLogRef _ _ _ _ _ _ _ = pure ()
 
 ----------------------------------------------------------------
 
@@ -88,14 +85,9 @@ sourceError ::
 sourceError err = do
     dflag <- getSessionDynFlags
     style <- getStyle dflag
-#if __GLASGOW_HASKELL__ >= 903
     let ret = unlines . errBagToStrList dflag style . getMessages . srcErrorMessages $ err
-#else
-    let ret = unlines . errBagToStrList dflag style . srcErrorMessages $ err
-#endif
     return (Left ret)
 
-#if __GLASGOW_HASKELL__ >= 903
 errBagToStrList :: DynFlags -> Gap.PprStyle -> Bag (MsgEnvelope GhcMessage) -> [String]
 errBagToStrList dflag style = map (ppErrMsg dflag style) . reverse . bagToList
 
@@ -108,19 +100,6 @@ ppErrMsg dflag style err = ppMsg spn SevError dflag style msg -- ++ ext
      msg = pprLocMsgEnvelope (defaultDiagnosticOpts @GhcMessage) err
 #else
      msg = pprLocMsgEnvelope err
-#endif
-     -- fixme
-#else
-errBagToStrList :: DynFlags -> Gap.PprStyle -> Bag (MsgEnvelope DecoratedSDoc) -> [String]
-errBagToStrList dflag style = map (ppErrMsg dflag style) . reverse . bagToList
-
-
-ppErrMsg :: DynFlags -> Gap.PprStyle -> MsgEnvelope DecoratedSDoc -> String
-ppErrMsg dflag style err = ppMsg spn SevError dflag style msg -- ++ ext
-   where
-     spn = errMsgSpan err
-     msg = pprLocMsgEnvelope err
-     -- fixme
 #endif
 
 ppMsg :: SrcSpan -> G.Severity-> DynFlags -> Gap.PprStyle -> SDoc -> String
