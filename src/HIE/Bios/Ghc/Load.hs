@@ -20,12 +20,7 @@ import qualified GHC as G
 import qualified GHC.Driver.Main as G
 
 import qualified HIE.Bios.Ghc.Gap as Gap
-#if __GLASGOW_HASKELL__ > 903
 import GHC.Fingerprint
-#endif
-#if __GLASGOW_HASKELL__ < 903
-import Data.Time.Clock
-#endif
 
 data Log =
   LogLoaded FilePath FilePath
@@ -118,16 +113,9 @@ msTargetIs ms t = case targetId t of
 -- fool the recompilation checker so that we can get the typechecked modules
 updateTime :: MonadIO m => [Target] -> ModuleGraph -> m ModuleGraph
 updateTime ts graph = liftIO $ do
-#if __GLASGOW_HASKELL__ < 903
-  cur_time <- getCurrentTime
-#endif
   let go ms
         | any (msTargetIs ms) ts =
-#if __GLASGOW_HASKELL__ >= 903
             ms {ms_hs_hash = fingerprint0}
-#else
-            ms {ms_hs_date = cur_time}
-#endif
         | otherwise = ms
   pure $ Gap.mapMG go graph
 
