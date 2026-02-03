@@ -146,7 +146,7 @@ Extra-Source-Files:     README.md
                         tests/projects/failing-multi-repl-cabal-project/multi-repl-cabal-fail/src/Lib.hs
                         tests/projects/failing-multi-repl-cabal-project/NotInPath.hs
 
-tested-with: GHC ==9.6.7 || ==9.8.4 || ==9.10.1 || ==9.12.2
+tested-with: GHC ==9.6.7 || ==9.8.4 || ==9.10.1 || ==9.12.2 || ==9.14.1
 
 Library
   Default-Language:     Haskell2010
@@ -186,13 +186,13 @@ Library
                         cryptohash-sha1      >= 0.11.100 && < 0.12,
                         directory            >= 1.3.0 && < 1.4,
                         filepath             >= 1.4.1 && < 1.6,
-                        time                 >= 1.8.0 && < 1.15,
+                        time                 >= 1.8.0 && < 1.16,
                         extra                >= 1.6.14 && < 1.9,
                         prettyprinter        ^>= 1.6 || ^>= 1.7.0,
-                        ghc                  >= 9.2.1 && < 9.13,
+                        ghc                  >= 9.2.1 && < 9.15,
                         transformers         >= 0.5.2 && < 0.7,
                         temporary            >= 1.2 && < 1.4,
-                        template-haskell     >= 2.18 && <2.24,
+                        template-haskell     >= 2.18 && <2.25,
                         text                 >= 1.2.3 && < 2.2,
                         unix-compat          >= 0.5.1 && < 0.8,
                         unordered-containers >= 0.2.9 && < 0.3,
@@ -214,7 +214,7 @@ Executable hie-bios
                       , directory
                       , filepath
                       , hie-bios
-                      , optparse-applicative >= 0.18.1 && < 0.20
+                      , optparse-applicative >= 0.17.1 && < 0.20
                       , prettyprinter
 
 test-suite parser-tests

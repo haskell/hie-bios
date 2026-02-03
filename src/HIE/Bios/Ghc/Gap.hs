@@ -156,17 +156,7 @@ overPkgDbRef _f db = db
 ----------------------------------------------------------------
 
 guessTarget :: GhcMonad m => String -> Maybe UnitId -> Maybe G.Phase -> m G.Target
-<<<<<<< HEAD
-guessTarget = G.guessTarget
-||||||| parent of a2a283ab (Drop support for GHC 9.2)
 guessTarget a b c = G.guessTarget a b c
-#else
-guessTarget :: GhcMonad m => String -> a -> Maybe G.Phase -> m G.Target
-guessTarget a _ b = G.guessTarget a b
-#endif
-=======
-guessTarget a b c = G.guessTarget a b c
->>>>>>> a2a283ab (Drop support for GHC 9.2)
 
 ----------------------------------------------------------------
 

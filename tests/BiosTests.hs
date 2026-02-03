@@ -562,5 +562,7 @@ verboseLogging = Tasty.TestManager [Tasty.Option (Proxy :: Proxy VerboseLogging)
 
 ignoreOnUnsupportedGhc :: TestTree -> TestTree
 ignoreOnUnsupportedGhc tt =
-  -- Currently, all GHC versions are supported! Yay!
-  tt
+#if (defined(MIN_VERSION_GLASGOW_HASKELL) && MIN_VERSION_GLASGOW_HASKELL(9,14,0,0))
+  ignoreTestBecause "Not supported on GHC 9.14"
+#endif
+    tt
