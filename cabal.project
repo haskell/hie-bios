@@ -1,2 +1,11 @@
 packages: .
 
+if impl(ghc >= 9.14.1)
+    allow-newer:
+        , base
+        , template-haskell
+        , containers
+        , bytestring
+        , deepseq
+        , ghc-prim
+        , time
