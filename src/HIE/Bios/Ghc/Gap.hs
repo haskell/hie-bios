@@ -41,6 +41,9 @@ module HIE.Bios.Ghc.Gap (
   , HIE.Bios.Ghc.Gap.parseDynamicFlags
   -- * Platform constants
   , hostIsDynamic
+  -- * OsPath Compat
+  , unsafeEncodeUtf
+  , unsafeDecodeUtf
   -- * misc
   , getTyThing
   , fixInfo
@@ -77,10 +80,12 @@ import GHC.Utils.Logger
 import GHC.Utils.Outputable
 import qualified GHC.Utils.Ppr as Ppr
 import qualified GHC.Driver.Make as G
-
-#if __GLASGOW_HASKELL__ > 903
+import System.OsPath (OsPath)
+import qualified System.OsPath as OsPath
 import GHC.Unit.Types (UnitId)
-#endif
+import Data.Maybe (fromMaybe)
+import GHC.Stack.Types (HasCallStack)
+
 #if __GLASGOW_HASKELL__ < 904
 import qualified GHC.Driver.Main as G
 #endif
@@ -136,21 +141,22 @@ setNoCode d = d { G.backend = G.NoBackend }
 set_hsc_dflags :: DynFlags -> HscEnv -> HscEnv
 set_hsc_dflags dflags hsc_env = hsc_env { G.hsc_dflags = dflags }
 
-overPkgDbRef :: (FilePath -> FilePath) -> G.PackageDBFlag -> G.PackageDBFlag
+overPkgDbRef :: (OsPath -> OsPath) -> G.PackageDBFlag -> G.PackageDBFlag
 overPkgDbRef f (G.PackageDB pkgConfRef) = G.PackageDB $ case pkgConfRef of
-    G.PkgDbPath fp -> G.PkgDbPath (f fp)
+    G.PkgDbPath fp ->
+#if __GLASGOW_HASKELL__ >= 915
+      G.PkgDbPath (f fp)
+#else
+      G.PkgDbPath (unsafeDecodeUtf $ f $ unsafeEncodeUtf fp)
+#endif
+
     conf -> conf
 overPkgDbRef _f db = db
 
 ----------------------------------------------------------------
 
-#if __GLASGOW_HASKELL__ >= 903
 guessTarget :: GhcMonad m => String -> Maybe UnitId -> Maybe G.Phase -> m G.Target
-guessTarget a b c = G.guessTarget a b c
-#else
-guessTarget :: GhcMonad m => String -> a -> Maybe G.Phase -> m G.Target
-guessTarget a _ b = G.guessTarget a b
-#endif
+guessTarget = G.guessTarget
 
 ----------------------------------------------------------------
 
@@ -180,9 +186,7 @@ mapOverIncludePaths f df = df
       G.IncludeSpecs
           (map f $ G.includePathsQuote  (includePaths df))
           (map f $ G.includePathsGlobal (includePaths df))
-#if MIN_VERSION_GLASGOW_HASKELL(9,0,2,0)
           (map f $ G.includePathsQuoteImplicit (includePaths df))
-#endif
   }
 
 ----------------------------------------------------------------
@@ -292,3 +296,18 @@ parseTargetFiles = G.parseTargetFiles
 
 hostIsDynamic :: Bool
 hostIsDynamic = Platform.hostIsDynamic
+
+-- --------------------------------------------------------
+-- OsPath Compat
+-- --------------------------------------------------------
+
+unsafeEncodeUtf :: HasCallStack => FilePath -> OsPath
+unsafeEncodeUtf fp =
+#if MIN_VERSION_filepath(1,5,0)
+  OsPath.unsafeEncodeUtf fp
+#else
+  fromMaybe (error "unsafeEncodeUtf") $ OsPath.encodeUtf fp
+#endif
+
+unsafeDecodeUtf :: HasCallStack => OsPath -> FilePath
+unsafeDecodeUtf = fromMaybe (error "unsafeDecodeUtf") . OsPath.decodeUtf
