@@ -22,13 +22,6 @@ jobs:
           # Reduce the number of jobs for cabal HEAD, macos is likely redundant
           - cabal: 'head'
             os: macOS-latest
-          # Make sure we test 3.16 series with recent GHC versions.
-          # In theory, we want to test with all GHC versions, but it is just
-          # too many jobs.
-          - cabal: '3.16.0.0'
-            ghc: '9.8.4'
-          - cabal: '3.16.0.0'
-            ghc: '9.6.7'
 
     steps:
     - uses: actions/checkout@v6
