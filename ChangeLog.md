@@ -1,5 +1,13 @@
 # ChangeLog hie-bios
 
+## 2026-02-06 - 0.18.0
+
+* Adapt to OsPath change ([#493](https://github.com/haskell/hie-bios/pull/493))
+* Parallel test suite ([#487](https://github.com/haskell/hie-bios/pull/487))
+* Fix processCabalLoadStyle to include dyn dep for extra files ([#484](https://github.com/haskell/hie-bios/pull/484))
+* Improve hie-bios cli interface ([#480](https://github.com/haskell/hie-bios/pull/480))
+* Only pass --keep-temp-files once ([#477](https://github.com/haskell/hie-bios/pull/477))
+
 ## 2025-08-07 - 0.17.0
 
 * Add support for cabal 3.16.1.0 [#470](https://github.com/haskell/hie-bios/pull/470)
