@@ -9,6 +9,7 @@ module HIE.Bios.Cradle.ProgramVersions
 
 import HIE.Bios.Types
 import qualified HIE.Bios.Process as Process
+import HIE.Bios.Cradle.Utils (trim)
 
 import Colog.Core (LogAction (..), WithSeverity (..))
 import Data.Version
@@ -67,6 +68,6 @@ getGhcVersion ghc = do
     _ -> pure Nothing
 
 versionMaybe :: String -> Maybe Version
-versionMaybe xs = case reverse $ readP_to_S parseVersion xs of
+versionMaybe xs = case reverse $ readP_to_S parseVersion (trim xs) of
   [] -> Nothing
   (x:_) -> Just (fst x)

@@ -1,0 +1,4 @@
+cradle:
+  bios:
+    program: ./hie-bios.sh
+    with-ghc: ./noisy-ghc.sh

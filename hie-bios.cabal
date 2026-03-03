@@ -145,6 +145,11 @@ Extra-Source-Files:     README.md
                         tests/projects/failing-multi-repl-cabal-project/multi-repl-cabal-fail/src/Fail.hs
                         tests/projects/failing-multi-repl-cabal-project/multi-repl-cabal-fail/src/Lib.hs
                         tests/projects/failing-multi-repl-cabal-project/NotInPath.hs
+                        tests/projects/noisy-bios-ghc/A.hs
+                        tests/projects/noisy-bios-ghc/B.hs
+                        tests/projects/noisy-bios-ghc/hie-bios.sh
+                        tests/projects/noisy-bios-ghc/noisy-ghc.sh
+                        tests/projects/noisy-bios-ghc/hie.yaml
 
 tested-with: GHC ==9.6.7 || ==9.8.4 || ==9.10.1 || ==9.12.2 || ==9.14.1
 

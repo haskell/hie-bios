@@ -15,11 +15,11 @@ import System.Environment (lookupEnv)
 import qualified Crypto.Hash.SHA1 as H
 import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Base16
-import Data.List
 import Data.Char (isSpace)
 import Text.ParserCombinators.ReadP hiding (optional)
 
 import HIE.Bios.Types
+import HIE.Bios.Cradle.Utils (trim)
 import qualified HIE.Bios.Ghc.Gap as Gap
 import qualified System.OsPath as OsPath
 
@@ -245,10 +245,3 @@ value = many1 (satisfy (not . isSpace))
 anyToken :: ReadP Char
 anyToken = satisfy $ const True
 
--- Used for clipping the trailing newlines on GHC output
--- Also only take the last line of output
--- (Stack's ghc output has a lot of preceding noise from 7zip etc)
-trim :: String -> String
-trim s = case lines s of
-  [] -> s
-  ls -> dropWhileEnd isSpace $ last ls

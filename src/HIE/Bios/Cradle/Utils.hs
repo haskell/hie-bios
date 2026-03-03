@@ -10,11 +10,14 @@ module HIE.Bios.Cradle.Utils
   , removeRTS
   , removeVerbosityOpts
   , expandGhcOptionResponseFile
+  -- * Processing of process output
+  , trim
   )
   where
 
 import HIE.Bios.Types (prettyCmdSpec)
 
+import Data.Char (isSpace)
 import Data.List
 import System.Process.Extra
 import GHC.ResponseFile (expandResponse)
@@ -105,4 +108,12 @@ expandGhcOptionResponseFile :: [String] -> IO [String]
 expandGhcOptionResponseFile args = do
   expanded_args <- expandResponse args
   pure $ removeInteractive expanded_args
+
+-- | Take the last line of output and strip trailing whitespace.
+-- This is necessary because some tools (e.g. darcs, 7zip via stack)
+-- produce extra output lines before the version number.
+trim :: String -> String
+trim s = case lines s of
+  [] -> s
+  ls -> dropWhileEnd isSpace $ last ls
 

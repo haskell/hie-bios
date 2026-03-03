@@ -15,11 +15,14 @@ import qualified Test.Tasty.Options as Tasty
 import qualified Test.Tasty.Ingredients as Tasty
 import HIE.Bios
 import HIE.Bios.Cradle
+import HIE.Bios.Cradle.ProgramVersions (ProgramVersions(..), makeVersions, runCachedIO)
+import HIE.Bios.Types (runGhcCmd)
 import Control.Monad (forM_)
 import Control.Monad.Extra (unlessM)
 import Control.Monad.IO.Class
 import Data.Foldable (for_)
 import Data.List ( sort, isPrefixOf )
+import Data.Maybe ( isJust )
 import Data.Typeable
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Directory
@@ -142,7 +145,26 @@ biosTestCases =
       testDirectoryM isBiosCradle "B.hs"
   , biosTestCase "simple-bios-shell-deps" $ runTestEnv "./simple-bios-shell" $ do
       biosCradleDeps "B.hs" ["hie.yaml"]
-  ] <> concat [linuxTestCases | False] -- TODO(fendor), enable again
+  ] <> concat
+    -- Regression test for https://github.com/haskell/hie-bios/issues/498
+    -- Tests that GHC version detection succeeds when the GHC wrapper produces
+    -- extra output (e.g. darcs "WARNING: creating a nested repository.").
+    [ [ biosTestCase "noisy-bios-ghc" $ runTestEnv "./noisy-bios-ghc" $ do
+          initCradle "B.hs"
+          assertCradle isBiosCradle
+          -- Test that getRuntimeGhcVersion handles noisy output
+          loadRuntimeGhcVersion
+          assertGhcVersion
+          -- Test that makeVersions/getGhcVersion (used during cradle discovery)
+          -- also handles noisy output via versionMaybe
+          crd <- askCradle
+          root <- askRoot
+          logger <- askLogger
+          versions <- liftIO $ makeVersions logger root ((runGhcCmd . cradleOptsProg) crd)
+          ghcVer <- liftIO $ runCachedIO (ghcVersion versions)
+          liftIO $ isJust ghcVer @? "GHC version detection should succeed with noisy output"
+      ] | not isWindows
+    ] <> concat [linuxTestCases | False] -- TODO(fendor), enable again
   where
     biosCradleDeps :: FilePath -> [FilePath] -> TestM ()
     biosCradleDeps fp deps = do

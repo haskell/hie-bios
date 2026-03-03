@@ -403,7 +403,7 @@ cabalProcess l vs cabalProject workDir command args = do
   ghcDirs@(ghcBin, libdir) <- callCabalPathForCompilerPath l vs workDir cabalProject >>= \case
     Just p -> do
       libdir <- Process.readProcessWithCwd_ l workDir p ["--print-libdir"] ""
-      pure (p, trimEnd libdir)
+      pure (p, trim libdir)
     Nothing -> cabalGhcDirs l cabalProject workDir
 
   ghcPkgPath <- liftIO $ withGhcPkgTool ghcBin libdir
@@ -464,7 +464,7 @@ cabalGhcDirs l cabalProject workDir = do
        ]
       )
       ""
-  pure (trimEnd exe, trimEnd libdir)
+  pure (trim exe, trim libdir)
   where
     projectFileArgs = projectFileProcessArgs cabalProject
 
@@ -623,7 +623,10 @@ callCabalPathForCompilerPath l vs workDir projectFile = do
         parse_compiler_path = Aeson.parseEither ((.: "compiler") >=>  (.: "path")) <=< Aeson.eitherDecode
 
       compiler_info <- Process.readProcessWithCwd_ l workDir "cabal" args ""
-      case parse_compiler_path (bs compiler_info) of
+      -- Strip any non-JSON noise lines (e.g. darcs warnings) before parsing.
+      -- The JSON output always starts with '{'.
+      let strip_noise = dropWhile (\c -> c /= '{') compiler_info
+      case parse_compiler_path (bs strip_noise) of
         Left err -> do
           liftIO $ l <& WithSeverity (LogCabalPath $ T.pack err) Warning
           pure Nothing
