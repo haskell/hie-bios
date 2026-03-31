@@ -11,9 +11,11 @@ module HIE.Bios.Cradle.Cabal
   withGhcWrapperTool,
   -- * Argument processing
   processCabalWrapperArgs,
-  -- * Exposed for tests
+  -- * Internals (exposed for tests)
   isCabalMultipleCompSupported,
-  )where
+  cabalBuildDir,
+  )
+  where
 
 import Data.Char (isSpace)
 import System.Exit
@@ -296,14 +298,21 @@ processCabalLoadStyle l cradles projectFile workDir mc fp loadStyle = do
 
 cabalLoadFilesWithRepl :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> [String] -> CradleLoadResultT IO CreateProcess
 cabalLoadFilesWithRepl l projectFile workDir args = do
-  let cabalCommand = "v2-repl"
-
+  buildDir <- liftIO $ cabalBuildDir workDir
   newEnvironment <- liftIO Process.getCleanEnvironment
   wrapper_fp <- liftIO $ withReplWrapperTool l (proc "ghc") workDir
-  pure (proc "cabal" ([cabalCommand, "--keep-temp-files", "--with-repl", wrapper_fp] <> projectFileProcessArgs projectFile <> args))
-    { env = Just newEnvironment
-    , cwd = Just workDir
-    }
+  let
+    cabalCommand = "v2-repl"
+    cabalArgs =
+      -- Don't clobber the user's 'dist-newstyle': pass --builddir (#501)
+        [ "--builddir=" <> buildDir
+        , cabalCommand, "--keep-temp-files", "--with-repl", wrapper_fp
+        ] <> projectFileProcessArgs projectFile <> args
+  pure $
+    (proc "cabal" cabalArgs)
+      { env = Just newEnvironment
+      , cwd = Just workDir
+      }
 
 -- | @'cabalCradleDependencies' projectFile rootDir componentDir@.
 -- Compute the dependencies of the cabal cradle based
@@ -617,8 +626,10 @@ callCabalPathForCompilerPath l vs workDir projectFile = do
   isCabalPathSupported vs >>= \case
     False -> pure Nothing
     True -> do
+      buildDir <- liftIO $ cabalBuildDir workDir
       let
-        args = ["path", "--output-format=json"] <> projectFileProcessArgs projectFile
+        args = [ "--builddir=" <> buildDir, "path", "--output-format=json" ]
+            <> projectFileProcessArgs projectFile
         bs = BS.fromStrict . T.encodeUtf8 . T.pack
         parse_compiler_path = Aeson.parseEither ((.: "compiler") >=>  (.: "path")) <=< Aeson.eitherDecode
 

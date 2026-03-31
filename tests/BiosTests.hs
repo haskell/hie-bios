@@ -15,6 +15,7 @@ import qualified Test.Tasty.Options as Tasty
 import qualified Test.Tasty.Ingredients as Tasty
 import HIE.Bios
 import HIE.Bios.Cradle
+import HIE.Bios.Cradle.Cabal (cabalBuildDir)
 import Control.Monad (forM_)
 import Control.Monad.Extra (unlessM)
 import Control.Monad.IO.Class
@@ -186,6 +187,20 @@ cabalTestCases extraGhcDep =
           return ()
   , biosTestCase "simple-cabal" $ runTestEnv "./simple-cabal" $ do
       testDirectoryM isCabalCradle "B.hs"
+  , biosTestCase "build-dir" $ runTestEnv "./simple-cabal" $ do
+      initCradle "B.hs"
+      assertCradle isCabalCradle
+      root <- askRoot
+      buildDir <- liftIO $ cabalBuildDir root
+      -- use --multi-repl, as that was the codepath with the bug
+      loadFileGhcMultiStyle "B.hs" []
+      liftIO $ do
+        -- Check we aren't trampling over dist-newstyle
+        distNewstyleExists <- doesDirectoryExist (root </> "dist-newstyle")
+        assertBool "dist-newstyle was created" (not distNewstyleExists)
+        -- Check we are using the correct build directory
+        buildDirExists <- doesDirectoryExist buildDir
+        assertBool "build dir does not exist" buildDirExists
   , biosTestCase "nested-cabal" $ runTestEnv "./nested-cabal" $ do
       cabalAttemptLoad "sub-comp/Lib.hs"
       assertComponentOptions $ \opts -> do
