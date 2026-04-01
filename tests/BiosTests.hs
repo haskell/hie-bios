@@ -11,8 +11,9 @@ import Utils
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.ExpectedFailure
-import qualified Test.Tasty.Options as Tasty
 import qualified Test.Tasty.Ingredients as Tasty
+import qualified Test.Tasty.Options     as Tasty
+import qualified Test.Tasty.Runners     as Tasty
 import HIE.Bios
 import HIE.Bios.Cradle
 import HIE.Bios.Cradle.Cabal (cabalBuildDir)
@@ -66,6 +67,10 @@ main = do
   extraGhcDep <- checkToolIsAvailable extraGhc
 
   defaultMainWithIngredients (ignoreToolTests:verboseLogging:defaultIngredients) $
+    -- Run tests sequentially on Windows, to avoid issues with locking of the
+    -- package database, e.g. errors of the form:
+    --   package.db/package.cache.lock: openBinaryFile: resource busy (file is locked)
+    (if isWindows then localOption (Tasty.NumThreads 1) else id) $
     testGroup "Bios-tests"
       [ testGroup "Find cradle" findCradleTests
       , testGroup "Symlink" symbolicLinkTests
