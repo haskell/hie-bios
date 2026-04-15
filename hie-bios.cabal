@@ -1,8 +1,8 @@
 Cabal-Version:          2.2
 Name:                   hie-bios
-Version:                0.18.0
-Author:                 Matthew Pickering <matthewtpickering@gmail.com>
-Maintainer:             Matthew Pickering <matthewtpickering@gmail.com>
+Version:                0.19.0
+Author:                 Matthew Pickering <matthewtpickering@gmail.com>, Hannes Siebenhandl <fendor.haskell@gmail.com>
+Maintainer:             Hannes Siebenhandl <fendor.haskell@gmail.com>
 License:                BSD-3-Clause
 License-File:           LICENSE
 Homepage:               https://github.com/haskell/hie-bios
