@@ -1,5 +1,9 @@
 # ChangeLog hie-bios
 
+## 2026-04-15 - 0.19.0
+
+* Pass --builddir to avoid clobbering dist-newstyle ([#503](https://github.com/haskell/hie-bios/pull/503))
+
 ## 2026-02-06 - 0.18.0
 
 * Adapt to OsPath change ([#493](https://github.com/haskell/hie-bios/pull/493))
