@@ -16,7 +16,7 @@ import HIE.Bios
 import HIE.Bios.Ghc.Check
 import HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Internal.Debug
-import HIE.Bios.Types (LoadStyle(..))
+import HIE.Bios.Types (LoadMode(..), TargetWithContext (..), singleTarget)
 import Paths_hie_bios
 import Data.Void (Void)
 import Data.Function
@@ -26,7 +26,8 @@ import Data.Function
 progVersion :: String
 progVersion = "hie-bios version " ++ showVersion version ++ " compiled by GHC " ++ Gap.ghcVersion ++ "\n"
 
-data UseLoadStyle
+-- TODO: add LoadUnits* modes to this?
+data UseLoadMode
   = UseSingleFile
   | UseMultiFile
 
@@ -38,7 +39,7 @@ data Cli = Cli
 data Command
   = Check { checkTargetFiles :: [FilePath] }
   | Flags { flagTargetFiles :: [FilePath] }
-  | Debug { debugUseMultiLoadStyle :: UseLoadStyle, debugComponents :: [FilePath] }
+  | Debug { debugUseMultiLoadMode :: UseLoadMode, debugComponents :: [FilePath] }
   | ConfigInfo { configFiles :: [FilePath] }
   | CradleInfo { cradleFiles :: [FilePath] }
   | Root
@@ -69,15 +70,15 @@ progParser :: Parser Command
 progParser = hsubparser
     (command "check" (info (Check <$> some filepathParser) (progDesc "Try to load modules into the GHC API."))
     <> command "flags" (info (Flags <$> some filepathParser) (progDesc "Print out the options that hie-bios thinks you will need to load a file."))
-    <> command "debug" (info (Debug <$> loadStyleParser <*> many filepathParser) (progDesc "Print out the options that hie-bios thinks you will need to load a file."))
+    <> command "debug" (info (Debug <$> loadModeParser <*> many filepathParser) (progDesc "Print out the options that hie-bios thinks you will need to load a file."))
     <> command "config" (info (ConfigInfo <$> some filepathParser) (progDesc "Print out the cradle config location."))
     <> command "cradle" (info (CradleInfo <$> some filepathParser) (progDesc "Print out only the cradle type."))
     <> command "root" (info (pure Root) (progDesc "Display the path towards the selected hie.yaml."))
     <> command "version" (info (pure Version) (progDesc "Print version and exit."))
     )
 
-loadStyleParser :: Parser UseLoadStyle
-loadStyleParser =
+loadModeParser :: Parser UseLoadMode
+loadModeParser =
   flag UseSingleFile UseMultiFile (long "multi" <> help "Load all targets in bulk if supported")
 
 ----------------------------------------------------------------
@@ -112,7 +113,7 @@ main = do
         [] -> error "too few arguments"
         _ -> do
           res <- forM files $ \fp -> do
-                  res <- getCompilerOptions fp LoadFile cradle
+                  res <- getCompilerOptions (TargetWithContext fp []) LoadFile cradle
                   case res of
                       CradleFail (CradleError _deps _ex err _fps) ->
                         return $ "Failed to show flags for \""
@@ -130,15 +131,15 @@ main = do
       Version -> return progVersion
     putStr res
 
-debugFiles :: [FilePath] -> UseLoadStyle -> Cradle Void -> IO String
-debugFiles fps useLoadStyle cradle = case useLoadStyle of
+debugFiles :: [FilePath] -> UseLoadMode -> Cradle Void -> IO String
+debugFiles fps useLoadMode cradle = case useLoadMode of
   UseSingleFile -> debugSingle
   UseMultiFile -> debugBulk
   where
     debugSingle = case fps of
-      [] -> debugInfo (cradleRootDir cradle) LoadFile cradle
-      _ -> concat <$> traverse (\fp -> debugInfo fp LoadFile cradle) fps
+      [] -> debugInfo (singleTarget $ cradleRootDir cradle) LoadFile cradle
+      _ -> concat <$> traverse (\fp -> debugInfo (singleTarget fp) LoadFile cradle) fps
 
     debugBulk = case fps of
-      [] -> debugInfo (cradleRootDir cradle) (LoadWithContext []) cradle
-      fp:otherFps -> debugInfo fp (LoadWithContext otherFps) cradle
+      [] -> debugInfo (TargetWithContext (cradleRootDir cradle) []) LoadFileWithContext cradle
+      fp:otherFps -> debugInfo (TargetWithContext fp otherFps) LoadFileWithContext cradle

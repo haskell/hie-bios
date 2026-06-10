@@ -6,11 +6,9 @@ import Colog.Core (WithSeverity (..), Severity (..), (<&))
 
 -- | Initialize the 'DynFlags' relating to the compilation of a single
 -- file or GHC session according to the provided 'Cradle'.
-getCompilerOptions
-  :: FilePath -- ^ The file we are loading it because of
-  -> LoadStyle -- ^ previous files we might want to include in the build
-  -> Cradle a
-  -> IO (CradleLoadResult ComponentOptions)
-getCompilerOptions fp loadStyle cradle = do
+
+-- | Note: @getCompilerOptions (TargetWithContext path cxt) LoadFile@ will warn if `cxt` is non-empty.
+getCompilerOptions :: TargetWithContext -> LoadMode -> Cradle a -> IO (CradleLoadResult ComponentOptions)
+getCompilerOptions target loadMode cradle = do
   (cradleLogger cradle) <& LogProcessOutput "invoking build tool to determine build flags (this may take some time depending on the cache)" `WithSeverity` Info
-  runCradle (cradleOptsProg cradle) fp loadStyle
+  runCradle (cradleOptsProg cradle) target loadMode
