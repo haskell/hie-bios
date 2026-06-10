@@ -149,7 +149,7 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
       liftIO $
         l
           <& WithSeverity
-            ( LogLoadFileWithContextUnsupported "cabal" $
+            ( LogLoadModeUnsupported "cabal" loadStyle $
                 Just "cabal or ghc version is too old. We require `cabal >= 3.11` and `ghc >= 9.4`"
             )
             Warning

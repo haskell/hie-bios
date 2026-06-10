@@ -104,11 +104,14 @@ data Log
   | LogProcessRun FilePath [FilePath]
   | LogRequestedCradleLoadMode !T.Text !TargetWithContext !LoadMode
   | LogComputedCradleLoadMode !T.Text !TargetWithContext !LoadMode
-  | LogLoadFileWithContextUnsupported !T.Text !(Maybe T.Text)
+  | LogLoadModeUnsupported !T.Text LoadMode !(Maybe T.Text)
   | LogCabalLoad !FilePath !(Maybe String) ![FilePath] ![FilePath]
   | LogCabalLibraryTooOld [String]
   | LogCabalPath !T.Text
   deriving (Show)
+
+instance Pretty LoadMode where
+  pretty = viaShow
 
 instance Pretty TargetWithContext where
   pretty (TargetWithContext fp fps) = pretty fp <> list (map pretty fps)
@@ -146,12 +149,12 @@ instance Pretty Log where
       LoadFileWithContext -> "using all files (multi-components)"
       LoadUnitsFromCradle -> "using all units specified in cradle"
       LoadUnitsInferred   -> "using all units from project"
-  pretty (LogLoadFileWithContextUnsupported crdlName mReason) =
+  pretty (LogLoadModeUnsupported crdlName mode mReason) =
     pretty crdlName <+> "cradle doesn't support loading using all files (multi-components)" <>
       case mReason of
         Nothing -> "."
         Just reason -> ", because:" <+> pretty reason <> "."
-      <+> "Falling back loading to single file mode."
+      <+> "Falling back" <+> parens ("from" <+> pretty mode ) <+> "loading to single file mode."
   pretty (LogCabalLoad file prefixes projectFile crs) =
     "Cabal Loading file" <+> pretty file
           <> line <> indent 4 "from project: " <+> pretty projectFile
@@ -176,6 +179,9 @@ data TargetWithContext = TargetWithContext
 
 singleTarget :: FilePath -> TargetWithContext
 singleTarget fp = TargetWithContext fp []
+
+targetAndContext :: TargetWithContext -> [FilePath]
+targetAndContext (TargetWithContext fp fps) = fp:fps
 
 -- | The 'LoadMode' instructs a cradle on how to load a given file target.
 data LoadMode
