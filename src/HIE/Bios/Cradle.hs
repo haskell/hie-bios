@@ -381,13 +381,20 @@ biosCradle l rc wdir biosCall biosDepsCall mbGhc
 biosWorkDir :: FilePath -> MaybeT IO FilePath
 biosWorkDir = Process.findFileUpwards ".hie-bios"
 
+-- | shared between @biosDepsAction@ and @biosAction@.
+biosFilePaths :: TargetWithContext -> LoadMode -> [FilePath]
+biosFilePaths fpc = \case
+  LoadFile -> [targetFilePath fpc]
+  LoadFileWithContext -> targetAndContext fpc
+  -- Exhaustive matching to trigger type errors for datatype changes.
+  LoadUnitsInferred -> targetAndContext fpc
+  LoadUnitsFromCradle -> targetAndContext fpc
+
 biosDepsAction :: LogAction IO (WithSeverity Log) -> FilePath -> Maybe Callable -> TargetWithContext -> LoadMode -> IO [FilePath]
 biosDepsAction l wdir (Just biosDepsCall) fpc loadStyle = do
-  let fp = targetFilePath fpc
 
-  let fps = case loadStyle of
-        LoadFile -> [fp]
-        LoadFileWithContext -> fp : targetContext fpc
+  let fps = biosFilePaths fpc loadStyle
+
   (ex, sout, serr, [(_, args)]) <-
     runContT (withCallableToProcess biosDepsCall fps) $ \biosDeps' ->
       Process.readProcessWithOutputs [hie_bios_output] l wdir biosDeps'
@@ -408,32 +415,37 @@ biosAction
 biosAction rc wdir bios bios_deps l fpc loadStyle = do
   let fp = targetFilePath fpc
   ghc_version <- liftIO $ runCachedIO $ ghcVersion $ cradleProgramVersions rc
+  let warnUnsupportedLoadMode msg =
+        liftIO $ l <& WithSeverity
+          (LogLoadModeUnsupported "bios" loadStyle (Just msg))
+          Warning
   determinedLoadMode <- case ghc_version of
-    Just ghc
-      -- Multi-component supported from ghc 9.4
-      -- We trust the assertion for a bios program, as we have no way of
-      -- checking its version
-      | LoadFileWithContext <- loadStyle ->
-          if ghc >= makeVersion [9,4]
-            then pure loadStyle
-            else do
-              liftIO $ l <& WithSeverity
-                (LogLoadFileWithContextUnsupported "bios"
-                  $ Just "ghc version is too old. We require `ghc >= 9.4`"
-                )
-                Warning
-              pure LoadFile
-    _ -> pure LoadFile
-  let fps = case determinedLoadMode of
-        LoadFile -> [fp]
-        LoadFileWithContext -> fp : targetContext fpc
+      Just ghc
+        | ghc >= makeVersion [9,4] -> do
+          -- Multi-component supported from ghc 9.4
+          -- We trust the assertion for a bios program, as we have no way of
+          -- checking its version
+          pure $ case loadStyle of
+            LoadFile -> LoadFile
+            LoadFileWithContext -> LoadFileWithContext
+            LoadUnitsFromCradle -> LoadFileWithContext
+            LoadUnitsInferred   -> LoadFileWithContext
+        | loadStyle /= LoadFile -> do
+          warnUnsupportedLoadMode "ghc version is too old. We require `ghc >= 9.4`"
+          pure LoadFile
+      _ -> do
+        warnUnsupportedLoadMode "Unable to determine ghc version. We require `ghc >= 9.4`"
+        pure LoadFile
+
+  let fps = biosFilePaths fpc determinedLoadMode
+
   (ex, _stdo, std, [(_, res),(_, mb_deps)]) <-
     runContT (withCallableToProcess bios fps) $ \bios' ->
       Process.readProcessWithOutputs [hie_bios_output, hie_bios_deps] l wdir bios'
 
   deps <- case mb_deps of
     Just x  -> return x
-    Nothing -> biosDepsAction l wdir bios_deps fpc loadStyle
+    Nothing -> biosDepsAction l wdir bios_deps fpc determinedLoadMode
         -- Output from the program should be written to the output file and
         -- delimited by newlines.
         -- Execute the bios action and add dependencies of the cradle.
@@ -690,9 +702,9 @@ runGhcCmdOnPath l wdir args = Process.readProcessWithCwd l wdir "ghc" args ""
 -- | Log that the cradle has no supported for loading with context, if and only if
 -- 'LoadFileWithContext' was requested.
 logCradleHasNoSupportForLoadFileWithContext :: Applicative m => LogAction m (WithSeverity Log) -> LoadMode -> T.Text -> m ()
-logCradleHasNoSupportForLoadFileWithContext l (LoadFileWithContext) crdlName =
+logCradleHasNoSupportForLoadFileWithContext l LoadFileWithContext crdlName =
   l <& WithSeverity
-        (LogLoadFileWithContextUnsupported crdlName
+        (LogLoadModeUnsupported crdlName LoadFileWithContext
           $ Just $ crdlName <> " doesn't support loading multiple components at once"
         )
         Info
