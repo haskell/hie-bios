@@ -291,7 +291,7 @@ loadComponentOptions fp = do
   a_fp <- normFile fp
   crd <- askCradle
   step $ "Initialise flags for: " <> fp
-  clr <- liftIO $ getCompilerOptions a_fp LoadFile crd
+  clr <- liftIO $ getCompilerOptions (TargetWithContext a_fp []) LoadFile crd
   setLoadResult clr
 
 loadComponentOptionsMultiStyle :: FilePath -> [FilePath] -> TestM ()
@@ -300,7 +300,7 @@ loadComponentOptionsMultiStyle fp fps = do
   a_fps <- traverse normFile fps
   crd <- askCradle
   step $ "Initialise flags for: " <> fp <> " and " <> show fps
-  clr <- liftIO $ getCompilerOptions a_fp (LoadWithContext a_fps) crd
+  clr <- liftIO $ getCompilerOptions (TargetWithContext a_fp a_fps) LoadFileWithContext crd
   setLoadResult clr
 
 loadRuntimeGhcLibDir :: TestM ()

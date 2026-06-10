@@ -126,10 +126,11 @@ resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
   versions <- makeVersions logger root run_ghc_cmd
   let rcs = ResolvedCradles root cs versions
       cradleActions = [ (c, resolveCradleAction logger buildCustomCradle rcs root c) | c <- cs ]
-      err_msg fp
+      err_msg (TargetWithContext fp fps)
         = ["Multi Cradle: No prefixes matched"
           , "pwd: " ++ root
           , "filepath: " ++ fp
+          , "context: " ++ intercalate ", " fps
           , "prefixes:"
           ] ++ [show (prefix pf, actionName cc) | (pf, cc) <- cradleActions]
   pure $ Cradle
@@ -137,12 +138,13 @@ resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
     , cradleLogger = logger
     , cradleOptsProg = CradleAction
       { actionName = multiActionName
-      , runCradle  = \fp prev -> do
-          absfp <- makeAbsolute fp
+      , runCradle  = \fpc prev -> do
+          -- TODO: LoadUnits* ?
+          absfp <- makeAbsolute (targetFilePath fpc)
           case selectCradle (prefix . fst) absfp cradleActions of
             Just (rc, act) -> do
-              addActionDeps (cradleDeps rc) <$> runCradle act fp prev
-            Nothing -> return $ CradleFail $ CradleError [] ExitSuccess (err_msg fp) [fp]
+              addActionDeps (cradleDeps rc) <$> runCradle act fpc prev
+            Nothing -> return $ CradleFail $ CradleError [] ExitSuccess (err_msg fpc) (targetFilePath fpc: targetContext fpc)
       , runGhcCmd = run_ghc_cmd
       }
     }
@@ -184,7 +186,7 @@ resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
 
 
 resolveCradleAction :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> ResolvedCradles b -> FilePath -> ResolvedCradle b -> CradleAction a
-resolveCradleAction l buildCustomCradle cs root cradle = addLoadStyleLogToCradleAction $
+resolveCradleAction l buildCustomCradle cs root cradle = addLoadModeLogToCradleAction $
   case concreteCradle cradle of
     ConcreteCabal t -> cabalCradle l cs root (cabalComponent t) (projectConfigFromMaybe root (cabalProjectFile t))
     ConcreteStack t -> stackCradle l root (stackComponent t) (projectConfigFromMaybe root (stackYaml t))
@@ -194,10 +196,10 @@ resolveCradleAction l buildCustomCradle cs root cradle = addLoadStyleLogToCradle
     ConcreteOther a -> buildCustomCradle a
   where
     -- Add a log message to each loading operation.
-    addLoadStyleLogToCradleAction crdlAct = crdlAct
-      { runCradle = \fp ls -> do
-          l <& LogRequestedCradleLoadStyle (T.pack $ show $ actionName crdlAct) ls `WithSeverity` Debug
-          runCradle crdlAct fp ls
+    addLoadModeLogToCradleAction crdlAct = crdlAct
+      { runCradle = \fpc ls -> do
+          l <& LogRequestedCradleLoadMode (T.pack $ show $ actionName crdlAct) fpc ls `WithSeverity` Debug
+          runCradle crdlAct fpc ls
       }
 
 resolveCradleTree :: FilePath -> CradleConfig a -> [ResolvedCradle a]
@@ -357,7 +359,7 @@ directCradle l wdir args
   = CradleAction
       { actionName = Types.Direct
       , runCradle = \_ loadStyle -> do
-          logCradleHasNoSupportForLoadWithContext l loadStyle "direct"
+          logCradleHasNoSupportForLoadFileWithContext l loadStyle "direct"
           return (CradleSuccess (ComponentOptions (args ++ argDynamic) wdir []))
       , runGhcCmd = runGhcCmdOnPath l wdir
       }
@@ -379,11 +381,13 @@ biosCradle l rc wdir biosCall biosDepsCall mbGhc
 biosWorkDir :: FilePath -> MaybeT IO FilePath
 biosWorkDir = Process.findFileUpwards ".hie-bios"
 
-biosDepsAction :: LogAction IO (WithSeverity Log) -> FilePath -> Maybe Callable -> FilePath -> LoadStyle -> IO [FilePath]
-biosDepsAction l wdir (Just biosDepsCall) fp loadStyle = do
+biosDepsAction :: LogAction IO (WithSeverity Log) -> FilePath -> Maybe Callable -> TargetWithContext -> LoadMode -> IO [FilePath]
+biosDepsAction l wdir (Just biosDepsCall) fpc loadStyle = do
+  let fp = targetFilePath fpc
+
   let fps = case loadStyle of
         LoadFile -> [fp]
-        LoadWithContext old_fps -> fp : old_fps
+        LoadFileWithContext -> fp : targetContext fpc
   (ex, sout, serr, [(_, args)]) <-
     runContT (withCallableToProcess biosDepsCall fps) $ \biosDeps' ->
       Process.readProcessWithOutputs [hie_bios_output] l wdir biosDeps'
@@ -398,37 +402,38 @@ biosAction
   -> Callable
   -> Maybe Callable
   -> LogAction IO (WithSeverity Log)
-  -> FilePath
-  -> LoadStyle
+  -> TargetWithContext
+  -> LoadMode
   -> IO (CradleLoadResult ComponentOptions)
-biosAction rc wdir bios bios_deps l fp loadStyle = do
+biosAction rc wdir bios bios_deps l fpc loadStyle = do
+  let fp = targetFilePath fpc
   ghc_version <- liftIO $ runCachedIO $ ghcVersion $ cradleProgramVersions rc
-  determinedLoadStyle <- case ghc_version of
+  determinedLoadMode <- case ghc_version of
     Just ghc
       -- Multi-component supported from ghc 9.4
       -- We trust the assertion for a bios program, as we have no way of
       -- checking its version
-      | LoadWithContext _ <- loadStyle ->
+      | LoadFileWithContext <- loadStyle ->
           if ghc >= makeVersion [9,4]
             then pure loadStyle
             else do
               liftIO $ l <& WithSeverity
-                (LogLoadWithContextUnsupported "bios"
+                (LogLoadFileWithContextUnsupported "bios"
                   $ Just "ghc version is too old. We require `ghc >= 9.4`"
                 )
                 Warning
               pure LoadFile
     _ -> pure LoadFile
-  let fps = case determinedLoadStyle of
+  let fps = case determinedLoadMode of
         LoadFile -> [fp]
-        LoadWithContext old_fps -> fp : old_fps
+        LoadFileWithContext -> fp : targetContext fpc
   (ex, _stdo, std, [(_, res),(_, mb_deps)]) <-
     runContT (withCallableToProcess bios fps) $ \bios' ->
       Process.readProcessWithOutputs [hie_bios_output, hie_bios_deps] l wdir bios'
 
   deps <- case mb_deps of
     Just x  -> return x
-    Nothing -> biosDepsAction l wdir bios_deps fp loadStyle
+    Nothing -> biosDepsAction l wdir bios_deps fpc loadStyle
         -- Output from the program should be written to the output file and
         -- delimited by newlines.
         -- Execute the bios action and add dependencies of the cradle.
@@ -478,7 +483,7 @@ cabalCradle :: LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath 
 cabalCradle l cs wdir mc projectFile
   = CradleAction
     { actionName = Types.Cabal
-    , runCradle = \fp -> runCradleResultT . cabalAction cs wdir mc l projectFile fp
+    , runCradle = \fpc -> runCradleResultT . cabalAction cs wdir mc l projectFile fpc
     , runGhcCmd = runCabalGhcCmd cs wdir l projectFile
     }
 
@@ -535,11 +540,12 @@ stackAction
   -> Maybe String
   -> CradleProjectConfig
   -> LogAction IO (WithSeverity Log)
-  -> FilePath
-  -> LoadStyle
+  -> TargetWithContext
+  -> LoadMode
   -> IO (CradleLoadResult ComponentOptions)
-stackAction workDir mc syaml l fp loadStyle = do
-  logCradleHasNoSupportForLoadWithContext l loadStyle "stack"
+stackAction workDir mc syaml l fpc loadStyle = do
+  let fp = targetFilePath fpc
+  logCradleHasNoSupportForLoadFileWithContext l loadStyle "stack"
   let ghcProc args = proc "stack" (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
   -- Same wrapper works as with cabal
   wrapper_fp <- withGhcWrapperTool l ghcProc workDir
@@ -682,12 +688,12 @@ runGhcCmdOnPath :: LogAction IO (WithSeverity Log) -> FilePath -> [String] -> IO
 runGhcCmdOnPath l wdir args = Process.readProcessWithCwd l wdir "ghc" args ""
 
 -- | Log that the cradle has no supported for loading with context, if and only if
--- 'LoadWithContext' was requested.
-logCradleHasNoSupportForLoadWithContext :: Applicative m => LogAction m (WithSeverity Log) -> LoadStyle -> T.Text -> m ()
-logCradleHasNoSupportForLoadWithContext l (LoadWithContext _) crdlName =
+-- 'LoadFileWithContext' was requested.
+logCradleHasNoSupportForLoadFileWithContext :: Applicative m => LogAction m (WithSeverity Log) -> LoadMode -> T.Text -> m ()
+logCradleHasNoSupportForLoadFileWithContext l (LoadFileWithContext) crdlName =
   l <& WithSeverity
-        (LogLoadWithContextUnsupported crdlName
+        (LogLoadFileWithContextUnsupported crdlName
           $ Just $ crdlName <> " doesn't support loading multiple components at once"
         )
         Info
-logCradleHasNoSupportForLoadWithContext _ _ _ = pure ()
+logCradleHasNoSupportForLoadFileWithContext _ _ _ = pure ()

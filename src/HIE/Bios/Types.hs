@@ -102,13 +102,16 @@ data Log
   | LogProcessOutput String
   | LogCreateProcessRun CreateProcess
   | LogProcessRun FilePath [FilePath]
-  | LogRequestedCradleLoadStyle !T.Text !LoadStyle
-  | LogComputedCradleLoadStyle !T.Text !LoadStyle
-  | LogLoadWithContextUnsupported !T.Text !(Maybe T.Text)
+  | LogRequestedCradleLoadMode !T.Text !TargetWithContext !LoadMode
+  | LogComputedCradleLoadMode !T.Text !TargetWithContext !LoadMode
+  | LogLoadFileWithContextUnsupported !T.Text !(Maybe T.Text)
   | LogCabalLoad !FilePath !(Maybe String) ![FilePath] ![FilePath]
   | LogCabalLibraryTooOld [String]
   | LogCabalPath !T.Text
   deriving (Show)
+
+instance Pretty TargetWithContext where
+  pretty (TargetWithContext fp fps) = pretty fp <> list (map pretty fps)
 
 instance Pretty Log where
   pretty (LogAny s) = pretty s
@@ -129,16 +132,21 @@ instance Pretty Log where
           ]
     where
       envText = map (indent 2 . pretty) $ prettyProcessEnv cp
-  pretty (LogRequestedCradleLoadStyle crdlName ls) =
+  pretty (LogRequestedCradleLoadMode crdlName fpc ls) =
     "Requested to load" <+> pretty crdlName <+> "cradle" <+> case ls of
-      LoadFile -> "using single file mode"
-      LoadWithContext fps -> "using all files (multi-components):" <> line <> indent 4 (pretty fps)
-  pretty (LogComputedCradleLoadStyle crdlName ls) =
+      LoadFile -> "using single file mode" <+> parens ("target =" <+> pretty fpc)
+      LoadFileWithContext -> "using all files (multi-components):" <> line <> indent 4 (pretty fpc)
+      LoadUnitsFromCradle -> "using all units specified in cradle" <+> fallback
+      LoadUnitsInferred   -> "using all units from project" <+> fallback
+    where
+      fallback = parens $ "fallback info: " <+> pretty fpc
+  pretty (LogComputedCradleLoadMode crdlName _fpc ls) =
     "Load" <+> pretty crdlName <+> "cradle" <+> case ls of
       LoadFile -> "using single file"
-      LoadWithContext _ -> "using all files (multi-components)"
-
-  pretty (LogLoadWithContextUnsupported crdlName mReason) =
+      LoadFileWithContext -> "using all files (multi-components)"
+      LoadUnitsFromCradle -> "using all units specified in cradle"
+      LoadUnitsInferred   -> "using all units from project"
+  pretty (LogLoadFileWithContextUnsupported crdlName mReason) =
     pretty crdlName <+> "cradle doesn't support loading using all files (multi-components)" <>
       case mReason of
         Nothing -> "."
@@ -156,8 +164,21 @@ instance Pretty Log where
     "Could not parse json output of 'cabal path': "
       <> line <> indent 4 (pretty err)
 
--- | The 'LoadStyle' instructs a cradle on how to load a given file target.
-data LoadStyle
+type Component = String
+
+-- | @TargetWithContext@ is only directly relevant for @LoadFile@ and @LoadFileWithContext@ modes.
+--  Other modes though can fallback on those two, so relevant regardless.
+data TargetWithContext = TargetWithContext
+    { targetFilePath :: !FilePath
+    , targetContext :: ![FilePath]
+    }
+  deriving (Show)
+
+singleTarget :: FilePath -> TargetWithContext
+singleTarget fp = TargetWithContext fp []
+
+-- | The 'LoadMode' instructs a cradle on how to load a given file target.
+data LoadMode
   = LoadFile
   -- ^ Instruct the cradle to load the given file target.
   --
@@ -165,7 +186,7 @@ data LoadStyle
   -- will configure the whole component the file target belongs to, and produce
   -- component options to load the component, which is the minimal unit of code in cabal repl.
   -- A 'default' cradle, on the other hand, will only load the given filepath.
-  | LoadWithContext [FilePath]
+  | LoadFileWithContext
   -- ^ Give a cradle additional context for loading a file target.
   --
   -- The context instructs the cradle to load the file target, while also loading
@@ -173,12 +194,14 @@ data LoadStyle
   -- This is useful for cradles that support loading multiple code units at once,
   -- e.g. cabal cradles can use the 'multi-repl' feature to set up a multiple home unit
   -- session in GHC.
-  deriving (Show, Eq, Ord)
+  | LoadUnitsInferred
+  | LoadUnitsFromCradle
+  deriving (Eq,Ord,Enum,Bounded,Show)
 
 data CradleAction a = CradleAction {
                         actionName    :: ActionName a
                       -- ^ Name of the action.
-                      , runCradle     :: FilePath -> LoadStyle -> IO (CradleLoadResult ComponentOptions)
+                      , runCradle     :: TargetWithContext -> LoadMode -> IO (CradleLoadResult ComponentOptions)
                       -- ^ Options to compile the given file with.
                       , runGhcCmd     :: [String] -> IO (CradleLoadResult String)
                       -- ^ Executes the @ghc@ binary that is usually used to

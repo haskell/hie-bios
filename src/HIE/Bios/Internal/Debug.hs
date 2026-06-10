@@ -25,13 +25,14 @@ import System.Directory
 --
 -- Otherwise, shows the error message and exit-code.
 debugInfo :: Show a
-          => FilePath
-          -> LoadStyle
+          => TargetWithContext
+          -> LoadMode
           -> Cradle a
           -> IO String
-debugInfo fp loadStyle cradle = unlines <$> do
+debugInfo fpc loadStyle cradle = unlines <$> do
+    let fp = targetFilePath fpc
     let logger = cradleLogger cradle
-    res <- getCompilerOptions fp loadStyle cradle
+    res <- getCompilerOptions fpc loadStyle cradle
     canonFp <- canonicalizePath fp
     conf <- findConfig canonFp
     crdl <- findCradle' logger canonFp

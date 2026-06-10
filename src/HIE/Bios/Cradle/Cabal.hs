@@ -137,26 +137,26 @@ cabalAction ::
   Maybe String ->
   LogAction IO (WithSeverity Log) ->
   CradleProjectConfig ->
-  FilePath ->
-  LoadStyle ->
+  TargetWithContext ->
+  LoadMode ->
   CradleLoadResultT IO ComponentOptions
 cabalAction cradles workDir mc l projectFile fp loadStyle = do
   let progVersions = cradleProgramVersions cradles
   multiCompSupport <- isCabalMultipleCompSupported progVersions
   -- determine which load style is supported by this cabal cradle.
-  determinedLoadStyle <- case loadStyle of
-    LoadWithContext _ | not multiCompSupport -> do
+  determinedLoadMode <- case loadStyle of
+    LoadFileWithContext | not multiCompSupport -> do
       liftIO $
         l
           <& WithSeverity
-            ( LogLoadWithContextUnsupported "cabal" $
+            ( LogLoadFileWithContextUnsupported "cabal" $
                 Just "cabal or ghc version is too old. We require `cabal >= 3.11` and `ghc >= 9.4`"
             )
             Warning
       pure LoadFile
     _ -> pure loadStyle
 
-  (cabalArgs, loadingFiles, extraDeps) <- processCabalLoadStyle l cradles projectFile workDir mc fp determinedLoadStyle
+  (cabalArgs, loadingFiles, extraDeps) <- processCabalLoadMode l cradles projectFile workDir mc fp determinedLoadMode
 
   cabalFeatures <- determineCabalLoadFeature progVersions
   let
@@ -255,22 +255,24 @@ runCabalGhcCmd cs wdir l projectFile args = runCradleResultT $ do
       cabalProc <- cabalExecGhc l vs projectFile wdir args
       Process.readProcessWithCwd' l cabalProc ""
 
-processCabalLoadStyle :: MonadIO m => LogAction IO (WithSeverity Log) -> ResolvedCradles a -> CradleProjectConfig -> [Char] -> Maybe FilePath -> [Char] -> LoadStyle -> m ([FilePath], [FilePath], [FilePath])
-processCabalLoadStyle l cradles projectFile workDir mc fp loadStyle = do
+processCabalLoadMode :: MonadIO m => LogAction IO (WithSeverity Log) -> ResolvedCradles a -> CradleProjectConfig -> [Char] -> Maybe FilePath -> TargetWithContext -> LoadMode -> m ([FilePath], [FilePath], [FilePath])
+processCabalLoadMode l cradles projectFile workDir mc fpc loadStyle = do
   let fpModule = fromMaybe (fixTargetPath fp) mc
   (cabalArgs, loadingFiles, extraDeps) <- case loadStyle of
         LoadFile -> pure ([fpModule], [fp], [])
-        LoadWithContext fps -> do
+        LoadFileWithContext  -> do
+          let fps = targetContext fpc
           (modPairs, mergedDeps) <- moduleFilesFromSameProject fps
           let allModPairs = nubOrd $ (fpModule, fp) : modPairs
               allModules  = nubOrd $ fmap fst allModPairs
               allFiles    = nubOrd $ fmap snd allModPairs
           pure (["--enable-multi-repl"] ++ allModules, allFiles, mergedDeps)
 
-  liftIO $ l <& LogComputedCradleLoadStyle "cabal" loadStyle `WithSeverity` Info
+  liftIO $ l <& LogComputedCradleLoadMode "cabal" fpc loadStyle `WithSeverity` Info
   liftIO $ l <& LogCabalLoad fp mc (prefix <$> resolvedCradles cradles) loadingFiles `WithSeverity` Debug
   pure (cabalArgs, loadingFiles, extraDeps)
   where
+    fp = targetFilePath fpc
     -- Need to make relative on Windows, due to a Cabal bug with how it
     -- parses file targets with a C: drive in it. So we decide to make
     -- the paths relative to the working directory.
