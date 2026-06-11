@@ -139,7 +139,6 @@ resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
     , cradleOptsProg = CradleAction
       { actionName = multiActionName
       , runCradle  = \fpc prev -> do
-          -- TODO: LoadUnits* ?
           absfp <- makeAbsolute (targetFilePath fpc)
           case selectCradle (prefix . fst) absfp cradleActions of
             Just (rc, act) -> do

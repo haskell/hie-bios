@@ -53,6 +53,7 @@ prettyProcessErrorDetails p  =
 
 -- | Given a list of cradles, try to find the most likely cradle that
 -- this 'FilePath' belongs to.
+-- TODO: this finds the first cradle that matches, while hie-bios README says most-specific cradle would match, unless the inputs are assumed sorted by specificity?
 selectCradle :: (a -> FilePath) -> FilePath -> [a] -> Maybe a
 selectCradle _ _ [] = Nothing
 selectCradle k cur_fp (c: css) =
@@ -105,4 +106,3 @@ expandGhcOptionResponseFile :: [String] -> IO [String]
 expandGhcOptionResponseFile args = do
   expanded_args <- expandResponse args
   pure $ removeInteractive expanded_args
-

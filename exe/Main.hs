@@ -26,10 +26,11 @@ import Data.Function
 progVersion :: String
 progVersion = "hie-bios version " ++ showVersion version ++ " compiled by GHC " ++ Gap.ghcVersion ++ "\n"
 
--- TODO: add LoadUnits* modes to this?
 data UseLoadMode
   = UseSingleFile
   | UseMultiFile
+  | UseUnitsInferred
+  | UseUnitsFromCradle
 
 data Cli = Cli
   { logLevel :: Maybe L.Severity
@@ -80,6 +81,8 @@ progParser = hsubparser
 loadModeParser :: Parser UseLoadMode
 loadModeParser =
   flag UseSingleFile UseMultiFile (long "multi" <> help "Load all targets in bulk if supported")
+  <|> flag UseSingleFile UseUnitsInferred (long "inferred-units" <> help "Load all units in bulk if supported")
+  <|> flag UseSingleFile UseUnitsFromCradle (long "cradle-units" <> help "Load all units from cradle components in bulk if supported")
 
 ----------------------------------------------------------------
 
@@ -134,12 +137,14 @@ main = do
 debugFiles :: [FilePath] -> UseLoadMode -> Cradle Void -> IO String
 debugFiles fps useLoadMode cradle = case useLoadMode of
   UseSingleFile -> debugSingle
-  UseMultiFile -> debugBulk
+  UseMultiFile -> debugBulk LoadFileWithContext
+  UseUnitsInferred -> debugBulk LoadUnitsInferred
+  UseUnitsFromCradle -> debugBulk LoadUnitsFromCradle
   where
     debugSingle = case fps of
       [] -> debugInfo (singleTarget $ cradleRootDir cradle) LoadFile cradle
       _ -> concat <$> traverse (\fp -> debugInfo (singleTarget fp) LoadFile cradle) fps
 
-    debugBulk = case fps of
-      [] -> debugInfo (TargetWithContext (cradleRootDir cradle) []) LoadFileWithContext cradle
-      fp:otherFps -> debugInfo (TargetWithContext fp otherFps) LoadFileWithContext cradle
+    debugBulk mode = case fps of
+      [] -> debugInfo (TargetWithContext (cradleRootDir cradle) []) mode cradle
+      fp:otherFps -> debugInfo (TargetWithContext fp otherFps) mode cradle

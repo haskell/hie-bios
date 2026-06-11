@@ -145,7 +145,9 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
   multiCompSupport <- isCabalMultipleCompSupported progVersions
   -- determine which load style is supported by this cabal cradle.
   determinedLoadMode <- case loadStyle of
-    LoadFileWithContext | not multiCompSupport -> do
+    LoadFile -> pure LoadFile
+    -- all other modes need multi component support.
+    _ | not multiCompSupport -> do
       liftIO $
         l
           <& WithSeverity
@@ -255,9 +257,10 @@ runCabalGhcCmd cs wdir l projectFile args = runCradleResultT $ do
       cabalProc <- cabalExecGhc l vs projectFile wdir args
       Process.readProcessWithCwd' l cabalProc ""
 
+data LoadUnits = Inferred | FromCradle
+
 processCabalLoadMode :: MonadIO m => LogAction IO (WithSeverity Log) -> ResolvedCradles a -> CradleProjectConfig -> [Char] -> Maybe FilePath -> TargetWithContext -> LoadMode -> m ([FilePath], [FilePath], [FilePath])
 processCabalLoadMode l cradles projectFile workDir mc fpc loadStyle = do
-  let fpModule = fromMaybe (fixTargetPath fp) mc
   (cabalArgs, loadingFiles, extraDeps) <- case loadStyle of
         LoadFile -> pure ([fpModule], [fp], [])
         LoadFileWithContext  -> do
@@ -267,11 +270,14 @@ processCabalLoadMode l cradles projectFile workDir mc fpc loadStyle = do
               allModules  = nubOrd $ fmap fst allModPairs
               allFiles    = nubOrd $ fmap snd allModPairs
           pure (["--enable-multi-repl"] ++ allModules, allFiles, mergedDeps)
+        LoadUnitsInferred    -> loadUnits Inferred
+        LoadUnitsFromCradle  -> loadUnits FromCradle
 
   liftIO $ l <& LogComputedCradleLoadMode "cabal" fpc loadStyle `WithSeverity` Info
   liftIO $ l <& LogCabalLoad fp mc (prefix <$> resolvedCradles cradles) loadingFiles `WithSeverity` Debug
   pure (cabalArgs, loadingFiles, extraDeps)
   where
+    fpModule = fromMaybe (fixTargetPath fp) mc
     fp = targetFilePath fpc
     -- Need to make relative on Windows, due to a Cabal bug with how it
     -- parses file targets with a C: drive in it. So we decide to make
@@ -297,6 +303,45 @@ processCabalLoadMode l cradles projectFile workDir mc fpc loadStyle = do
       let modPairs = [ (fromMaybe (fixTargetPath file) old_mc, file)
                      | (file, _, _, old_mc) <- selected ]
       pure (modPairs, mergedDeps)
+
+    cabalComponentsFromSameProject :: MonadIO m => m ([String],[FilePath])
+    cabalComponentsFromSameProject = do
+
+      let selected =
+            [ (comp, prefix rc, depsYaml)
+            | rc@(ResolvedCradle {concreteCradle = ConcreteCabal ct, cradleDeps = depsYaml}) <- (resolvedCradles cradles)
+            , (projectConfigFromMaybe (cradleRoot cradles) (cabalProjectFile ct)) == projectFile
+            , Just comp <- [cabalComponent ct]
+            ]
+      let compDirs = nubOrd $ [dir | (_,dir,_) <- selected]
+      dynDeps <- concatMapM (liftIO . cabalCradleDependenciesEnclosing projectFile (cradleRoot cradles)) compDirs
+      let mergedDeps = nubOrd $ dynDeps ++ concat [ depsYaml | (_, _, depsYaml) <- selected ]
+      pure ([comp | (comp,_,_) <- selected], mergedDeps)
+
+    loadUnits whichUnits0 = do
+      -- compDeps includes the .cabal files of the specified components (if the prefixes are there and accurate)
+      -- These are used as dependencies for both Inferred and FromCradle modes.
+      -- They might not be accurate for `Inferred`, but we have no easy way to query the cabal project for the complete set.
+      (cradleComponents,compDeps) <- cabalComponentsFromSameProject
+      let
+        whichUnits
+          | null cradleComponents = Inferred
+          | otherwise             = whichUnits0
+      let fps = targetContext fpc
+      (modPairs, mergedDeps0) <- moduleFilesFromSameProject fps
+      let allModPairs = nubOrd $ (fpModule, fp) : modPairs
+          allModules  = nubOrd $ fmap fst allModPairs
+          allFiles    = nubOrd $ fmap snd allModPairs
+      let mergedDeps = mergedDeps0 ++ compDeps
+      let compArgs = case whichUnits of
+            Inferred -> enableFlags ++ ["all"]
+              where
+                enableFlags = case projectFile of
+                  NoExplicitConfig
+                    -> ["--enable-tests","--enable-benchmarks"]
+                  _ -> []
+            FromCradle -> cradleComponents
+      pure (["--enable-multi-repl"] ++ compArgs ++ allModules, allFiles, mergedDeps)
 
 cabalLoadFilesWithRepl :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> [String] -> CradleLoadResultT IO CreateProcess
 cabalLoadFilesWithRepl l projectFile workDir args = do
