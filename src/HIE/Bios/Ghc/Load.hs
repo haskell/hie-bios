@@ -163,7 +163,7 @@ astHook
   -> Gap.Hsc Gap.FrontendResult
 astHook logger tc_ref ms = ghcInHsc $ do
   p <- G.parseModule =<< initializePluginsGhc logger ms
-  tcm <- G.typecheckModule p
+  tcm <- Gap.typecheckModule p
   let tcg_env = fst (tm_internals_ tcm)
   liftIO $ modifyIORef tc_ref (tcm :)
   return $ Gap.FrontendTypecheck tcg_env
