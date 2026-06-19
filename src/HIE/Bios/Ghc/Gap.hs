@@ -11,6 +11,8 @@ module HIE.Bios.Ghc.Gap (
   , G.modifySession
   , G.reflectGhc
   , G.Session(..)
+  -- * Compat shims
+  , typecheckModule
   -- * Hsc Monad
   , getHscEnv
   -- * Driver compat
@@ -60,7 +62,7 @@ module HIE.Bios.Ghc.Gap (
 import Control.Monad.IO.Class
 import qualified Control.Monad.Catch as E
 
-import GHC
+import GHC hiding (typecheckModule)
 import qualified GHC as G
 
 ----------------------------------------------------------------
@@ -109,6 +111,13 @@ load' = G.load'
 #else
 load' :: GhcMonad m => a -> LoadHowMuch -> Maybe G.Messager -> ModuleGraph -> m SuccessFlag
 load' _ a b c = G.load' a b c
+#endif
+
+typecheckModule :: GhcMonad m => ParsedModule -> m TypecheckedModule
+#if MIN_VERSION_ghc(10, 1, 0)
+typecheckModule = G.typecheckModule G.StartAndStopTcMPlugins
+#else
+typecheckModule = G.typecheckModule
 #endif
 
 bracket :: E.MonadMask m => m a -> (a -> m c) -> (a -> m b) -> m b
