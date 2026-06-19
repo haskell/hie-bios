@@ -94,11 +94,13 @@ loadImplicitCradle l wfile = do
 loadCradleWithOpts :: (Yaml.FromJSON b, Show a) => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> IO (Cradle a)
 loadCradleWithOpts l buildCustomCradle wfile = do
     cradleConfig <- readCradleConfig wfile
+    l <& WithSeverity (LogAny $ T.pack $ "Cradle Config: " ++ show cradleConfig) Debug
     getCradle l buildCustomCradle (cradleConfig, takeDirectory wfile)
 
 getCradle :: Show a => LogAction IO (WithSeverity Log) ->  (b -> CradleAction a) -> (CradleConfig b, FilePath) -> IO (Cradle a)
 getCradle l buildCustomCradle (cc, wdir) = do
     rcs <- canonicalizeResolvedCradles wdir cs
+    liftIO $ l <& WithSeverity (LogAny . T.pack $ "Resolved Cradles " ++ show ((fmap . fmap) (const ()) rcs)) Debug
     resolvedCradlesToCradle l buildCustomCradle wdir rcs
   where
     cs = resolveCradleTree wdir cc

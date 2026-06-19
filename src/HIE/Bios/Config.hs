@@ -126,7 +126,11 @@ data CradleTree a
     deriving (Eq, Functor)
 
 instance Show (CradleTree a) where
-    show (Cabal comp) = "Cabal {component = " ++ show (cabalComponent comp) ++ "}"
+    show (Cabal comp) = concat $
+      [ "Cabal { component = ", show (cabalComponent comp)
+      , ", projectFile = ", show (cabalProjectFile comp)
+      , "}"
+      ]
     show (CabalMulti d a) = "CabalMulti {defaultCabal = " ++ show d ++ ", subCabalComponents = " ++ show a ++ "}"
     show (Stack comp) = "Stack {component = " ++ show (stackComponent comp) ++ ", stackYaml = " ++ show (stackYaml comp) ++ "}"
     show (StackMulti d a) = "StackMulti {defaultStack = " ++ show d ++ ", subStackComponents = "  ++ show a ++ "}"
