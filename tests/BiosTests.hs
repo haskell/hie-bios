@@ -17,11 +17,12 @@ import qualified Test.Tasty.Runners     as Tasty
 import HIE.Bios
 import HIE.Bios.Cradle
 import HIE.Bios.Cradle.Cabal (cabalBuildDir)
-import Control.Monad (forM_)
+import HIE.Bios.Types (LoadMode(..))
+import Control.Monad (forM_, forM)
 import Control.Monad.Extra (unlessM)
 import Control.Monad.IO.Class
 import Data.Foldable (for_)
-import Data.List ( sort, isPrefixOf )
+import Data.List ( sort, isPrefixOf, isInfixOf, tails )
 import Data.Typeable
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Directory
@@ -29,6 +30,8 @@ import System.FilePath ((</>), makeRelative)
 import System.Info.Extra (isWindows)
 import System.IO (BufferMode (LineBuffering), hSetBuffering, stderr, stdout)
 import qualified HIE.Bios.Ghc.Gap as Gap
+import HIE.Bios.Cradle.Utils (expandGhcOptionResponseFile)
+import HIE.Bios.Environment (extractUnits)
 
 
 argDynamic :: [String]
@@ -172,13 +175,13 @@ biosTestCases =
 cabalTestCases :: ToolDependency -> [TestTree]
 cabalTestCases extraGhcDep =
   [
-    biosTestCase "failing-cabal" $ runTestEnv "./failing-cabal" $ do
-      cabalAttemptLoad "MyLib.hs"
+    biosTestCaseAll "failing-cabal" $ \mode -> runTestEnv "./failing-cabal" $ do
+      cabalAttemptLoadWithMode' mode "MyLib.hs"
       assertCradleError (\CradleError {..} -> do
         cradleErrorExitCode @?= ExitFailure 1
         cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
-  , biosTestCase "failing-cabal-multi-repl-with-shrink-error-files" $ runTestEnv "./failing-multi-repl-cabal-project" $ do
-      cabalAttemptLoadFiles "multi-repl-cabal-fail/app/Main.hs" ["multi-repl-cabal-fail/src/Lib.hs", "multi-repl-cabal-fail/src/Fail.hs", "NotInPath.hs"]
+  , biosTestCaseMulti "failing-cabal-multi-repl-with-shrink-error-files" $ \mode -> runTestEnv "./failing-multi-repl-cabal-project" $ do
+      cabalAttemptLoadWithMode mode "multi-repl-cabal-fail/app/Main.hs" ["multi-repl-cabal-fail/src/Lib.hs", "multi-repl-cabal-fail/src/Fail.hs", "NotInPath.hs"]
       root <- askRoot
       multiSupported <- isCabalMultipleCompSupported'
       if multiSupported
@@ -190,15 +193,15 @@ cabalTestCases extraGhcDep =
             (makeRelative root <$> cradleErrorLoadingFiles) `shouldMatchList` ["multi-repl-cabal-fail/app/Main.hs","multi-repl-cabal-fail/src/Fail.hs","multi-repl-cabal-fail/src/Lib.hs"])
         else assertLoadSuccess >>= \ComponentOptions {} -> do
           return ()
-  , biosTestCase "simple-cabal" $ runTestEnv "./simple-cabal" $ do
-      testDirectoryM isCabalCradle "B.hs"
-  , biosTestCase "build-dir" $ runTestEnv "./simple-cabal" $ do
+  , biosTestCaseAll "simple-cabal" $ \mode -> runTestEnv "./simple-cabal" $ do
+      testDirectoryWithModeM mode isCabalCradle "B.hs"
+  , biosTestCaseMulti "build-dir" $ \ mode -> runTestEnv "./simple-cabal" $ do
       initCradle "B.hs"
       assertCradle isCabalCradle
       root <- askRoot
       buildDir <- liftIO $ cabalBuildDir root
       -- use --multi-repl, as that was the codepath with the bug
-      loadFileGhcMultiStyle "B.hs" []
+      loadFileGhcWithMode mode "B.hs" []
       liftIO $ do
         -- Check we aren't trampling over dist-newstyle
         distNewstyleExists <- doesDirectoryExist (root </> "dist-newstyle")
@@ -206,30 +209,48 @@ cabalTestCases extraGhcDep =
         -- Check we are using the correct build directory
         buildDirExists <- doesDirectoryExist buildDir
         assertBool "build dir does not exist" buildDirExists
-  , biosTestCase "nested-cabal" $ runTestEnv "./nested-cabal" $ do
-      cabalAttemptLoad "sub-comp/Lib.hs"
+  , biosTestCaseAll "nested-cabal" $ \mode -> runTestEnv "./nested-cabal" $ do
+      cabalAttemptLoadWithMode' mode "sub-comp/Lib.hs"
       assertComponentOptions $ \opts -> do
-        componentDependencies opts `shouldMatchList`
-          [ "sub-comp" </> "sub-comp.cabal"
-          , "cabal.project"
-          , "cabal.project.local"
-          ]
-  , biosTestCase "nested-cabal2" $ runTestEnv "./nested-cabal" $ do
-      cabalAttemptLoad "MyLib.hs"
+        let
+          expectedDeps
+            | mode `elem` [LoadUnitsFromCradle,LoadUnitsInferred]
+            = [ "nested-cabal.cabal"
+              , "sub-comp" </> "sub-comp.cabal"
+              , "cabal.project"
+              , "cabal.project.local"
+              ]
+            | otherwise =
+              [ "sub-comp" </> "sub-comp.cabal"
+              , "cabal.project"
+              , "cabal.project.local"
+              ]
+        componentDependencies opts `shouldMatchList` expectedDeps
+  , biosTestCaseAll "nested-cabal2" $ \mode -> runTestEnv "./nested-cabal" $ do
+      cabalAttemptLoadWithMode' mode "MyLib.hs"
       assertComponentOptions $ \opts -> do
-        componentDependencies opts `shouldMatchList`
-          [ "nested-cabal.cabal"
-          , "cabal.project"
-          , "cabal.project.local"
-          ]
-  , biosTestCase "nested-cabal multi-mode includes enclosing deps for extra files" $ runTestEnv "./nested-cabal" $ do
+        let
+          expectedDeps
+            | mode `elem` [LoadUnitsFromCradle,LoadUnitsInferred]
+            = [ "nested-cabal.cabal"
+              , "sub-comp" </> "sub-comp.cabal"
+              , "cabal.project"
+              , "cabal.project.local"
+              ]
+            | otherwise
+            = [ "nested-cabal.cabal"
+              , "cabal.project"
+              , "cabal.project.local"
+              ]
+        componentDependencies opts `shouldMatchList` expectedDeps
+  , biosTestCaseMulti "nested-cabal multi-mode includes enclosing deps for extra files" $ \mode -> runTestEnv "./nested-cabal" $ do
       -- Initialize cradle first, since capability checks use the current cradle.
       initCradle "sub-comp/Lib.hs"
       assertCradle isCabalCradle
       multiSupported <- isCabalMultipleCompSupported'
       if multiSupported
         then do
-          loadComponentOptionsMultiStyle "sub-comp/Lib.hs" ["MyLib.hs"]
+          loadComponentOptionsWithMode mode "sub-comp/Lib.hs" ["MyLib.hs"]
           assertComponentOptions $ \opts -> do
             -- Expect both the main component's cabal file and the enclosing cabal for the extra file,
             -- plus project files.
@@ -244,14 +265,14 @@ cabalTestCases extraGhcDep =
           loadComponentOptions "sub-comp/Lib.hs"
           _ <- assertLoadSuccess
           pure ()
-  , biosTestCase "nested-cabal multi-mode includes enclosing deps when extra file is subcomp" $ runTestEnv "./nested-cabal" $ do
+  , biosTestCaseMulti "nested-cabal multi-mode includes enclosing deps when extra file is subcomp" $ \ mode -> runTestEnv "./nested-cabal" $ do
       -- Initialize cradle at the top level, then treat the sub-component file as an extra file.
       initCradle "MyLib.hs"
       assertCradle isCabalCradle
       multiSupported <- isCabalMultipleCompSupported'
       if multiSupported
         then do
-          loadComponentOptionsMultiStyle "MyLib.hs" ["sub-comp/Lib.hs"]
+          loadComponentOptionsWithMode mode "MyLib.hs" ["sub-comp/Lib.hs"]
           assertComponentOptions $ \opts -> do
             componentDependencies opts `shouldMatchList`
               [ "nested-cabal.cabal"
@@ -263,24 +284,26 @@ cabalTestCases extraGhcDep =
           loadComponentOptions "MyLib.hs"
           _ <- assertLoadSuccess
           pure ()
-  , biosTestCase "multi-cabal" $ runTestEnv "./multi-cabal" $ do
+  , biosTestCaseAll "multi-cabal" $ \mode -> runTestEnv "./multi-cabal" $ do
       {- tests if both components can be loaded -}
-      testDirectoryM isCabalCradle "app/Main.hs"
-      testDirectoryM isCabalCradle "src/Lib.hs"
+      testDirectoryWithModeM mode isCabalCradle "app/Main.hs"
+      testDirectoryWithModeM mode isCabalCradle "src/Lib.hs"
   , {- issue https://github.com/mpickering/hie-bios/issues/200 -}
-    biosTestCase "monorepo-cabal" $ runTestEnv "./monorepo-cabal" $ do
-      testDirectoryM isCabalCradle "A/Main.hs"
-      testDirectoryM isCabalCradle "B/MyLib.hs"
+    biosTestCaseAll "monorepo-cabal" $ \mode -> runTestEnv "./monorepo-cabal" $ do
+      testDirectoryWithModeM mode isCabalCradle "A/Main.hs"
+      testDirectoryWithModeM mode isCabalCradle "B/MyLib.hs"
   , testGroup "Implicit cradle tests" $
-      [ biosTestCase "implicit-cabal" $ runTestEnv "./implicit-cabal" $ do
-          testImplicitDirectoryM isCabalCradle "Main.hs"
-      , biosTestCase "implicit-cabal-no-project" $ runTestEnv "./implicit-cabal-no-project" $ do
-          testImplicitDirectoryM isCabalCradle "Main.hs"
-      , biosTestCase "implicit-cabal-deep-project" $ runTestEnv "./implicit-cabal-deep-project" $ do
-          testImplicitDirectoryM isCabalCradle "foo/Main.hs"
+      [ biosTestCaseAll "implicit-cabal" $ \mode -> runTestEnv "./implicit-cabal" $ do
+          testImplicitDirectoryM mode isCabalCradle "Main.hs"
+      , biosTestCaseAll "implicit-cabal-no-project" $ \mode -> runTestEnv "./implicit-cabal-no-project" $ do
+          testImplicitDirectoryM mode isCabalCradle "Main.hs"
+      , biosTestCaseAll "implicit-cabal-deep-project" $ \mode -> runTestEnv "./implicit-cabal-deep-project" $ do
+          testImplicitDirectoryM mode isCabalCradle "foo/Main.hs"
+      , biosTestCase "implicit-cabal-deep-project-with-context" $ runTestEnv "./implicit-cabal-deep-project" $ do
+          testImplicitDirectoryWithContextM LoadFileWithContext isCabalCradle "foo/Main.hs" ["Main.hs"]
       ]
   , testGroupWithDependency extraGhcDep
-    [ biosTestCase "Appropriate ghc and libdir" $ runTestEnvLocal "./cabal-with-ghc" $ do
+    [ biosTestCaseAll "Appropriate ghc and libdir" $ \mode -> runTestEnvLocal "./cabal-with-ghc" $ do
         initCradle "src/MyLib.hs"
         assertCradle isCabalCradle
         loadRuntimeGhcLibDir
@@ -288,32 +311,33 @@ cabalTestCases extraGhcDep =
         loadRuntimeGhcVersion
         assertGhcVersionIs extraGhcVersion
         step "Find Component Options"
-        loadComponentOptions "src/MyLib.hs"
+        loadComponentOptionsWithMode mode "src/MyLib.hs" []
         _ <- assertLoadSuccess
         pure ()
     ]
   , testGroup "Cabal cabalProject"
-    [ biosTestCase "cabal-with-project, options propagated" $ runTestEnv "cabal-with-project" $ do
-        opts <- cabalLoadOptions "src/MyLib.hs"
+    [ biosTestCaseAll "cabal-with-project, options propagated" $ \mode -> runTestEnv "cabal-with-project" $ do
+        opts <- cabalLoadOptions mode "src/MyLib.hs"
         liftIO $ do
-          "-O2" `elem` componentOptions opts
+          hasOption mode "-O2" Nothing opts
             @? "Options must contain '-O2'"
-    , biosTestCase "cabal-with-project, load" $ runTestEnv "cabal-with-project" $ do
-        testDirectoryM isCabalCradle "src/MyLib.hs"
-    , biosTestCase "multi-cabal-with-project, options propagated" $ runTestEnv "multi-cabal-with-project" $ do
-        optsAppA <- cabalLoadOptions "appA/src/Lib.hs"
+    , biosTestCaseAll "cabal-with-project, load" $ \mode -> runTestEnv "cabal-with-project" $ do
+        testDirectoryWithModeM mode isCabalCradle "src/MyLib.hs"
+    , biosTestCaseAll "multi-cabal-with-project, options propagated" $ \mode -> runTestEnv "multi-cabal-with-project" $ do
+        optsAppA <- cabalLoadOptions mode "appA/src/Lib.hs"
         liftIO $ do
-          "-O2" `elem` componentOptions optsAppA
+          hasOption mode "-O2" (Just "appA") optsAppA
             @? "Options must contain '-O2'"
-        optsAppB <- cabalLoadOptions "appB/src/Lib.hs"
+    , biosTestCaseAll "multi-cabal-with-project, options not propagated" $ \mode -> runTestEnv "multi-cabal-with-project" $ do
+        optsAppB <- cabalLoadOptions mode "appB/src/Lib.hs"
         liftIO $ do
-          "-O2" `notElem` componentOptions optsAppB
+          hasNotOption mode "-O2" (Just "appB") optsAppB
             @? "Options must not contain '-O2'"
-    , biosTestCase "multi-cabal-with-project, load" $ runTestEnv "multi-cabal-with-project" $ do
-        testDirectoryM isCabalCradle "appB/src/Lib.hs"
-        testDirectoryM isCabalCradle "appB/src/Lib.hs"
+    , biosTestCaseAll "multi-cabal-with-project, load" $ \mode -> runTestEnv "multi-cabal-with-project" $ do
+        testDirectoryWithModeM mode isCabalCradle "appB/src/Lib.hs"
+        testDirectoryWithModeM mode isCabalCradle "appB/src/Lib.hs"
     , testGroupWithDependency extraGhcDep
-      [ biosTestCase "Honours extra ghc setting" $ runTestEnv "cabal-with-ghc-and-project" $ do
+      [ biosTestCaseAll "Honours extra ghc setting" $ \mode -> runTestEnv "cabal-with-ghc-and-project" $ do
           initCradle "src/MyLib.hs"
           assertCradle isCabalCradle
           loadRuntimeGhcLibDir
@@ -321,17 +345,17 @@ cabalTestCases extraGhcDep =
           loadRuntimeGhcVersion
           assertGhcVersionIs extraGhcVersion
           step "Find Component Options"
-          loadComponentOptions "src/MyLib.hs"
+          loadComponentOptionsWithMode mode "src/MyLib.hs" []
           _ <- assertLoadSuccess
           pure ()
       ]
-    , biosTestCase "force older Cabal version in custom setup" $ runTestEnv "cabal-with-custom-setup" $ do
+    , biosTestCaseAll "force older Cabal version in custom setup" $ \mode -> runTestEnv "cabal-with-custom-setup" $ do
         -- Specifically tests whether cabal 3.16 works as expected with
         -- an older lib:Cabal version that doesn't support '--with-repl'.
         -- This test doesn't hurt for other cases as well, so we enable it for
         -- all configurations.
-        testDirectoryM isCabalCradle "src/MyLib.hs"
-    , biosTestCase "force older Cabal version in custom setup with multi mode" $ runTestEnv "cabal-with-custom-setup" $ do
+        testDirectoryWithModeM mode isCabalCradle "src/MyLib.hs"
+    , biosTestCaseMulti "force older Cabal version in custom setup with multi mode" $ \ mode -> runTestEnv "cabal-with-custom-setup" $ do
         -- Specifically tests whether cabal 3.16 works as expected with
         -- an older lib:Cabal version that doesn't support '--with-repl'.
         -- This test doesn't hurt for other cases as well, so we enable it for
@@ -344,28 +368,46 @@ cabalTestCases extraGhcDep =
         loadRuntimeGhcVersion
         assertGhcVersion
         -- suffices to force loading cabal's `--enable-multi-repl` codepath
-        loadFileGhcMultiStyle target []
+        loadFileGhcWithMode mode target []
     ]
   ]
   where
-    cabalAttemptLoad :: FilePath -> TestM ()
-    cabalAttemptLoad fp = do
+    cabalAttemptLoadWithMode' mode fp = cabalAttemptLoadWithMode mode fp []
+    cabalAttemptLoadWithMode :: LoadMode -> FilePath -> [FilePath] -> TestM ()
+    cabalAttemptLoadWithMode mode fp fps = do
       initCradle fp
       assertCradle isCabalCradle
-      loadComponentOptions fp
+      loadComponentOptionsWithMode mode fp fps
 
-    cabalAttemptLoadFiles :: FilePath -> [FilePath] -> TestM ()
-    cabalAttemptLoadFiles fp fps = do
+    cabalLoadOptions :: LoadMode -> FilePath -> TestM ComponentOptions
+    cabalLoadOptions mode fp = do
       initCradle fp
       assertCradle isCabalCradle
-      loadComponentOptionsMultiStyle fp fps
-
-    cabalLoadOptions :: FilePath -> TestM ComponentOptions
-    cabalLoadOptions fp = do
-      initCradle fp
-      assertCradle isCabalCradle
-      loadComponentOptions fp
+      loadComponentOptionsWithMode mode fp []
       assertLoadSuccess
+
+hasNotOption :: LoadMode -> [Char] -> Maybe String -> ComponentOptions -> IO Bool
+hasNotOption mode flag munit opts = not <$> hasOption mode flag munit opts
+
+hasOption :: LoadMode -> [Char] -> Maybe String -> ComponentOptions -> IO Bool
+hasOption mode flag munit opts = elem flag <$> do
+  case mode of
+    LoadFile -> return options
+    LoadFileWithContext -> expandGhcOptionResponseFile options
+    LoadUnitsFromCradle -> common
+    LoadUnitsInferred -> common
+  where
+    common | Nothing <- munit = do
+        expandGhcOptionResponseFile options
+      | Just unit <- munit = do
+        let (units, rest) = extractUnits options
+        fmap (concat . (rest:)) . forM units $ \ resp_file -> do
+          unit_flags <- expandGhcOptionResponseFile [resp_file]
+          if and [ unit `isInfixOf` uid | ("-this-unit-id":uid:_) <- tails unit_flags
+              ]
+            then pure unit_flags
+            else pure []
+    options = componentOptions opts
 
 stackTestCases :: [TestTree]
 stackTestCases =
@@ -403,11 +445,11 @@ stackTestCases =
       testDirectoryM isStackCradle "A.hs"
       testDirectoryM isStackCradle "B.hs"
   , testGroup "Implicit cradle tests"
-      [ biosTestCase "implicit-stack" $ runTestEnv "./implicit-stack" $
-          testImplicitDirectoryM isStackCradle "Main.hs"
+      [ biosTestCase "implicit-stack" $ runTestEnv "./implicit-stack" $ do
+          testImplicitDirectoryM LoadFile isStackCradle "Main.hs"
       , biosTestCase "implicit-stack-multi" $ runTestEnv "./implicit-stack-multi" $ do
-          testImplicitDirectoryM isStackCradle "Main.hs"
-          testImplicitDirectoryM isStackCradle "other-package/Main.hs"
+          testImplicitDirectoryM LoadFile isStackCradle "Main.hs"
+          testImplicitDirectoryM LoadFile isStackCradle "other-package/Main.hs"
       ]
   ]
   where
@@ -460,6 +502,14 @@ biosTestCase :: TestName -> (Bool -> Assertion) -> TestTree
 biosTestCase name assertion = askOption @VerboseLogging (\case
   VerboseLogging verbose -> testCase name (assertion verbose)
   )
+
+biosTestCaseMulti :: TestName -> (LoadMode -> Bool -> Assertion) -> TestTree
+biosTestCaseMulti = biosTestCaseAll' [LoadFileWithContext .. ]
+
+biosTestCaseAll :: TestName -> (LoadMode -> Bool -> Assertion) -> TestTree
+biosTestCaseAll = biosTestCaseAll' [minBound .. ]
+biosTestCaseAll' :: [LoadMode] -> TestName -> (LoadMode -> Bool -> Assertion) -> TestTree
+biosTestCaseAll' modes name assertion = testGroup name $ [biosTestCase (name ++ ":" ++ show mode) (assertion mode) | mode <- modes ]
 
 -- ------------------------------------------------------------------
 -- Stack related helper functions
