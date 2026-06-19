@@ -303,7 +303,7 @@ cabalTestCases extraGhcDep =
           testImplicitDirectoryWithContextM LoadFileWithContext isCabalCradle "foo/Main.hs" ["Main.hs"]
       ]
   , testGroupWithDependency extraGhcDep
-    [ biosTestCaseAll "Appropriate ghc and libdir" $ \mode -> runTestEnvLocal "./cabal-with-ghc" $ do
+    [ biosTestCaseAllInOrder "Appropriate ghc and libdir" $ \mode -> runTestEnvLocal "./cabal-with-ghc" $ do
         initCradle "src/MyLib.hs"
         assertCradle isCabalCradle
         loadRuntimeGhcLibDir
@@ -504,12 +504,16 @@ biosTestCase name assertion = askOption @VerboseLogging (\case
   )
 
 biosTestCaseMulti :: TestName -> (LoadMode -> Bool -> Assertion) -> TestTree
-biosTestCaseMulti = biosTestCaseAll' [LoadFileWithContext .. ]
+biosTestCaseMulti = biosTestCaseAll' [LoadFileWithContext .. ] testGroup
 
 biosTestCaseAll :: TestName -> (LoadMode -> Bool -> Assertion) -> TestTree
-biosTestCaseAll = biosTestCaseAll' [minBound .. ]
-biosTestCaseAll' :: [LoadMode] -> TestName -> (LoadMode -> Bool -> Assertion) -> TestTree
-biosTestCaseAll' modes name assertion = testGroup name $ [biosTestCase (name ++ ":" ++ show mode) (assertion mode) | mode <- modes ]
+biosTestCaseAll = biosTestCaseAll' [minBound .. ] testGroup
+
+biosTestCaseAllInOrder :: TestName -> (LoadMode -> Bool -> Assertion) -> TestTree
+biosTestCaseAllInOrder = biosTestCaseAll' [minBound .. ] inOrderTestGroup
+
+biosTestCaseAll' :: [LoadMode] -> (String -> [TestTree] -> TestTree) -> TestName -> (LoadMode -> Bool -> Assertion) -> TestTree
+biosTestCaseAll' modes tG name assertion = tG name $ [biosTestCase (name ++ "-" ++ show mode) (assertion mode) | mode <- modes ]
 
 -- ------------------------------------------------------------------
 -- Stack related helper functions
