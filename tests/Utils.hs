@@ -94,6 +94,8 @@ import Test.Tasty.HUnit
 import Colog.Core
 import qualified Data.Text as Text
 import Data.Function ((&))
+import qualified Control.Exception as C
+import System.Environment (lookupEnv)
 
 -- ---------------------------------------------------------------------------
 -- Test configuration and information
@@ -131,10 +133,12 @@ runTestEnv' config root act = do
   -- We need to copy over the directory to somewhere outside the source tree
   -- when we test, since the cabal.project/stack.yaml/hie.yaml file in the root
   -- of this repository interferes with the test cradles!
-  let wrapper =
+  let wrapper r cont =
         if useTemporaryDirectory config
-          then withTempCopy
-          else \r cont -> cont r
+          then do
+            mkeep <- lookupEnv "KEEP_TEMP_DIRS"
+            withTempCopy (mkeep == Just "true") r cont
+          else cont r
       mkEnv root' =
         TestEnv
           { testCradleType = Nothing
@@ -468,13 +472,21 @@ findCradleForModuleM fp expected' = do
 -- Copy Directory system utilities
 -- ---------------------------------------------------------------------------
 
-withTempCopy :: FilePath -> (FilePath -> IO a) -> IO a
-withTempCopy srcDir f =
-  withSystemTempDirectory "hie-bios-test" $ \newDir -> do
-    exists <- doesDirectoryExist srcDir
-    when exists $ do
-      copyDir srcDir newDir
-    f newDir
+withTempCopy :: Bool -> FilePath -> (FilePath -> IO a) -> IO a
+withTempCopy keep srcDir f = getCanonicalTemporaryDirectory >>= \targetDir -> do
+  C.bracket
+    (liftIO (createTempDirectory targetDir template))
+    cleanup $ \newDir -> do
+      exists <- doesDirectoryExist srcDir
+      when exists $ do
+        copyDir srcDir newDir
+      f newDir
+  where
+    template = "hie-bios-test"
+    cleanup dir | keep = return ()
+       | otherwise = (liftIO . ignoringIOErrors . removeDirectoryRecursive) dir
+    ignoringIOErrors ioe = ioe `C.catch` (\e -> const (return ()) (e :: IOError))
+
 
 copyDir :: FilePath -> FilePath -> IO ()
 copyDir src dst = do
