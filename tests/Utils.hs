@@ -43,11 +43,11 @@ module Utils (
   initCradle,
   initImplicitCradle,
   loadComponentOptions,
-  loadComponentOptionsMultiStyle,
+  loadComponentOptionsWithMode,
   loadRuntimeGhcLibDir,
   loadRuntimeGhcVersion,
   loadFileGhc,
-  loadFileGhcMultiStyle,
+  loadFileGhcWithMode,
   isCabalMultipleCompSupported',
 
   -- * Assertion helpers
@@ -66,7 +66,9 @@ module Utils (
 
   -- * High-level test helpers
   testDirectoryM,
+  testDirectoryWithModeM,
   testImplicitDirectoryM,
+  testImplicitDirectoryWithContextM,
   findCradleForModuleM,
 ) where
 
@@ -299,13 +301,14 @@ loadComponentOptions fp = do
   clr <- liftIO $ getCompilerOptions (TargetWithContext a_fp []) LoadFile crd
   setLoadResult clr
 
-loadComponentOptionsMultiStyle :: FilePath -> [FilePath] -> TestM ()
-loadComponentOptionsMultiStyle fp fps = do
+
+loadComponentOptionsWithMode :: LoadMode -> FilePath -> [FilePath] -> TestM ()
+loadComponentOptionsWithMode mode fp fps = do
   a_fp <- normFile fp
   a_fps <- traverse normFile fps
   crd <- askCradle
   step $ "Initialise flags for: " <> fp <> " and " <> show fps
-  clr <- liftIO $ getCompilerOptions (TargetWithContext a_fp a_fps) LoadFileWithContext crd
+  clr <- liftIO $ getCompilerOptions (TargetWithContext a_fp a_fps) mode crd
   setLoadResult clr
 
 loadRuntimeGhcLibDir :: TestM ()
@@ -330,31 +333,15 @@ isCabalMultipleCompSupported' = do
   liftIO $ isCabalMultipleCompSupported versions
 
 loadFileGhc :: FilePath -> TestM ()
-loadFileGhc fp = do
-  libdir <- askOrLoadLibDir
-  a_fp <- normFile fp
-  stepF <- askStep
-  step "Cradle load"
-  loadComponentOptions fp
-  opts <- assertLoadSuccess
-  liftIO $
-    G.runGhc (Just libdir) $ do
-      let (ini, _) = initSessionWithMessage' True (Just G.batchMsg) opts
-      sf <- ini
-      case sf of
-        -- Test resetting the targets
-        Succeeded -> do
-          liftIO $ stepF "Set target files"
-          setTargetFiles mempty [(a_fp, a_fp)]
-        Failed -> liftIO $ assertFailure "Module loading failed"
+loadFileGhc fp = loadFileGhcWithMode LoadFile fp []
 
-loadFileGhcMultiStyle :: FilePath -> [FilePath] -> TestM ()
-loadFileGhcMultiStyle fp extraFps = do
+loadFileGhcWithMode :: LoadMode -> FilePath -> [FilePath] -> TestM ()
+loadFileGhcWithMode mode fp extraFps = do
   libdir <- askOrLoadLibDir
   a_fp <- normFile fp
   stepF <- askStep
   step "Cradle load"
-  loadComponentOptionsMultiStyle fp extraFps
+  loadComponentOptionsWithMode mode fp extraFps
   opts <- assertLoadSuccess
   liftIO $
     G.runGhc (Just libdir) $ do
@@ -443,24 +430,30 @@ assertCradleLoadError = \case
 -- ---------------------------------------------------------------------------
 
 testDirectoryM :: (Cradle Void -> Bool) -> FilePath -> TestM ()
-testDirectoryM cradlePred file = do
+testDirectoryM = testDirectoryWithModeM LoadFile
+
+testDirectoryWithModeM :: LoadMode -> (Cradle Void -> Bool) -> FilePath -> TestM ()
+testDirectoryWithModeM mode cradlePred file = do
   initCradle file
   assertCradle cradlePred
   loadRuntimeGhcLibDir
   assertLibDirVersion
   loadRuntimeGhcVersion
   assertGhcVersion
-  loadFileGhc file
+  loadFileGhcWithMode mode file []
 
-testImplicitDirectoryM :: (Cradle Void -> Bool) -> FilePath -> TestM ()
-testImplicitDirectoryM cradlePred file = do
+testImplicitDirectoryM :: LoadMode -> (Cradle Void -> Bool) -> FilePath -> TestM ()
+testImplicitDirectoryM mode cradlePred file = testImplicitDirectoryWithContextM mode cradlePred file []
+
+testImplicitDirectoryWithContextM :: LoadMode -> (Cradle Void -> Bool) -> FilePath -> [FilePath] -> TestM ()
+testImplicitDirectoryWithContextM mode cradlePred file ctxt = do
   initImplicitCradle file
   assertCradle cradlePred
   loadRuntimeGhcLibDir
   assertLibDirVersion
   loadRuntimeGhcVersion
   assertGhcVersion
-  loadFileGhc file
+  loadFileGhcWithMode mode file ctxt
 
 findCradleForModuleM :: FilePath -> Maybe FilePath -> TestM ()
 findCradleForModuleM fp expected' = do
