@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards, CPP #-}
-module HIE.Bios.Environment (initSession, initSession', getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, getCacheDir, addCmdOpts) where
+{-# LANGUAGE TupleSections #-}
+module HIE.Bios.Environment (initSession, initSession', getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, getCacheDir, addCmdOpts, extractUnits) where
 
 import GHC (GhcMonad)
 import qualified GHC as G
@@ -22,7 +23,13 @@ import Text.ParserCombinators.ReadP hiding (optional)
 import HIE.Bios.Types
 import qualified HIE.Bios.Ghc.Gap as Gap
 import qualified System.OsPath as OsPath
-
+import qualified GHC.Plugins as G
+import qualified Data.List.NonEmpty as NE
+import qualified GHC.Driver.Monad as G
+import Data.IORef (newIORef, readIORef)
+import qualified GHC.Unit.Env as G
+import GHC.Driver.Env (HscEnv(hsc_unit_env))
+import Data.Maybe (fromMaybe)
 
 -- | Start a GHC session and set some sensible options for tooling to use.
 -- Creates a folder in the cache directory to cache interface files to make
@@ -37,7 +44,6 @@ initSession' :: (GhcMonad m)
     -> ComponentOptions
     -> m [G.Target]
 initSession' workAroundThreadUnsafety ComponentOptions {..} = do
-    df <- G.getSessionDynFlags
     -- Create a unique folder per set of different GHC options, assuming that each different set of
     -- GHC options will create incompatible interface files.
     let
@@ -45,22 +51,69 @@ initSession' workAroundThreadUnsafety ComponentOptions {..} = do
       hash_args = (if workAroundThreadUnsafety then (componentRoot :) else id) componentOptions
       opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init $ map B.pack hash_args
 
-    cache_dir <- liftIO $ getCacheDir opts_hash
-    -- Add the user specified options to a fresh GHC session.
-    (df', targets) <- addCmdOpts componentOptions df
-    let df'' = makeDynFlagsAbsolute componentRoot df'
-    void $ G.setSessionDynFlags
-        (disableOptimisation -- Compile with -O0 as we are not going to produce object files.
-        $ setIgnoreInterfacePragmas            -- Ignore any non-essential information in interface files such as unfoldings changing.
-        $ writeInterfaceFiles (Just cache_dir) -- Write interface files to the cache
-        $ setVerbosity 0                       -- Set verbosity to zero just in case the user specified `-vx` in the options.
-        $ Gap.setWayDynamicIfHostIsDynamic     -- Add dynamic way if GHC is built with dynamic linking
-        $ setLinkerOptions df''                -- Set `-fno-code` to avoid generating object files, unless we have to.
-        )
+    cache_dir <- liftIO $ makeAbsolute =<< getCacheDir opts_hash
 
-    let targets' = makeTargetsAbsolute componentRoot targets
+    -- Plan:
+    -- - Extract `-unit @resp_file` options if present
+    -- - Add the user specified options to a fresh GHC session
+    -- - Make all dflags absolute
+    -- - Set flags for interactive session
+    -- - Reconstruct targets and make them absolute
+
+    let (units,rest) = extractUnits componentOptions
+
+    let liftGhc m = do
+          env <- G.getSession
+          s <- liftIO (newIORef env)
+          x <- liftIO $ G.reflectGhc m (G.Session s)
+          G.setSession =<< liftIO (readIORef s)
+          pure x
+    let
+      setFlags df'' =
+        void $ G.setSessionDynFlags
+          (disableOptimisation -- Compile with -O0 as we are not going to produce object files.
+          $ setIgnoreInterfacePragmas            -- Ignore any non-essential information in interface files such as unfoldings changing.
+          $ writeInterfaceFiles (Just cache_dir) -- Write interface files to the cache
+          $ setVerbosity 0                       -- Set verbosity to zero just in case the user specified `-vx` in the options.
+          $ Gap.setWayDynamicIfHostIsDynamic     -- Add dynamic way if GHC is built with dynamic linking
+          $ setLinkerOptions df''                -- Set `-fno-code` to avoid generating object files, unless we have to.
+          )
+
+    targets <- case NE.nonEmpty units of
+      Nothing -> do
+        (df',targets) <- addCmdOpts componentOptions =<< G.getSessionDynFlags
+        setFlags $ makeDynFlagsAbsolute componentRoot df'
+        pure targets
+      Just ne_units -> do
+        logger <- Gap.getLogger <$> G.getSession
+        df <- G.getSessionDynFlags
+        -- leftovers won't have targets when units are present.
+        (df', _leftovers, _warns) <- Gap.parseDynamicFlags logger df (map G.noLoc rest)
+        setFlags $ makeDynFlagsAbsolute componentRoot df'
+
+        hs_srcs <- liftGhc $ Gap.initMulti ne_units (\ _ _ _ _ -> return ())
+
+        G.modifySession $ G.hscUpdateHUG $ fmap (\ ue -> ue {G.homeUnitEnv_dflags = makeDynFlagsAbsolute componentRoot (G.homeUnitEnv_dflags ue)})
+
+        -- This should be an enforced invariant.
+        G.modifySession $ \ hsc_env -> G.hscSetActiveUnitId (G.ue_current_unit $ G.hsc_unit_env hsc_env) hsc_env
+
+        mapM (\(src, uid, phase) -> G.guessTarget src uid phase) hs_srcs
+
+    let mkTgtAbs env tgt = tgt {G.targetId = makeTargetIdAbsolute wdir (G.targetId tgt)}
+          where
+            wdir = fromMaybe componentRoot $
+              G.workingDirectory
+              . G.homeUnitEnv_dflags . G.ue_findHomeUnitEnv uid
+              $ hsc_unit_env env
+            uid = G.targetUnitId tgt
+
+    env <- G.getSession
+    let targets' = map (mkTgtAbs env) targets
+
     -- Unset the default log action to avoid output going to stdout.
     Gap.unsetLogAction
+
     return targets'
 
 ----------------------------------------------------------------
@@ -145,6 +198,14 @@ writeInterfaceFiles (Just hi_dir) df = setHiDir hi_dir (Gap.gopt_set df G.Opt_Wr
 setHiDir :: FilePath -> G.DynFlags -> G.DynFlags
 setHiDir f d = d { G.hiDir      = Just f}
 
+extractUnits :: [String] -> ([String], [String])
+extractUnits = go [] []
+  where
+    -- TODO: we should likely use the 'processCmdLineP' instead
+    go units rest ("-unit" : x : xs) = go (x : units) rest xs
+    go units rest (x : xs)           = go units (x : rest) xs
+    go units rest []                 = (reverse units, reverse rest)
+
 
 -- | Interpret and set the specific command line options.
 -- A lot of this code is just copied from ghc/Main.hs
@@ -174,6 +235,7 @@ makeDynFlagsAbsolute root df =
     { G.importPaths = map makeAbs (G.importPaths df)
     , G.packageDBFlags =
         map (Gap.overPkgDbRef makeAbsOs) (G.packageDBFlags df)
+    , G.workingDirectory = (root </>) <$> G.workingDirectory df
     }
   where
     makeAbs =

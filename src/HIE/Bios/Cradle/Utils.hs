@@ -18,6 +18,7 @@ import HIE.Bios.Types (prettyCmdSpec)
 import Data.List
 import System.Process.Extra
 import GHC.ResponseFile (expandResponse)
+import HIE.Bios.Ghc.Gap (removeRTS)
 
 -- ----------------------------------------------------------------------------
 -- Process error details
@@ -68,36 +69,6 @@ selectCradle k cur_fp (c: css) =
 
 removeInteractive :: [String] -> [String]
 removeInteractive = filter (/= "--interactive")
-
--- | Strip out any ["+RTS", ..., "-RTS"] sequences in the command string list.
-data InRTS = OutsideRTS | InsideRTS
-
--- | Strip out any ["+RTS", ..., "-RTS"] sequences in the command string list.
---
--- >>> removeRTS ["option1", "+RTS -H32m -RTS", "option2"]
--- ["option1", "option2"]
---
--- >>> removeRTS ["option1", "+RTS", "-H32m", "-RTS", "option2"]
--- ["option1", "option2"]
---
--- >>> removeRTS ["option1", "+RTS -H32m"]
--- ["option1"]
---
--- >>> removeRTS ["option1", "+RTS -H32m", "-RTS", "option2"]
--- ["option1", "option2"]
---
--- >>> removeRTS ["option1", "+RTS -H32m", "-H32m -RTS", "option2"]
--- ["option1", "option2"]
-removeRTS :: [String] -> [String]
-removeRTS = go OutsideRTS
-  where
-    go :: InRTS -> [String] -> [String]
-    go _ [] = []
-    go OutsideRTS (y:ys)
-      | "+RTS" `isPrefixOf` y = go (if "-RTS" `isSuffixOf` y then OutsideRTS else InsideRTS) ys
-      | otherwise = y : go OutsideRTS ys
-    go InsideRTS (y:ys) = go (if "-RTS" `isSuffixOf` y then OutsideRTS else InsideRTS) ys
-
 
 removeVerbosityOpts :: [String] -> [String]
 removeVerbosityOpts = filter ((&&) <$> (/= "-v0") <*> (/= "-w"))

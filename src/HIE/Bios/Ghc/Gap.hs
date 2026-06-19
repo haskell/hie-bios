@@ -1,4 +1,6 @@
 {-# LANGUAGE FlexibleInstances, CPP, PatternSynonyms #-}
+{-# LANGUAGE NondecreasingIndentation #-}
+{-# LANGUAGE TupleSections #-}
 -- | All the CPP for GHC version compability should live in this module.
 module HIE.Bios.Ghc.Gap (
   ghcVersion
@@ -57,12 +59,15 @@ module HIE.Bios.Ghc.Gap (
   , load'
   , homeUnitId_
   , getDynFlags
+  , initMulti
+  , InRTS(..)
+  , removeRTS
   ) where
 
 import Control.Monad.IO.Class
 import qualified Control.Monad.Catch as E
 
-import GHC hiding (typecheckModule)
+import GHC hiding (typecheckModule,parseTargetFiles)
 import qualified GHC as G
 
 ----------------------------------------------------------------
@@ -98,6 +103,21 @@ import GHC.Driver.Errors.Types (DriverMessage)
 #if __GLASGOW_HASKELL__ < 907
 import GHC.Driver.CmdLine as CmdLine
 #endif
+#if __GLASGOW_HASKELL__ >= 914
+import qualified GHC.Driver.Session.Units as G
+#else
+import GHC.Unit.Home.ModInfo (emptyHomePackageTable)
+import GHC.Unit.Env
+import Control.Monad
+import GHC.ResponseFile (expandResponse)
+import Data.List (partition)
+import GHC.Driver.Phases (isHaskellishTarget)
+import qualified GHC.Unit.State as State
+import System.FilePath (isRelative, (</>))
+import qualified Data.Map as Map
+#endif
+import qualified Data.List.NonEmpty as NE
+import Data.List (isPrefixOf, isSuffixOf)
 
 ghcVersion :: String
 ghcVersion = VERSION_ghc
@@ -312,3 +332,114 @@ unsafeEncodeUtf fp =
 
 unsafeDecodeUtf :: HasCallStack => OsPath -> FilePath
 unsafeDecodeUtf = fromMaybe (error "unsafeDecodeUtf") . OsPath.decodeUtf
+
+initMulti :: NE.NonEmpty String -> (DynFlags     -> [(String, Maybe Phase)] -> [String] -> [String] -> IO ()) -> Ghc [(String, Maybe UnitId, Maybe Phase)]
+#if __GLASGOW_HASKELL__ >= 914
+initMulti = G.initMulti
+#else
+
+-- taken from ghc-9.6.7, dropping some checks and logging.
+initMulti unitArgsFiles _check = do
+  hsc_env <- GHC.getSession
+  let logger = hsc_logger hsc_env
+  initial_dflags <- GHC.getSessionDynFlags
+
+  dynFlagsAndSrcs <- forM unitArgsFiles $ \f -> do
+    when (verbosity initial_dflags > 2) (liftIO $ print f)
+    args <- liftIO $ expandResponse [f]
+    (dflags2, fileish_args, _warns) <- parseDynamicFlagsCmdLine initial_dflags (map (mkGeneralLocated f) (removeRTS args))
+
+    let (dflags3, srcs, _objs) = parseTargetFiles dflags2 (map unLoc fileish_args)
+        dflags4 = offsetDynFlags dflags3
+
+    let (hs_srcs, _non_hs_srcs) = partition isHaskellishTarget srcs
+    pure (dflags4, hs_srcs)
+
+  let
+    unitDflags = NE.map fst dynFlagsAndSrcs
+    srcs = NE.map (\(dflags, lsrcs) -> map (uncurry (,Just $ homeUnitId_ dflags,)) lsrcs) dynFlagsAndSrcs
+    (hs_srcs, _non_hs_srcs) = unzip (map (partition (\(file, _uid, phase) -> isHaskellishTarget (file, phase))) (NE.toList srcs))
+
+  let (initial_home_graph, mainUnitId) = createUnitEnvFromFlags unitDflags
+      home_units = unitEnv_keys initial_home_graph
+
+  home_unit_graph <- forM initial_home_graph $ \homeUnitEnv -> do
+    let cached_unit_dbs = homeUnitEnv_unit_dbs homeUnitEnv
+        hue_flags = homeUnitEnv_dflags homeUnitEnv
+        dflags = homeUnitEnv_dflags homeUnitEnv
+    (dbs,unit_state,home_unit,mconstants) <- liftIO $ State.initUnits logger hue_flags cached_unit_dbs home_units
+
+    updated_dflags <- liftIO $ updatePlatformConstants dflags mconstants
+    pure $ HomeUnitEnv
+      { homeUnitEnv_units = unit_state
+      , homeUnitEnv_unit_dbs = Just dbs
+      , homeUnitEnv_dflags = updated_dflags
+      , homeUnitEnv_hpt = emptyHomePackageTable
+      , homeUnitEnv_home_unit = Just home_unit
+      }
+
+  let dflags = homeUnitEnv_dflags $ unitEnv_lookup mainUnitId home_unit_graph
+  unitEnv <- assertUnitEnvInvariant <$> (liftIO $ initUnitEnv mainUnitId home_unit_graph (ghcNameVersion dflags) (targetPlatform dflags))
+  let final_hsc_env = hsc_env { hsc_unit_env = unitEnv }
+
+  GHC.setSession final_hsc_env
+
+  return $ concat hs_srcs
+
+offsetDynFlags :: DynFlags -> DynFlags
+offsetDynFlags dflags =
+  dflags { hiDir = c hiDir
+         , objectDir  = c objectDir
+         , stubDir = c stubDir
+         , hieDir  = c hieDir
+         , dumpDir = c dumpDir  }
+
+  where
+    c f = augment_maybe (f dflags)
+
+    augment_maybe Nothing = Nothing
+    augment_maybe (Just f) = Just (augment f)
+    augment f | isRelative f, Just offset <- workingDirectory dflags = offset </> f
+              | otherwise = f
+
+
+createUnitEnvFromFlags :: NE.NonEmpty DynFlags -> (HomeUnitGraph, UnitId)
+createUnitEnvFromFlags unitDflags =
+  let
+    newInternalUnitEnv dflags = mkHomeUnitEnv dflags emptyHomePackageTable Nothing
+    unitEnvList = NE.map (\dflags -> (homeUnitId_ dflags, newInternalUnitEnv dflags)) unitDflags
+    activeUnit = fst $ NE.head unitEnvList
+  in
+    (unitEnv_new (Map.fromList (NE.toList (unitEnvList))), activeUnit)
+
+
+#endif
+
+-- | Strip out any ["+RTS", ..., "-RTS"] sequences in the command string list.
+data InRTS = OutsideRTS | InsideRTS
+
+-- | Strip out any ["+RTS", ..., "-RTS"] sequences in the command string list.
+--
+-- >>> removeRTS ["option1", "+RTS -H32m -RTS", "option2"]
+-- ["option1", "option2"]
+--
+-- >>> removeRTS ["option1", "+RTS", "-H32m", "-RTS", "option2"]
+-- ["option1", "option2"]
+--
+-- >>> removeRTS ["option1", "+RTS -H32m"]
+-- ["option1"]
+--
+-- >>> removeRTS ["option1", "+RTS -H32m", "-RTS", "option2"]
+-- ["option1", "option2"]
+--
+-- >>> removeRTS ["option1", "+RTS -H32m", "-H32m -RTS", "option2"]
+-- ["option1", "option2"]
+removeRTS :: [String] -> [String]
+removeRTS = go OutsideRTS
+  where
+    go :: InRTS -> [String] -> [String]
+    go _ [] = []
+    go OutsideRTS (y:ys)
+      | "+RTS" `isPrefixOf` y = go (if "-RTS" `isSuffixOf` y then OutsideRTS else InsideRTS) ys
+      | otherwise = y : go OutsideRTS ys
+    go InsideRTS (y:ys) = go (if "-RTS" `isSuffixOf` y then OutsideRTS else InsideRTS) ys
