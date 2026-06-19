@@ -195,6 +195,7 @@ Library
                         template-haskell     >= 2.18 && <2.25,
                         text                 >= 1.2.3 && < 2.2,
                         unix-compat          >= 0.5.1 && < 0.8,
+                        containers >=0.6.2 && <0.9,
                         unordered-containers >= 0.2.9 && < 0.3,
                         yaml                 >= 0.10.0 && < 0.12,
                         file-embed           >= 0.0.11 && < 1,
