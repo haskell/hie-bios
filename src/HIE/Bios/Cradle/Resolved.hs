@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor #-}
 module HIE.Bios.Cradle.Resolved
   ( ResolvedCradles(..)
   , ResolvedCradle(..)
@@ -21,7 +22,7 @@ data ResolvedCradle a = ResolvedCradle
  { prefix :: FilePath -- ^ the prefix to match files
  , cradleDeps :: [FilePath] -- ^ accumulated dependencies
  , concreteCradle :: ConcreteCradle a
- } deriving Show
+ } deriving (Show, Functor)
 
 -- | The actual type of action we will be using to process a file
 data ConcreteCradle a
@@ -31,5 +32,4 @@ data ConcreteCradle a
   | ConcreteDirect [String]
   | ConcreteNone
   | ConcreteOther a
-  deriving Show
-
+  deriving (Show, Functor)

@@ -280,6 +280,7 @@ initCradle fp = do
   crd <- case mcfg of
     Just cfg -> liftIO $ loadCradle logger cfg
     Nothing -> liftIO $ loadImplicitCradle logger a_fp
+  step $ "Cradle: " ++ show crd
   setCradle crd
 
 initImplicitCradle :: FilePath -> TestM ()
