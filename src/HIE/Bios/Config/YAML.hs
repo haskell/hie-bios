@@ -24,8 +24,9 @@ module HIE.Bios.Config.YAML
 import           Control.Applicative ((<|>))
 import           Data.Aeson
 #if MIN_VERSION_aeson(2,0,0)
-import           Data.Aeson.KeyMap   (keys)
+import           Data.Aeson.KeyMap   (keys,lookup)
 #else
+import           Data.HashMap.Strict (lookup)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Text           as T
 #endif
@@ -33,6 +34,7 @@ import           Data.Aeson.Types    (Parser, typeMismatch)
 import qualified Data.Char           as C (toLower)
 import           Data.List           ((\\))
 import           GHC.Generics        (Generic)
+import           Prelude             hiding (lookup)
 
 #if !MIN_VERSION_aeson(2,0,0)
 -- | Backwards compatible type-def for Key
@@ -166,12 +168,13 @@ data OneOrManyComponents component
   | ManyComponents [component]
   | NoComponent
 
-instance FromJSON component => FromJSON (OneOrManyComponents component) where
-  parseJSON =
-    let parseComponents o = (parseSingleComponent o <|> parseSubComponents o <|> pure NoComponent)
-        parseSingleComponent o = SingleComponent <$> o .: "component"
-        parseSubComponents   o = ManyComponents <$> o .: "components"
-     in withObject "Components" parseComponents
+instance FromJSON a => FromJSON (OneOrManyComponents a) where
+  parseJSON (Object obj)
+    | Just v <- lookup "component"  obj = SingleComponent <$> parseJSON v
+    | Just v <- lookup "components" obj = ManyComponents <$> parseJSON v
+    | otherwise                         = pure NoComponent
+  parseJSON Null = pure NoComponent
+  parseJSON v    = typeMismatch "OneOrManyComponents" v
 
 data DirectConfig
   = DirectConfig { arguments :: [String] }
