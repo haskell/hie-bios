@@ -92,6 +92,7 @@ main = defaultMain $
         ]))
     , assertParserFails "keys-not-unique-fails.yaml" invalidYamlException
     , assertParser "cabal-empty-config.yaml" (noDeps (Cabal $ CabalType Nothing Nothing))
+    , assertParserFails "single-components.yaml" aesonException
     ]
 
 assertParser :: FilePath -> Config Void -> TestTree
@@ -104,6 +105,10 @@ assertParser fp cc = testCase fp $ do
 invalidYamlException :: Selector ParseException
 invalidYamlException (InvalidYaml (Just _)) = True
 invalidYamlException _ = False
+
+aesonException :: Selector ParseException
+aesonException (AesonException _) = True
+aesonException _ = False
 
 assertParserFails :: Exception e => FilePath -> Selector e -> TestTree
 assertParserFails fp es = testCase fp $ (readConfig (configDir </> fp) :: IO (Config Void)) `shouldThrow` es
