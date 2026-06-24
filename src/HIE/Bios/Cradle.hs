@@ -234,7 +234,7 @@ inferCradleTree fp =
 
   maybeItsStack = stackExecutable >> (Stack $ StackType Nothing Nothing,) <$> stackWorkDir fp
 
-  maybeItsCabal = (Cabal $ CabalType Nothing Nothing,) <$> cabalWorkDir fp
+  maybeItsCabal = (Cabal $ CabalType Nothing Nothing Nothing,) <$> cabalWorkDir fp
 
   -- maybeItsObelisk = (Obelisk,) <$> obeliskWorkDir fp
 

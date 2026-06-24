@@ -105,16 +105,18 @@ data MultiSubComponent a
 
 data CabalConfig
   = CabalConfig { cabalProject    :: Maybe FilePath
+                , cabalComponentsToLoad :: Maybe [String]
                 , cabalComponents :: OneOrManyComponents CabalComponent
                 }
 
 instance FromJSON CabalConfig where
-  parseJSON v@(Array _)     = CabalConfig Nothing . ManyComponents <$> parseJSON v
-  parseJSON v@(Object obj)  = (checkObjectKeys ["cabalProject", "component", "components"] obj)
+  parseJSON v@(Array _)     = CabalConfig Nothing Nothing . ManyComponents <$> parseJSON v
+  parseJSON v@(Object obj)  = (checkObjectKeys ["cabalProject", "component", "components", "componentsToLoad"] obj)
                                 *> (CabalConfig
                                   <$> obj .:? "cabalProject"
+                                  <*> obj .:? "componentsToLoad"
                                   <*> parseJSON v)
-  parseJSON Null            = pure $ CabalConfig Nothing NoComponent
+  parseJSON Null            = pure $ CabalConfig Nothing Nothing NoComponent
   parseJSON v               = typeMismatch "CabalConfig" v
 
 data CabalComponent

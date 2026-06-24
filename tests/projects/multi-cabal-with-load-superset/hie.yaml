@@ -1,0 +1,6 @@
+cradle:
+  cabal:
+    componentsToLoad: ["appA:lib", "appB:lib"]
+    components:
+            - path: appA/src
+              component: appA:lib

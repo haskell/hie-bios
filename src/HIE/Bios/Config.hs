@@ -11,6 +11,7 @@ module HIE.Bios.Config(
     pattern CabalType,
     cabalComponent,
     cabalProjectFile,
+    cabalComponentsToLoad,
     StackType,
     pattern StackType,
     stackComponent,
@@ -67,17 +68,21 @@ data Callable = Program FilePath | Command String
 -- 'cabal.project'. We allow to override that name to have an HLS specific
 -- project configuration file.
 data CabalType
-    = CabalType_ { _cabalComponent :: !(Last String), _cabalProjectFile :: !(Last FilePath) }
+    = CabalType_
+        { _cabalComponent :: !(Last String)
+        , _cabalProjectFile :: !(Last FilePath)
+        , _cabalComponentsToLoad :: !(Maybe [String])
+        }
     deriving (Eq)
 
 instance Semigroup CabalType where
-    CabalType_ cr cpr <> CabalType_ cl cpl = CabalType_ (cr <> cl) (cpr <> cpl)
+    CabalType_ cr cpr csr <> CabalType_ cl cpl csl = CabalType_ (cr <> cl) (cpr <> cpl) (csr <> csl)
 
 instance Monoid CabalType where
-    mempty = CabalType_ mempty mempty
+    mempty = CabalType_ mempty mempty mempty
 
-pattern CabalType :: Maybe String -> Maybe FilePath -> CabalType
-pattern CabalType { cabalComponent, cabalProjectFile } = CabalType_ (Last cabalComponent) (Last cabalProjectFile)
+pattern CabalType :: Maybe String -> Maybe FilePath -> Maybe [String] -> CabalType
+pattern CabalType { cabalComponent, cabalProjectFile, cabalComponentsToLoad } = CabalType_ (Last cabalComponent) (Last cabalProjectFile) cabalComponentsToLoad
 {-# COMPLETE CabalType #-}
 
 instance Show CabalType where
@@ -170,13 +175,13 @@ toCradleTree (YAML.Stack (YAML.StackConfig yaml cpts)) =
     (YAML.ManyComponents cs)  -> StackMulti (StackType Nothing yaml)
                                             ((\(YAML.StackComponent fp' c cYAML) ->
                                               (fp', StackType (Just c) cYAML)) <$> cs)
-toCradleTree (YAML.Cabal (YAML.CabalConfig prjFile cpts)) =
+toCradleTree (YAML.Cabal (YAML.CabalConfig prjFile csToLoad cpts)) =
   case cpts of
-    YAML.NoComponent          -> Cabal $ CabalType Nothing prjFile
-    (YAML.SingleComponent c)  -> Cabal $ CabalType (Just c) prjFile
-    (YAML.ManyComponents cs)  -> CabalMulti (CabalType Nothing prjFile)
+    YAML.NoComponent          -> Cabal $ CabalType Nothing prjFile csToLoad
+    (YAML.SingleComponent c)  -> Cabal $ CabalType (Just c) prjFile csToLoad
+    (YAML.ManyComponents cs)  -> CabalMulti (CabalType Nothing prjFile csToLoad)
                                             ((\(YAML.CabalComponent fp' c cPrjFile) ->
-                                              (fp', CabalType (Just c) cPrjFile)) <$> cs)
+                                              (fp', CabalType (Just c) cPrjFile Nothing)) <$> cs)
 toCradleTree (YAML.Direct cfg)  = Direct (YAML.arguments cfg)
 toCradleTree (YAML.Bios cfg)    = Bios  (toCallable $ YAML.callable cfg)
                                         (toCallable <$> YAML.depsCallable cfg)

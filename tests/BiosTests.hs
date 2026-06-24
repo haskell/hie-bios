@@ -18,7 +18,7 @@ import HIE.Bios
 import HIE.Bios.Cradle
 import HIE.Bios.Cradle.Cabal (cabalBuildDir)
 import HIE.Bios.Types (LoadMode(..))
-import Control.Monad (forM_, forM)
+import Control.Monad (forM_, forM, unless)
 import Control.Monad.Extra (unlessM)
 import Control.Monad.IO.Class
 import Data.Foldable (for_)
@@ -369,6 +369,35 @@ cabalTestCases extraGhcDep =
         assertGhcVersion
         -- suffices to force loading cabal's `--enable-multi-repl` codepath
         loadFileGhcWithMode mode target []
+    , biosTestCase "multi-cabal-with-load" $ runTestEnv "multi-cabal-with-load" $ do
+        opts <- componentOptions <$> cabalLoadOptions LoadUnitsFromCradle "appA/src/Lib.hs"
+        liftIO $ do
+          unless (any ("appA" `isInfixOf`) opts) $
+            assertFailure $ "Missing appA: " ++ unwords opts
+          unless (all (not . ("appB" `isInfixOf`)) opts) $
+            assertFailure $ "Included appB: " ++ unwords opts
+    , biosTestCase "multi-cabal-with-load-inferred" $ runTestEnv "multi-cabal-with-load" $ do
+        -- LoadUnitsInferred should be unaffected by componentsToLoad
+        opts <- componentOptions <$> cabalLoadOptions LoadUnitsInferred "appA/src/Lib.hs"
+        liftIO $ do
+          unless (any ("appA" `isInfixOf`) opts) $
+            assertFailure $ "Missing appA: " ++ unwords opts
+          unless (any ("appB" `isInfixOf`) opts) $
+            assertFailure $ "Missing appB: " ++ unwords opts
+    , biosTestCase "cabal-with-load" $ runTestEnv "cabal-with-load" $ do
+        opts <- componentOptions <$> cabalLoadOptions LoadUnitsFromCradle "appA/src/Lib.hs"
+        liftIO $ do
+          unless (any ("appA" `isInfixOf`) opts) $
+            assertFailure $ "Missing appA: " ++ unwords opts
+          unless (all (not . ("appB" `isInfixOf`)) opts) $
+            assertFailure $ "Included appB: " ++ unwords opts
+    , biosTestCase "multi-cabal-with-load-superset" $ runTestEnv "multi-cabal-with-load-superset" $ do
+        opts <- componentOptions <$> cabalLoadOptions LoadUnitsFromCradle "appA/src/Lib.hs"
+        liftIO $ do
+          unless (any ("appA" `isInfixOf`) opts) $
+            assertFailure $ "Missing appA: " ++ unwords opts
+          unless (any ("appB" `isInfixOf`) opts) $
+            assertFailure $ "Missing appB: " ++ unwords opts
     ]
   ]
   where
