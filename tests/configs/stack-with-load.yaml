@@ -1,0 +1,3 @@
+cradle:
+  stack:
+    componentsToLoad: ["lib:hie-bios","parser-tests","some-other"]

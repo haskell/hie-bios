@@ -16,6 +16,7 @@ module HIE.Bios.Config(
     pattern StackType,
     stackComponent,
     stackYaml,
+    stackComponentsToLoad,
     CradleTree(..),
     Callable(..)
     ) where
@@ -89,17 +90,21 @@ instance Show CabalType where
   show = show . Cabal
 
 data StackType
-    = StackType_ { _stackComponent :: !(Last String) , _stackYaml :: !(Last String) }
+    = StackType_
+        { _stackComponent :: !(Last String)
+        , _stackYaml :: !(Last String)
+        , _stackComponentsToLoad :: !(Maybe [String])
+        }
     deriving (Eq)
 
 instance Semigroup StackType where
-    StackType_ cr yr <> StackType_ cl yl = StackType_ (cr <> cl) (yr <> yl)
+    StackType_ cr yr zr <> StackType_ cl yl zl = StackType_ (cr <> cl) (yr <> yl) (zr <> zl)
 
 instance Monoid StackType where
-    mempty = StackType_ mempty mempty
+    mempty = StackType_ mempty mempty mempty
 
-pattern StackType :: Maybe String -> Maybe FilePath -> StackType
-pattern StackType { stackComponent, stackYaml } = StackType_ (Last stackComponent) (Last stackYaml)
+pattern StackType :: Maybe String -> Maybe FilePath -> Maybe [String] -> StackType
+pattern StackType { stackComponent, stackYaml, stackComponentsToLoad } = StackType_ (Last stackComponent) (Last stackYaml) stackComponentsToLoad
 {-# COMPLETE StackType #-}
 
 instance Show StackType where
@@ -168,13 +173,14 @@ fromYAMLConfig cradleYAML = Config $ CradleConfig (fromMaybe [] $ YAML.dependenc
 toCradleTree :: YAML.CradleComponent a -> CradleTree a
 toCradleTree (YAML.Multi cpts)  =
   Multi $ (\(YAML.MultiSubComponent fp' cfg) -> (fp', cradle $ fromYAMLConfig cfg)) <$> cpts
-toCradleTree (YAML.Stack (YAML.StackConfig yaml cpts)) =
+toCradleTree (YAML.Stack (YAML.StackConfig yaml csToLoad cpts)) =
   case cpts of
-    YAML.NoComponent          -> Stack $ StackType Nothing yaml
-    (YAML.SingleComponent c)  -> Stack $ StackType (Just c) yaml
-    (YAML.ManyComponents cs)  -> StackMulti (StackType Nothing yaml)
+    YAML.NoComponent          -> Stack $ StackType Nothing yaml csToLoad
+    (YAML.SingleComponent c)  -> Stack $ StackType (Just c) yaml csToLoad
+    (YAML.ManyComponents cs)  -> StackMulti (StackType Nothing yaml csToLoad)
                                             ((\(YAML.StackComponent fp' c cYAML) ->
-                                              (fp', StackType (Just c) cYAML)) <$> cs)
+                                              (fp', StackType (Just c) cYAML
+                                                    Nothing)) <$> cs)
 toCradleTree (YAML.Cabal (YAML.CabalConfig prjFile csToLoad cpts)) =
   case cpts of
     YAML.NoComponent          -> Cabal $ CabalType Nothing prjFile csToLoad

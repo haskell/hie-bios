@@ -232,7 +232,7 @@ inferCradleTree fp =
   where
   maybeItsBios = (\wdir -> (Bios (Program $ wdir </> ".hie-bios") Nothing Nothing, wdir)) <$> biosWorkDir fp
 
-  maybeItsStack = stackExecutable >> (Stack $ StackType Nothing Nothing,) <$> stackWorkDir fp
+  maybeItsStack = stackExecutable >> (Stack $ StackType Nothing Nothing Nothing,) <$> stackWorkDir fp
 
   maybeItsCabal = (Cabal $ CabalType Nothing Nothing Nothing,) <$> cabalWorkDir fp
 
