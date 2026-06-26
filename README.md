@@ -554,28 +554,29 @@ cradle:
 
 ## Selecting which components to load
 
-For `cabal` and `stack` cradles, tools using the `LoadUnitsFromCradle` load mode
-will load all the components listed, ignoring paths.
+For `cabal` and `stack` cradles, `hie-bios` supports asking for flags to load
+the components in the cradle at once. This is much faster than loading
+components on-demand at the cost of more memory usage if a component isn't
+actually needed. Support is conditional on underlying tool versions, and
+`hie-bios` will fall back to legacy loading otherwise.
 
-The additional field `componentsToLoad` can be used to override the list of components loaded via `LoadUnitsFromCradle`.
+The optional field `componentsToLoad` specifies which components should be loaded together, it defaults to all the explicitly listed components.
 
 ```yaml
 cradle:
-  config:
-    cabal:
-      componentsToLoad: ["lib:foo"]
-      components:
-        - {"path": "./src", "component": "lib:foo"}
-        - {"path": "./app", "component": "exe:foo"}
+  cabal:
+    componentsToLoad: ["lib:foo"]
+    components:
+      - {"path": "./src", "component": "lib:foo"}
+      - {"path": "./app", "component": "exe:foo"}
 ```
 
 The elements of `componentsToLoad` do not need to be also listed as individual components, though doing so might improve dependency tracking.
 
 ```yaml
 cradle:
-  config:
-    stack:
-      componentsToLoad: ["foo:lib","foo:exe"]
+  stack:
+    componentsToLoad: ["foo:lib","foo:exe"]
 ```
 
 ## Cradle Dependencies
@@ -636,6 +637,7 @@ The complete configuration is a subset of
 cradle:
   cabal:
     cabalProject: "optional path to project description"
+    componentsToLoad: ["cabal target1","cabal target2"]
     -- one or none of the following
     component: "optional component name"
     components:
@@ -643,6 +645,7 @@ cradle:
         component: "cabal target"
   stack:
     stackYaml: "optional path to stack yaml file"
+    componentsToLoad: ["stack target1","stack target2"]
     -- one or none of the following
     component: "optional component name"
     components:
