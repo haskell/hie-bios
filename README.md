@@ -552,6 +552,32 @@ cradle:
                             , { path: "./tests", component: "parser-tests" } ] } }
 ```
 
+## Selecting which components to load
+
+For `cabal` and `stack` cradles, tools using the `LoadUnitsFromCradle` load mode
+will load all the components listed, ignoring paths.
+
+The additional field `componentsToLoad` can be used to override the list of components loaded via `LoadUnitsFromCradle`.
+
+```yaml
+cradle:
+  config:
+    cabal:
+      componentsToLoad: ["lib:foo"]
+      components:
+        - {"path": "./src", "component": "lib:foo"}
+        - {"path": "./app", "component": "exe:foo"}
+```
+
+The elements of `componentsToLoad` do not need to be also listed as individual components, though doing so might improve dependency tracking.
+
+```yaml
+cradle:
+  config:
+    stack:
+      componentsToLoad: ["foo:lib","foo:exe"]
+```
+
 ## Cradle Dependencies
 
 Sometimes it is necessary to reload a component, for example when a package
@@ -609,9 +635,19 @@ The complete configuration is a subset of
 ```yaml
 cradle:
   cabal:
+    cabalProject: "optional path to project description"
+    -- one or none of the following
     component: "optional component name"
+    components:
+      - path: "path to package dir"
+        component: "cabal target"
   stack:
+    stackYaml: "optional path to stack yaml file"
+    -- one or none of the following
     component: "optional component name"
+    components:
+      - path: "path to package dir"
+        component: "stack target"
   bios:
     program: "program to run"
     dependency-program: "optional program to run"
