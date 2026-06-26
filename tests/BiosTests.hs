@@ -451,6 +451,8 @@ stackTestCases =
   , biosTestCase "multi-stack" $ runTestEnv "./multi-stack" $ do {- tests if both components can be loaded -}
       testDirectoryM isStackCradle "app/Main.hs"
       testDirectoryM isStackCradle "src/Lib.hs"
+  , biosTestCaseMulti "multi-stack-multi-modes" $ \ mode -> runTestEnv "./multi-stack" $ do
+      testDirectoryWithModeM mode isStackCradle "app/Main.hs"
   , biosTestCase "nested-stack" $ runTestEnv "./nested-stack" $ do
       stackAttemptLoad "sub-comp/Lib.hs"
       assertComponentOptions $ \opts ->
@@ -467,6 +469,24 @@ stackTestCases =
       {- tests if both components can be loaded -}
       testDirectoryM isStackCradle "appA/src/Lib.hs"
       testDirectoryM isStackCradle "appB/src/Lib.hs"
+  , biosTestCase "multi-stack-with-load" $ runTestEnv "multi-stack-with-load" $ do
+        testDirectoryWithModeM LoadUnitsFromCradle isStackCradle "appA/src/LibA.hs"
+        assertComponentOptions $ \ opts0 -> do
+          liftIO $ do
+            let opts = componentOptions opts0
+            unless (any ("appA" `isInfixOf`) opts) $
+              assertFailure $ "Missing appA: " ++ unwords opts
+            unless (all (not . ("appB" `isInfixOf`)) opts) $
+              assertFailure $ "Included appB: " ++ unwords opts
+  , biosTestCase "multi-stack-with-load-inferred" $ runTestEnv "multi-stack-with-load" $ do
+        testDirectoryWithModeM LoadUnitsInferred isStackCradle "appA/src/LibA.hs"
+        assertComponentOptions $ \ opts0 -> do
+          liftIO $ do
+            let opts = componentOptions opts0
+            unless (any ("appA" `isInfixOf`) opts) $
+              assertFailure $ "Missing appA: " ++ unwords opts
+            unless (any ("appB" `isInfixOf`) opts) $
+              assertFailure $ "Missing appB: " ++ unwords opts
   ,
     -- Test for special characters in the path for parsing of the ghci-scripts.
     -- Issue https://github.com/mpickering/hie-bios/issues/162
@@ -565,6 +585,7 @@ stackProjects =
   , ("tests" </> "projects" </> "implicit-stack-multi", "stack.yaml", ["."])
   , ("tests" </> "projects" </> "multi-stack-with-yaml", "stack-alt.yaml", ["appA", "appB"])
   , ("tests" </> "projects" </> "stack-with-yaml", "stack-alt.yaml", ["."])
+  , ("tests" </> "projects" </> "multi-stack-with-load", "stack.yaml", ["appA", "appB"])
   ]
 
 stackYaml :: String -> [FilePath] -> String

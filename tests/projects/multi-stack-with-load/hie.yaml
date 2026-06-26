@@ -1,0 +1,8 @@
+cradle:
+  stack:
+    componentsToLoad: ["appA:lib"]
+    components:
+            - path: appA/src
+              component: appA:lib
+            - path: appB/src
+              component: appB:lib

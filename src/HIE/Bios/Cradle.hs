@@ -58,6 +58,7 @@ import HIE.Bios.Cradle.Utils
 import HIE.Bios.Cradle.Cabal as Cabal
 import HIE.Bios.Cradle.Resolved
 import HIE.Bios.Cradle.ProgramVersions
+import Data.List.Extra (nubOrd)
 
 ----------------------------------------------------------------
 
@@ -190,7 +191,7 @@ resolveCradleAction :: Show a => LogAction IO (WithSeverity Log) -> (b -> Cradle
 resolveCradleAction l buildCustomCradle cs root cradle = addLoadModeLogToCradleAction $
   case concreteCradle cradle of
     ConcreteCabal t -> cabalCradle l cs root (cabalComponent t) (projectConfigFromMaybe root (cabalProjectFile t))
-    ConcreteStack t -> stackCradle l root (stackComponent t) (projectConfigFromMaybe root (stackYaml t))
+    ConcreteStack t -> stackCradle l cs root (stackComponent t) (projectConfigFromMaybe root (stackYaml t))
     ConcreteBios bios deps mbGhc -> biosCradle l cs root bios deps mbGhc
     ConcreteDirect xs -> directCradle l root xs
     ConcreteNone -> noneCradle
@@ -517,11 +518,11 @@ stackYamlLocationOrDefault (ExplicitConfig yaml) = yaml
 
 -- | Stack Cradle
 -- Works for by invoking `stack repl` with a wrapper script
-stackCradle :: LogAction IO (WithSeverity Log) ->  FilePath -> Maybe String -> CradleProjectConfig -> CradleAction a
-stackCradle l wdir mc syaml =
+stackCradle :: LogAction IO (WithSeverity Log) -> ResolvedCradles b -> FilePath -> Maybe String -> CradleProjectConfig -> CradleAction a
+stackCradle l cs wdir mc syaml =
   CradleAction
     { actionName = Types.Stack
-    , runCradle = stackAction wdir mc syaml l
+    , runCradle = stackAction wdir mc syaml l cs
     , runGhcCmd = \args -> runCradleResultT $ do
         -- Setup stack silently, since stack might print stuff to stdout in some cases (e.g. on Win)
         -- Issue 242 from HLS: https://github.com/haskell/haskell-language-server/issues/242
@@ -553,20 +554,40 @@ stackAction
   -> Maybe String
   -> CradleProjectConfig
   -> LogAction IO (WithSeverity Log)
+  -> ResolvedCradles a
   -> TargetWithContext
   -> LoadMode
   -> IO (CradleLoadResult ComponentOptions)
-stackAction workDir mc syaml l fpc loadStyle = do
+stackAction workDir mc syaml l cs fpc loadStyle = do
   let fp = targetFilePath fpc
   logCradleHasNoSupportForLoadFileWithContext l loadStyle "stack"
   let ghcProc args = proc "stack" (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
   -- Same wrapper works as with cabal
   wrapper_fp <- withGhcWrapperTool l ghcProc workDir
+  let
+    fallback = [ comp | Just comp <- [mc] ]
+    componentsToLoad = nubOrd <$> mconcat
+      [ comps
+      | ResolvedCradle{concreteCradle = ConcreteStack
+          (StackType {stackComponentsToLoad = comps})} <- resolvedCradles cs ]
+    allComponents = [ comp
+      | ResolvedCradle{concreteCradle = ConcreteStack
+          (StackType {stackComponent = Just comp})} <- resolvedCradles cs ]
+    -- for stack we do not include --test --bench to avoid triggering stack repl limitations.
+    inferred = []
+    components = case loadStyle of
+      LoadUnitsFromCradle
+        | Just comps <- componentsToLoad -> comps
+        | null allComponents -> inferred
+        | otherwise -> allComponents
+      LoadUnitsInferred -> inferred
+      LoadFile -> fallback
+      LoadFileWithContext -> fallback
   (ex1, _stdo, stde, [(_, maybeArgs)]) <-
     Process.readProcessWithOutputs [hie_bios_output] l workDir
       $ stackProcess syaml
           $  ["repl", "--no-nix-pure", "--with-ghc", wrapper_fp]
-          <> [ comp | Just comp <- [mc] ]
+             <> components
 
   (ex2, pkg_args, stdr, _) <-
     Process.readProcessWithOutputs [hie_bios_output] l workDir
