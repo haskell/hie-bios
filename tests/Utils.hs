@@ -12,6 +12,7 @@ module Utils (
 
   -- * Run Tests
   runTestEnv,
+  runTestModeEnv,
   runTestEnv',
   runTestEnvLocal,
 
@@ -28,6 +29,7 @@ module Utils (
   askStep,
   askLogger,
   askCradle,
+  askLoadMode,
   askLoadResult,
   askOrLoadLibDir,
   askLibDir,
@@ -43,11 +45,9 @@ module Utils (
   initCradle,
   initImplicitCradle,
   loadComponentOptions,
-  loadComponentOptionsWithMode,
   loadRuntimeGhcLibDir,
   loadRuntimeGhcVersion,
   loadFileGhc,
-  loadFileGhcWithMode,
   isCabalMultipleCompSupported',
 
   -- * Assertion helpers
@@ -66,7 +66,6 @@ module Utils (
 
   -- * High-level test helpers
   testDirectoryM,
-  testDirectoryWithModeM,
   testImplicitDirectoryM,
   testImplicitDirectoryWithContextM,
   findCradleForModuleM,
@@ -109,8 +108,9 @@ data TestConfig = TestConfig
   { useTemporaryDirectory :: Bool
   , testProjectRoots :: FilePath
   , testVerbose :: Bool
+  , testStepFunction :: String -> IO ()
+  , testLoadModeConfig :: LoadMode
   }
-  deriving (Eq, Show, Ord)
 
 data TestEnv ext = TestEnv
   { testCradleType :: Maybe (Cradle ext)
@@ -119,16 +119,27 @@ data TestEnv ext = TestEnv
   , testGhcVersionResult :: Maybe (CradleLoadResult String)
   , testRootDir :: FilePath
   , testLogger :: L.LogAction IO (L.WithSeverity HIE.Log)
+  , testLoadMode :: LoadMode
   }
 
 defConfig :: TestConfig
-defConfig = TestConfig True "./tests/projects" False
+defConfig =
+  TestConfig
+    { useTemporaryDirectory = True
+    , testProjectRoots = "./tests/projects"
+    , testVerbose = False
+    , testStepFunction = unLogAction logStringStderr
+    , testLoadModeConfig = LoadFile
+    }
 
-runTestEnv :: FilePath -> TestM a -> Bool -> IO a
-runTestEnv fp act verbose = runTestEnv' defConfig{testVerbose=verbose} fp act
+runTestEnv :: FilePath -> TestM a -> TestConfig -> IO a
+runTestEnv fp act testConf = runTestEnv' testConf fp act
 
-runTestEnvLocal :: FilePath -> TestM a -> Bool -> IO a
-runTestEnvLocal fp act verbose = runTestEnv' defConfig{useTemporaryDirectory = False,testVerbose=verbose} fp act
+runTestModeEnv :: FilePath -> LoadMode -> TestM a -> TestConfig -> IO a
+runTestModeEnv fp loadMode act testConf = runTestEnv' testConf{testLoadModeConfig=loadMode} fp act
+
+runTestEnvLocal :: FilePath -> TestM a -> TestConfig -> IO a
+runTestEnvLocal fp act testConf = runTestEnv' testConf{useTemporaryDirectory = False} fp act
 
 runTestEnv' :: TestConfig -> FilePath -> TestM a -> IO a
 runTestEnv' config root act = do
@@ -149,13 +160,14 @@ runTestEnv' config root act = do
           , testGhcVersionResult = Nothing
           , testRootDir = root'
           , testLogger = init_logger
+          , testLoadMode = testLoadModeConfig config
           }
   realRoot <- makeAbsolute $ testProjectRoots config </> root
   wrapper realRoot $ \root' -> flip evalStateT (mkEnv root') $ do
     step $ "Run test in: " <> root'
     act
   where
-    init_logger = L.logStringStderr
+    init_logger = LogAction (testStepFunction config)
       & L.cmap printLog
       & L.filterBySeverity (if testVerbose config then Debug else Error) getSeverity
     printLog (L.WithSeverity l sev) = "[" ++ show sev ++ "] " ++ show (pretty l)
@@ -251,6 +263,9 @@ askGhcVersionResult =
 askLogger :: TestM (L.LogAction IO (L.WithSeverity HIE.Log))
 askLogger = gets testLogger
 
+askLoadMode :: TestM LoadMode
+askLoadMode = gets testLoadMode
+
 -- ---------------------------------------------------------------------------
 -- Test setup helpers
 -- ---------------------------------------------------------------------------
@@ -293,21 +308,15 @@ initImplicitCradle fp = do
   crd <- liftIO $ loadImplicitCradle logger a_fp
   setCradle crd
 
-loadComponentOptions :: FilePath -> TestM ()
-loadComponentOptions fp = do
+loadComponentOptions :: FilePath -> [FilePath] -> TestM ()
+loadComponentOptions fp extraFps = do
   a_fp <- normFile fp
+  a_fps <- traverse normFile extraFps
   crd <- askCradle
-  step $ "Initialise flags for: " <> fp
-  clr <- liftIO $ getCompilerOptions (TargetWithContext a_fp []) LoadFile crd
-  setLoadResult clr
-
-
-loadComponentOptionsWithMode :: LoadMode -> FilePath -> [FilePath] -> TestM ()
-loadComponentOptionsWithMode mode fp fps = do
-  a_fp <- normFile fp
-  a_fps <- traverse normFile fps
-  crd <- askCradle
-  step $ "Initialise flags for: " <> fp <> " and " <> show fps
+  mode <- askLoadMode
+  step $ "Initialise flags for " <> fp <> " using " <> show mode
+  when (not $ null extraFps) $ do
+    step $ "Provided context: " <> show extraFps
   clr <- liftIO $ getCompilerOptions (TargetWithContext a_fp a_fps) mode crd
   setLoadResult clr
 
@@ -332,16 +341,13 @@ isCabalMultipleCompSupported' = do
   versions <- liftIO $ makeVersions (cradleLogger cr) root ((runGhcCmd . cradleOptsProg) cr)
   liftIO $ isCabalMultipleCompSupported versions
 
-loadFileGhc :: FilePath -> TestM ()
-loadFileGhc fp = loadFileGhcWithMode LoadFile fp []
-
-loadFileGhcWithMode :: LoadMode -> FilePath -> [FilePath] -> TestM ()
-loadFileGhcWithMode mode fp extraFps = do
+loadFileGhc :: FilePath -> [FilePath] -> TestM ()
+loadFileGhc fp extraFps = do
   libdir <- askOrLoadLibDir
   a_fp <- normFile fp
   stepF <- askStep
   step "Cradle load"
-  loadComponentOptionsWithMode mode fp extraFps
+  loadComponentOptions fp extraFps
   opts <- assertLoadSuccess
   liftIO $
     G.runGhc (Just libdir) $ do
@@ -430,30 +436,27 @@ assertCradleLoadError = \case
 -- ---------------------------------------------------------------------------
 
 testDirectoryM :: (Cradle Void -> Bool) -> FilePath -> TestM ()
-testDirectoryM = testDirectoryWithModeM LoadFile
-
-testDirectoryWithModeM :: LoadMode -> (Cradle Void -> Bool) -> FilePath -> TestM ()
-testDirectoryWithModeM mode cradlePred file = do
+testDirectoryM cradlePred file = do
   initCradle file
   assertCradle cradlePred
   loadRuntimeGhcLibDir
   assertLibDirVersion
   loadRuntimeGhcVersion
   assertGhcVersion
-  loadFileGhcWithMode mode file []
+  loadFileGhc file []
 
-testImplicitDirectoryM :: LoadMode -> (Cradle Void -> Bool) -> FilePath -> TestM ()
-testImplicitDirectoryM mode cradlePred file = testImplicitDirectoryWithContextM mode cradlePred file []
+testImplicitDirectoryM :: (Cradle Void -> Bool) -> FilePath -> TestM ()
+testImplicitDirectoryM cradlePred file = testImplicitDirectoryWithContextM cradlePred file []
 
-testImplicitDirectoryWithContextM :: LoadMode -> (Cradle Void -> Bool) -> FilePath -> [FilePath] -> TestM ()
-testImplicitDirectoryWithContextM mode cradlePred file ctxt = do
+testImplicitDirectoryWithContextM :: (Cradle Void -> Bool) -> FilePath -> [FilePath] -> TestM ()
+testImplicitDirectoryWithContextM cradlePred file ctxt = do
   initImplicitCradle file
   assertCradle cradlePred
   loadRuntimeGhcLibDir
   assertLibDirVersion
   loadRuntimeGhcVersion
   assertGhcVersion
-  loadFileGhcWithMode mode file ctxt
+  loadFileGhc file ctxt
 
 findCradleForModuleM :: FilePath -> Maybe FilePath -> TestM ()
 findCradleForModuleM fp expected' = do
