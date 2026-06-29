@@ -105,16 +105,18 @@ data MultiSubComponent a
 
 data CabalConfig
   = CabalConfig { cabalProject    :: Maybe FilePath
+                , cabalComponentsToLoad :: Maybe [String]
                 , cabalComponents :: OneOrManyComponents CabalComponent
                 }
 
 instance FromJSON CabalConfig where
-  parseJSON v@(Array _)     = CabalConfig Nothing . ManyComponents <$> parseJSON v
-  parseJSON v@(Object obj)  = (checkObjectKeys ["cabalProject", "component", "components"] obj)
+  parseJSON v@(Array _)     = CabalConfig Nothing Nothing . ManyComponents <$> parseJSON v
+  parseJSON v@(Object obj)  = (checkObjectKeys ["cabalProject", "component", "components", "componentsToLoad"] obj)
                                 *> (CabalConfig
                                   <$> obj .:? "cabalProject"
+                                  <*> obj .:? "componentsToLoad"
                                   <*> parseJSON v)
-  parseJSON Null            = pure $ CabalConfig Nothing NoComponent
+  parseJSON Null            = pure $ CabalConfig Nothing Nothing NoComponent
   parseJSON v               = typeMismatch "CabalConfig" v
 
 data CabalComponent
@@ -135,6 +137,7 @@ instance FromJSON CabalComponent where
 
 data StackConfig
   = StackConfig { stackYaml       :: Maybe FilePath
+                , stackComponentsToLoad :: Maybe [String]
                 , stackComponents :: OneOrManyComponents StackComponent
                 }
 
@@ -145,13 +148,14 @@ data StackComponent
                    }
 
 instance FromJSON StackConfig where
-  parseJSON v@(Array _)     = StackConfig Nothing . ManyComponents <$> parseJSON v
-  parseJSON v@(Object obj)  = (checkObjectKeys ["component", "components", "stackYaml"] obj)
+  parseJSON v@(Array _)     = StackConfig Nothing Nothing . ManyComponents <$> parseJSON v
+  parseJSON v@(Object obj)  = (checkObjectKeys ["component", "components", "stackYaml", "componentsToLoad"] obj)
                                 *> (StackConfig
                                       <$> obj .:? "stackYaml"
+                                      <*> obj .:? "componentsToLoad"
                                       <*> parseJSON v
                                     )
-  parseJSON Null            = pure $ StackConfig Nothing NoComponent
+  parseJSON Null            = pure $ StackConfig Nothing Nothing NoComponent
   parseJSON v               = typeMismatch "StackConfig" v
 
 instance FromJSON StackComponent where

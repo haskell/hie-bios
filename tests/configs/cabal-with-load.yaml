@@ -1,0 +1,3 @@
+cradle:
+  cabal:
+    componentsToLoad: ["lib:hie-bios","parser-tests","some-other"]

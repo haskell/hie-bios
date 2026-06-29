@@ -18,7 +18,7 @@ import HIE.Bios
 import HIE.Bios.Cradle
 import HIE.Bios.Cradle.Cabal (cabalBuildDir)
 import HIE.Bios.Types (LoadMode(..))
-import Control.Monad (forM_, forM)
+import Control.Monad (forM_, forM, unless)
 import Control.Monad.Extra (unlessM)
 import Control.Monad.IO.Class
 import Data.Foldable (for_)
@@ -369,6 +369,35 @@ cabalTestCases extraGhcDep =
         assertGhcVersion
         -- suffices to force loading cabal's `--enable-multi-repl` codepath
         loadFileGhcWithMode mode target []
+    , biosTestCase "multi-cabal-with-load" $ runTestEnv "multi-cabal-with-load" $ do
+        opts <- componentOptions <$> cabalLoadOptions LoadUnitsFromCradle "appA/src/Lib.hs"
+        liftIO $ do
+          unless (any ("appA" `isInfixOf`) opts) $
+            assertFailure $ "Missing appA: " ++ unwords opts
+          unless (all (not . ("appB" `isInfixOf`)) opts) $
+            assertFailure $ "Included appB: " ++ unwords opts
+    , biosTestCase "multi-cabal-with-load-inferred" $ runTestEnv "multi-cabal-with-load" $ do
+        -- LoadUnitsInferred should be unaffected by componentsToLoad
+        opts <- componentOptions <$> cabalLoadOptions LoadUnitsInferred "appA/src/Lib.hs"
+        liftIO $ do
+          unless (any ("appA" `isInfixOf`) opts) $
+            assertFailure $ "Missing appA: " ++ unwords opts
+          unless (any ("appB" `isInfixOf`) opts) $
+            assertFailure $ "Missing appB: " ++ unwords opts
+    , biosTestCase "cabal-with-load" $ runTestEnv "cabal-with-load" $ do
+        opts <- componentOptions <$> cabalLoadOptions LoadUnitsFromCradle "appA/src/Lib.hs"
+        liftIO $ do
+          unless (any ("appA" `isInfixOf`) opts) $
+            assertFailure $ "Missing appA: " ++ unwords opts
+          unless (all (not . ("appB" `isInfixOf`)) opts) $
+            assertFailure $ "Included appB: " ++ unwords opts
+    , biosTestCase "multi-cabal-with-load-superset" $ runTestEnv "multi-cabal-with-load-superset" $ do
+        opts <- componentOptions <$> cabalLoadOptions LoadUnitsFromCradle "appA/src/Lib.hs"
+        liftIO $ do
+          unless (any ("appA" `isInfixOf`) opts) $
+            assertFailure $ "Missing appA: " ++ unwords opts
+          unless (any ("appB" `isInfixOf`) opts) $
+            assertFailure $ "Missing appB: " ++ unwords opts
     ]
   ]
   where
@@ -422,6 +451,8 @@ stackTestCases =
   , biosTestCase "multi-stack" $ runTestEnv "./multi-stack" $ do {- tests if both components can be loaded -}
       testDirectoryM isStackCradle "app/Main.hs"
       testDirectoryM isStackCradle "src/Lib.hs"
+  , biosTestCaseMulti "multi-stack-multi-modes" $ \ mode -> runTestEnv "./multi-stack" $ do
+      testDirectoryWithModeM mode isStackCradle "app/Main.hs"
   , biosTestCase "nested-stack" $ runTestEnv "./nested-stack" $ do
       stackAttemptLoad "sub-comp/Lib.hs"
       assertComponentOptions $ \opts ->
@@ -438,6 +469,24 @@ stackTestCases =
       {- tests if both components can be loaded -}
       testDirectoryM isStackCradle "appA/src/Lib.hs"
       testDirectoryM isStackCradle "appB/src/Lib.hs"
+  , biosTestCase "multi-stack-with-load" $ runTestEnv "multi-stack-with-load" $ do
+        testDirectoryWithModeM LoadUnitsFromCradle isStackCradle "appA/src/LibA.hs"
+        assertComponentOptions $ \ opts0 -> do
+          liftIO $ do
+            let opts = componentOptions opts0
+            unless (any ("appA" `isInfixOf`) opts) $
+              assertFailure $ "Missing appA: " ++ unwords opts
+            unless (all (not . ("appB" `isInfixOf`)) opts) $
+              assertFailure $ "Included appB: " ++ unwords opts
+  , biosTestCase "multi-stack-with-load-inferred" $ runTestEnv "multi-stack-with-load" $ do
+        testDirectoryWithModeM LoadUnitsInferred isStackCradle "appA/src/LibA.hs"
+        assertComponentOptions $ \ opts0 -> do
+          liftIO $ do
+            let opts = componentOptions opts0
+            unless (any ("appA" `isInfixOf`) opts) $
+              assertFailure $ "Missing appA: " ++ unwords opts
+            unless (any ("appB" `isInfixOf`) opts) $
+              assertFailure $ "Missing appB: " ++ unwords opts
   ,
     -- Test for special characters in the path for parsing of the ghci-scripts.
     -- Issue https://github.com/mpickering/hie-bios/issues/162
@@ -536,6 +585,7 @@ stackProjects =
   , ("tests" </> "projects" </> "implicit-stack-multi", "stack.yaml", ["."])
   , ("tests" </> "projects" </> "multi-stack-with-yaml", "stack-alt.yaml", ["appA", "appB"])
   , ("tests" </> "projects" </> "stack-with-yaml", "stack-alt.yaml", ["."])
+  , ("tests" </> "projects" </> "multi-stack-with-load", "stack.yaml", ["appA", "appB"])
   ]
 
 stackYaml :: String -> [FilePath] -> String

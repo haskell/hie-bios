@@ -1,0 +1,9 @@
+cradle:
+  stack:
+    componentsToLoad: ["lib:hie-bios","parser-tests","some-other"]
+    stackYaml: "stack.extra.yaml"
+    components:
+      - path: "./src"
+        component: "lib:hie-bios"
+      - path: "./vendor"
+        component: "parser-tests"
