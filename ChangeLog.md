@@ -1,5 +1,14 @@
 # ChangeLog hie-bios
 
+## 2026-06-30 - 0.20.0
+
+* Hide LoadMode in TestM ([#516](https://github.com/haskell/hie-bios/pull/516))
+* "componentsToLoad" field ([#515](https://github.com/haskell/hie-bios/pull/515))
+* Fail hard if component(s) field have wrong type ([#513](https://github.com/haskell/hie-bios/pull/513))
+* Allow to build with GHC 10.1  ([#510](https://github.com/haskell/hie-bios/pull/510))
+* New Load Modes for upfront loading of cradle/project ([#508](https://github.com/haskell/hie-bios/pull/508))
+  * Implement full project loading
+
 ## 2026-04-15 - 0.19.0
 
 * Pass --builddir to avoid clobbering dist-newstyle ([#503](https://github.com/haskell/hie-bios/pull/503))
