@@ -14,6 +14,19 @@ extra-doc-files: ChangeLog.md
 extra-source-files:
   README.md
   tests/configs/*.yaml
+  tests/projects/cabal-with-custom-setup-old/a-with-custom/a-with-custom.cabal
+  tests/projects/cabal-with-custom-setup-old/a-with-custom/Setup.hs
+  tests/projects/cabal-with-custom-setup-old/a-with-custom/src/MyLib.hs
+  tests/projects/cabal-with-custom-setup-old/b/b.cabal
+  tests/projects/cabal-with-custom-setup-old/b/src/B.hs
+  tests/projects/cabal-with-custom-setup-old/b/tests/Main.hs
+  tests/projects/cabal-with-custom-setup-old/cabal.project
+  tests/projects/cabal-with-custom-setup/a-with-custom/a-with-custom.cabal
+  tests/projects/cabal-with-custom-setup/a-with-custom/Setup.hs
+  tests/projects/cabal-with-custom-setup/a-with-custom/src/MyLib.hs
+  tests/projects/cabal-with-custom-setup/b/b.cabal
+  tests/projects/cabal-with-custom-setup/b/src/B.hs
+  tests/projects/cabal-with-custom-setup/cabal.project
   tests/projects/cabal-with-ghc-and-project/cabal-with-ghc.cabal
   tests/projects/cabal-with-ghc-and-project/cabal.project.extra
   tests/projects/cabal-with-ghc-and-project/hie.yaml
@@ -252,6 +265,7 @@ test-suite bios-tests
     ghc,
     hie-bios,
     prettyprinter,
+    process,
     tasty,
     tasty-expected-failure,
     tasty-hunit,

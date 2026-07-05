@@ -1,0 +1,15 @@
+cabal-version:      3.0
+name:               a-with-custom
+version:            0.1.0.0
+build-type:         Custom
+
+custom-setup
+    setup-depends:
+        Cabal,
+        base
+
+library
+    exposed-modules:  MyLib
+    build-depends:    base
+    hs-source-dirs:   src
+    default-language: Haskell2010
