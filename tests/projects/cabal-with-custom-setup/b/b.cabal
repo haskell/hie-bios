@@ -1,0 +1,24 @@
+cabal-version:      3.0
+name:               b
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            NONE
+author:             fendor
+maintainer:         fendor@posteo.de
+-- copyright:
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common warnings
+    ghc-options: -Wall
+
+library
+    import:           warnings
+    exposed-modules:  B
+    -- other-modules:
+    -- other-extensions:
+    build-depends:    base, a-with-custom
+    hs-source-dirs:   src
+    default-language: Haskell2010

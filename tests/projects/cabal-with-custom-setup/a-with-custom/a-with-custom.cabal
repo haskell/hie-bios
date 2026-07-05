@@ -1,5 +1,5 @@
-cabal-version:      3.8
-name:               cabal-with-custom-setup
+cabal-version:      3.0
+name:               a-with-custom
 version:            0.1.0.0
 build-type:         Custom
 
