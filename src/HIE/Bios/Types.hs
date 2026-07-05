@@ -109,7 +109,8 @@ data Log
   | LogComputedCradleLoadMode !T.Text !TargetWithContext !LoadMode
   | LogLoadModeUnsupported !T.Text LoadMode !(Maybe T.Text)
   | LogCabalLoad !FilePath !(Maybe String) ![FilePath] ![FilePath]
-  | LogCabalLibraryTooOld [String]
+  | LogWithReplNotSupported [String]
+  | LogKeepTempFilesNotSupported [String]
   | LogCabalPath !T.Text
   deriving (Show)
 
@@ -163,9 +164,12 @@ instance Pretty Log where
           <> line <> indent 4 "from project: " <+> pretty projectFile
           <> line <> indent 4 "with prefixes:" <+> pretty prefixes
           <> line <> indent 4 "with actual loading files:" <+> pretty crs
-  pretty (LogCabalLibraryTooOld err) =
-    "'lib:Cabal' is too old to use '--with-repl' flag. Requires 'lib:Cabal' >= 3.15. Original error:" <> line
+  pretty (LogWithReplNotSupported err) =
+    "'lib:Cabal' is too old to use '--with-repl' flag. Requires 'lib:Cabal' >= 3.15. Likely caused by `build-type: Custom`. Original error:" <> line
       <> vcat (fmap pretty err)
+  pretty (LogKeepTempFilesNotSupported err) =
+    "'lib:Cabal' is too old to use '--keep-temp-files' flag. Likely caused by `build-type: Custom`. Original error:" <> line
+    <> vcat (fmap pretty err)
   pretty (LogCabalPath err) =
     "Could not parse json output of 'cabal path': "
       <> line <> indent 4 (pretty err)

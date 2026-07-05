@@ -157,20 +157,11 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
       pure LoadFile
     _ -> pure loadStyle
 
-  (cabalArgs, loadingFiles, extraDeps) <- processCabalLoadMode l cradles projectFile workDir mc fp determinedLoadMode
+  (cabalArgs, loadingFiles, extraDeps) <- processCabalLoadMode l cradles progVersions projectFile workDir mc fp determinedLoadMode
 
-  cabalFeatures <- determineCabalLoadFeature progVersions
-  let
-    cacheDir = cradleCacheDirResolved cradles
-    -- Used for @cabal >= 3.15@ but @lib:Cabal <3.15@, in custom setups.
-    mkFallbackCabalProc = cabalLoadFilesBefore315 l cacheDir progVersions projectFile workDir cabalArgs
-  cabalProc <- case cabalFeatures of
-    CabalWithRepl -> cabalLoadFilesWithRepl l cacheDir projectFile workDir cabalArgs
-    CabalWithGhcShimWrapper -> cabalLoadFilesBefore315 l cacheDir progVersions projectFile workDir cabalArgs
-
-  mResult <- runCabalToGetGhcOptions cabalProc mkFallbackCabalProc
+  mResult <- runCabalToGetGhcOptions progVersions cabalArgs
   case mResult of
-    Left (code, errorDetails) -> do
+    Left (cabalProc, code, errorDetails) -> do
       -- Provide some dependencies an IDE can look for to trigger a reload.
       -- Best effort. Assume the working directory is the
       -- root of the component, so we are right in trivial cases at least.
@@ -198,10 +189,9 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
             }
         Just (componentDir, ghc_args) -> do
           deps <- liftIO $ cabalCradleDependencies projectFile workDir componentDir
-          usesResponseFiles <- usesResponseFilesForAllGhcOptions progVersions
-          final_args <- case usesResponseFiles of
-            True -> liftIO $ expandGhcOptionResponseFile ghc_args
-            False -> pure ghc_args
+          final_args <- case loadModeUsesResponseFiles cabalArgs of
+            UsesResponseFiles -> liftIO $ expandGhcOptionResponseFile ghc_args
+            NoResponseFiles -> pure ghc_args
           CradleLoadResultT $ pure $ CradleSuccess
             ComponentOptions
               { componentOptions = final_args
@@ -209,19 +199,67 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
               , componentDependencies = nubOrd (deps <> extraDeps)
               }
   where
-    -- | Run the given cabal process to obtain ghc options.
-    -- In the special case of 'cabal >= 3.15' but 'lib:Cabal <3.15' (via custom-setups),
-    -- we gracefully fall back to the given action to create an alternative cabal process which
-    -- we use to find the ghc options.
+    -- | Try to obtain the ghc options using cabal.
+    --
+    -- First, we try what the user requested and what cabal supports.
+    -- For example, if the user requested to load multiple components at once, and cabal
+    -- is recent enough, we try to use @--with-repl --enable-multi-repl@.
+    -- We detect when certain cabal features are not supported. For example, for old
+    -- lib:Cabal versions, @--with-repl@ is not supported. In this case, we parse the error message
+    -- and fall back to the old `CabalWithGhcShimWrapper` version.
+    -- The ghc shim @--with-ghc@ might work with @--keep-temp-files@ if no custom cabal package is part
+    -- of the repl session, so we try to load that, and as a last resort, fall back to single component loading.
     runCabalToGetGhcOptions ::
-      Process.CreateProcess ->
-      CradleLoadResultT IO Process.CreateProcess ->
+      ProgramVersions ->
+      LoadModeTargets ->
       CradleLoadResultT IO
         (Either
-          (Int, ProcessErrorDetails)
+          (CreateProcess, Int, ProcessErrorDetails)
           ([String], ProcessErrorDetails)
         )
-    runCabalToGetGhcOptions cabalProc mkFallbackCabalProc = do
+    runCabalToGetGhcOptions progVersions cabalArgs = do
+      cabalFeatures <- determineCabalLoadFeature progVersions
+      let
+        cacheDir = cradleCacheDirResolved cradles
+        -- The preferred way of loading ghc-options. Requires cabal 3.16
+        cabalWithReplProc = cabalLoadFilesWithRepl l cacheDir projectFile workDir cabalArgs
+        -- Legacy way of loading ghc-options.
+        -- Supports multi-repl and the deprecated single file mode.
+        cabalWithGhcShimWrapper = cabalLoadFilesBefore315 l cacheDir progVersions projectFile workDir cabalArgs
+        -- Legacy way of loading ghc-options.
+        -- This should only be used for project with Custom setups that are older than lib:Cabal 3.16.
+        cabalWithGhcShimWrapperSingleTarget = cabalLoadFilesBefore315 l cacheDir progVersions projectFile workDir (demoteToSingleLoadModeTarget cabalArgs)
+
+      cabalProc <- case cabalFeatures of
+        CabalWithRepl -> cabalWithReplProc
+        CabalWithGhcShimWrapper -> cabalWithGhcShimWrapper
+
+      loadResult <- getCabalGhcOptions cabalProc
+      case loadResult of
+        -- Some fallback
+        Left (_, _, details)
+          -- Used for @cabal >= 3.15@ but @lib:Cabal <3.15@, in custom setups.
+          | isCabalLibraryInProjectTooOld (processStderr details) -> do
+              liftIO $ l <& WithSeverity (LogWithReplNotSupported (processStderr details)) Debug
+              shimResult <- getCabalGhcOptions =<< cabalWithGhcShimWrapper
+              case shimResult of
+                Left (_, _, shimDetails)
+                  | checkKeepTempFilesIsNotSupported shimDetails -> do
+                    liftIO $ l <& WithSeverity (LogKeepTempFilesNotSupported (processStdout shimDetails <> processStderr shimDetails)) Debug
+                    getCabalGhcOptions =<< cabalWithGhcShimWrapperSingleTarget
+                _ ->
+                  pure shimResult
+
+          | checkKeepTempFilesIsNotSupported details -> do
+              liftIO $ l <& WithSeverity (LogKeepTempFilesNotSupported (processStdout details <> processStderr details)) Debug
+              getCabalGhcOptions =<< cabalWithGhcShimWrapperSingleTarget
+
+        Left codeAndDetails -> do
+          pure $ Left codeAndDetails
+        Right argsAndDetails ->
+          pure $ Right argsAndDetails
+
+    getCabalGhcOptions cabalProc = do
       (ex, output, stde, [(_, maybeArgs)]) <- liftIO $ Process.readProcessWithOutputs [hie_bios_output] l workDir cabalProc
       let args = fromMaybe [] maybeArgs
       let errorDetails = ProcessErrorDetails
@@ -232,16 +270,16 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
             , processHieBiosEnvironment = hieBiosProcessEnv cabalProc
             }
       case ex of
-        ExitFailure{} | isCabalLibraryInProjectTooOld stde -> do
-          liftIO $ l <& WithSeverity (LogCabalLibraryTooOld stde) Debug
-          fallbackCabalProc <- mkFallbackCabalProc
-          runCabalToGetGhcOptions fallbackCabalProc mkFallbackCabalProc
         ExitFailure code -> do
-
-          pure $ Left (code, errorDetails)
+          pure $ Left (cabalProc, code, errorDetails)
         ExitSuccess ->
           pure $ Right (args, errorDetails)
 
+    checkKeepTempFilesIsNotSupported details =
+      -- See https://github.com/haskell/cabal/issues/12178 why we check stdout and stderr.
+      -- This is a forward compatible check to make sure this won't break accidentally in the future once
+      -- this ticket is fixed.
+      isKeepTempFilesNotSupported (processStdout details) || isKeepTempFilesNotSupported (processStderr details)
 
 runCabalGhcCmd :: ResolvedCradles a -> FilePath -> LogAction IO (WithSeverity Log) -> CradleProjectConfig -> [String] -> IO (CradleLoadResult String)
 runCabalGhcCmd cs wdir l projectFile args = runCradleResultT $ do
@@ -257,26 +295,24 @@ runCabalGhcCmd cs wdir l projectFile args = runCradleResultT $ do
       cabalProc <- cabalExecGhc l (cradleCacheDirResolved cs) vs projectFile wdir args
       Process.readProcessWithCwd' l cabalProc ""
 
-data LoadUnits = Inferred | FromCradle
-  deriving Eq
-
-processCabalLoadMode :: MonadIO m => LogAction IO (WithSeverity Log) -> ResolvedCradles a -> CradleProjectConfig -> [Char] -> Maybe FilePath -> TargetWithContext -> LoadMode -> m ([FilePath], [FilePath], [FilePath])
-processCabalLoadMode l cradles projectFile workDir mc fpc loadStyle = do
+processCabalLoadMode :: MonadIO m => LogAction IO (WithSeverity Log) -> ResolvedCradles a -> ProgramVersions -> CradleProjectConfig -> [Char] -> Maybe FilePath -> TargetWithContext -> LoadMode -> m (LoadModeTargets, [FilePath], [FilePath])
+processCabalLoadMode l cradles progVersions projectFile workDir mc fpc loadStyle = do
+  usesResponseFiles <- usesResponseFilesForAllGhcOptions progVersions
   (cabalArgs, loadingFiles, extraDeps) <- case loadStyle of
-        LoadFile -> pure ([fpModule], [fp], [])
+        LoadFile -> pure (SingleTarget fpModule usesResponseFiles, [fp], [])
         LoadFileWithContext  -> do
           let fps = targetContext fpc
           (modPairs, mergedDeps) <- moduleFilesFromSameProject fps
-          let allModPairs = nubOrd $ (fpModule, fp) : modPairs
-              allModules  = nubOrd $ fmap fst allModPairs
-              allFiles    = nubOrd $ fmap snd allModPairs
-          pure (["--enable-multi-repl"] ++ allModules, allFiles, mergedDeps)
-        LoadUnitsInferred    -> loadUnits Inferred
-        LoadUnitsFromCradle  -> loadUnits FromCradle
+          let
+            extraModules =      fmap fst modPairs
+            allFiles     = fp : fmap snd modPairs
+          pure (MultipleTargets fpModule extraModules NoExtraComponents usesResponseFiles, allFiles, mergedDeps)
+        LoadUnitsInferred    -> loadUnits usesResponseFiles Inferred
+        LoadUnitsFromCradle  -> loadUnits usesResponseFiles FromCradle
 
   liftIO $ l <& LogComputedCradleLoadMode "cabal" fpc loadStyle `WithSeverity` Info
   liftIO $ l <& LogCabalLoad fp mc (prefix <$> resolvedCradles cradles) loadingFiles `WithSeverity` Debug
-  pure (cabalArgs, loadingFiles, extraDeps)
+  pure (cabalArgs, nubOrd loadingFiles, extraDeps)
   where
     fpModule = fromMaybe (fixTargetPath fp) mc
     fp = targetFilePath fpc
@@ -320,7 +356,7 @@ processCabalLoadMode l cradles projectFile workDir mc fpc loadStyle = do
       let mergedDeps = nubOrd $ dynDeps ++ concat [ depsYaml | (_, _, depsYaml) <- selected ]
       pure ([comp | (comp,_,_) <- selected], mergedDeps)
 
-    loadUnits whichUnits0 = do
+    loadUnits usesResponseFiles whichUnits0 = do
       let
         componentsToLoad = do
           guard (whichUnits0 == FromCradle)
@@ -343,21 +379,24 @@ processCabalLoadMode l cradles projectFile workDir mc fpc loadStyle = do
 
       let fps = targetContext fpc
       (modPairs, mergedDeps0) <- moduleFilesFromSameProject fps
-      let allModPairs = nubOrd $ (fpModule, fp) : modPairs
-          allModules  = nubOrd $ fmap fst allModPairs
-          allFiles    = nubOrd $ fmap snd allModPairs
+      let
+        extraModules = nubOrd $      fmap fst modPairs
+        allFiles     = nubOrd $ fp : fmap snd modPairs
       let mergedDeps = mergedDeps0 ++ compDeps
-      let compArgs = case whichUnits of
-            (Inferred,_) -> enableFlags ++ ["all"]
-              where
-                enableFlags = case projectFile of
-                  NoExplicitConfig
-                    -> ["--enable-tests","--enable-benchmarks"]
-                  _ -> []
-            (FromCradle,units) -> units
-      pure (["--enable-multi-repl"] ++ compArgs ++ allModules, allFiles, mergedDeps)
+      let
+        extraComponents = case fst whichUnits of
+            Inferred -> case projectFile of
+              NoExplicitConfig -> LoadTestsAndBenchmarks
+              ExplicitConfig{} -> NoExtraComponents
+            FromCradle -> NoExtraComponents
 
-cabalLoadFilesWithRepl :: LogAction IO (WithSeverity Log) -> CacheDir -> CradleProjectConfig -> FilePath -> [String] -> CradleLoadResultT IO CreateProcess
+        withExtraTargets targetFiles = case whichUnits of
+          (Inferred, _) -> "all" : targetFiles
+          (FromCradle, units) -> units ++ targetFiles
+
+      pure (MultipleTargets fpModule (withExtraTargets extraModules) extraComponents usesResponseFiles, fp:allFiles, mergedDeps)
+
+cabalLoadFilesWithRepl :: LogAction IO (WithSeverity Log) -> CacheDir -> CradleProjectConfig -> FilePath -> LoadModeTargets -> CradleLoadResultT IO CreateProcess
 cabalLoadFilesWithRepl l cacheDir projectFile workDir args = do
   buildDir <- liftIO $ cabalBuildDir cacheDir workDir
   newEnvironment <- liftIO Process.getCleanEnvironment
@@ -367,8 +406,8 @@ cabalLoadFilesWithRepl l cacheDir projectFile workDir args = do
     cabalArgs =
       -- Don't clobber the user's 'dist-newstyle': pass --builddir (#501)
         [ "--builddir=" <> buildDir
-        , cabalCommand, "--keep-temp-files", "--with-repl", wrapper_fp
-        ] <> projectFileProcessArgs projectFile <> args
+        , cabalCommand, "--with-repl", wrapper_fp
+        ] <> projectFileProcessArgs projectFile <> renderLoadModeTargets CabalWithRepl args
   pure $
     (proc "cabal" cabalArgs)
       { env = Just newEnvironment
@@ -447,15 +486,10 @@ processCabalWrapperArgs args =
 -- them.
 -- ----------------------------------------------------------------------------
 
-cabalLoadFilesBefore315 :: LogAction IO (WithSeverity Log) -> CacheDir -> ProgramVersions -> CradleProjectConfig -> [Char] -> [String] -> CradleLoadResultT IO CreateProcess
-cabalLoadFilesBefore315 l cacheDir progVersions projectFile workDir args' = do
+cabalLoadFilesBefore315 :: LogAction IO (WithSeverity Log) -> CacheDir -> ProgramVersions -> CradleProjectConfig -> [Char] -> LoadModeTargets -> CradleLoadResultT IO CreateProcess
+cabalLoadFilesBefore315 l cacheDir progVersions projectFile workDir args = do
   let cabalCommand = "v2-repl"
-  cabal_version <- liftIO $ runCachedIO $ cabalVersion progVersions
-
-  let args = case cabal_version of
-        Just v | v < makeVersion [3,15] -> "--keep-temp-files" : args'
-        _ -> args'
-  cabalProcess l cacheDir progVersions projectFile workDir cabalCommand args `modCradleError` \err -> do
+  cabalProcess l cacheDir progVersions projectFile workDir cabalCommand (renderLoadModeTargets CabalWithGhcShimWrapper args) `modCradleError` \err -> do
     deps <- cabalCradleDependencies projectFile workDir workDir
     pure $ err {cradleErrorDependencies = cradleErrorDependencies err ++ deps}
 
@@ -705,9 +739,45 @@ callCabalPathForCompilerPath l cacheDir vs workDir projectFile = do
 -- Version and cabal capability checks
 -- ----------------------------------------------------------------------------
 
+data LoadUnits = Inferred | FromCradle
+  deriving Eq
+
+data WithTestsAndBenchmarks
+  = NoExtraComponents
+  | LoadTestsAndBenchmarks
+
+data LoadModeTargets
+  = SingleTarget
+      String
+      -- ^ Main Target FilePath or component
+      UsesResponseFiles
+      -- ^ Is this going to use top-level response files?
+  | MultipleTargets
+      String
+      -- ^ Main Target FilePath or component
+      [String]
+      -- ^ Extra targets to load alongside the main component
+      WithTestsAndBenchmarks
+      -- ^ Should we enable tests and benchmarks as well?
+      UsesResponseFiles
+      -- ^ Is this going to use top-level response files?
+
+loadModeUsesResponseFiles :: LoadModeTargets -> UsesResponseFiles
+loadModeUsesResponseFiles = \ case
+  SingleTarget _ usesResponseFiles -> usesResponseFiles
+  MultipleTargets _ _ _ usesResponseFiles -> usesResponseFiles
+
+demoteToSingleLoadModeTarget :: LoadModeTargets -> LoadModeTargets
+demoteToSingleLoadModeTarget (MultipleTargets mainTarget _ _ _) = SingleTarget mainTarget NoResponseFiles
+demoteToSingleLoadModeTarget (SingleTarget mainTarget _) = SingleTarget mainTarget NoResponseFiles
+
 data CabalLoadFeature
   = CabalWithRepl
   | CabalWithGhcShimWrapper
+
+data UsesResponseFiles
+  = UsesResponseFiles
+  | NoResponseFiles
 
 determineCabalLoadFeature :: MonadIO m => ProgramVersions -> m CabalLoadFeature
 determineCabalLoadFeature vs = do
@@ -738,17 +808,21 @@ determineCabalLoadFeature vs = do
 -- Then, later on in `cabal-3.17`, we use response files again.
 --
 -- 'usesResponseFilesForAllGhcOptions' encodes all of this history.
-usesResponseFilesForAllGhcOptions :: MonadIO m => ProgramVersions -> m Bool
+usesResponseFilesForAllGhcOptions :: MonadIO m => ProgramVersions -> m UsesResponseFiles
 usesResponseFilesForAllGhcOptions vs = do
   cabal_version <- liftIO $ runCachedIO $ cabalVersion vs
   -- determine which load style is supported by this cabal cradle.
   case cabal_version of
     Just ver
-      | ver >= makeVersion [3, 15] && ver <= makeVersion [3, 16, 0, 0] -> pure True
-      | ver >= makeVersion [3, 17] -> pure True
-      | otherwise -> pure False
-    _ -> pure False
+      | ver >= makeVersion [3, 15] && ver <= makeVersion [3, 16, 0, 0] -> pure UsesResponseFiles
+      | ver >= makeVersion [3, 17] -> pure UsesResponseFiles
+      | otherwise -> pure NoResponseFiles
+    _ -> pure NoResponseFiles
 
+renderResponseFileArgs :: UsesResponseFiles -> [[Char]]
+renderResponseFileArgs = \ case
+  UsesResponseFiles -> ["--keep-temp-files"]
+  NoResponseFiles -> []
 
 -- | When @cabal repl --with-repl@ is called in a project with a custom setup which forces
 -- an older @lib:Cabal@ version, then the error message looks roughly like:
@@ -766,7 +840,22 @@ usesResponseFilesForAllGhcOptions vs = do
 -- by using a @lib:Cabal@ version that doesn't support the @--with-repl@ flag.
 isCabalLibraryInProjectTooOld :: [String] -> Bool
 isCabalLibraryInProjectTooOld stderr =
-  "constraint from --with-repl requires >=3.15" `isInfixOf` unlines stderr
+  any ("constraint from --with-repl requires >=3.15" `isInfixOf`) stderr
+
+-- | Some @cabal@ versions don't support @--keep-temp-files@
+--
+-- @
+--  Configuring a-with-custom-0.1.0.0...
+--  unrecognized 'repl' option `--keep-temp-files'
+-- @
+--
+-- Can also occur with 'configure'.
+--
+-- We do a quick and dirty string comparison to check whether the error message looks like it has been caused
+-- by using a @--keep-temp-files@ version that doesn't support the @--keep-temp-files@ flag.
+isKeepTempFilesNotSupported :: [String] -> Bool
+isKeepTempFilesNotSupported stderr =
+  any (\ line -> all (`isInfixOf` line) ["unrecognized", "option `--keep-temp-files'"]) stderr
 
 isCabalPathSupported :: MonadIO m => ProgramVersions -> m Bool
 isCabalPathSupported vs = do
@@ -781,3 +870,24 @@ isCabalMultipleCompSupported vs = do
   case (cabal_version, ghc_version) of
     (Just cabal, Just ghc) -> pure $ ghc >= makeVersion [9, 4] && cabal >= makeVersion [3, 11]
     _ -> pure False
+
+renderWithTestsAndBenchmarks :: WithTestsAndBenchmarks -> [String]
+renderWithTestsAndBenchmarks = \ case
+  NoExtraComponents -> []
+  LoadTestsAndBenchmarks -> ["--enable-tests", "--enable-benchmarks"]
+
+renderLoadModeTargets :: CabalLoadFeature -> LoadModeTargets -> [String]
+renderLoadModeTargets CabalWithGhcShimWrapper = \ case
+  SingleTarget fp usesResponseFiles ->
+    -- If cabal version is recent enough, we even need to pass '--keep-temp-files'
+    -- when loading a single target
+    fp : renderResponseFileArgs usesResponseFiles
+  MultipleTargets mainTarget targets withTestsAndBenchmarks _usesResponseFiles ->
+    "--enable-multi-repl" : "--keep-temp-files" : renderWithTestsAndBenchmarks withTestsAndBenchmarks ++ nubOrd (mainTarget:targets)
+renderLoadModeTargets CabalWithRepl = \ case
+  SingleTarget fp _usesResponseFiles ->
+    -- We need to pass `--keep-temp-files` here as well as `with-repl` will invoke the script with a response file.
+    ["--keep-temp-files", fp]
+  MultipleTargets mainTarget targets withTestsAndBenchmarks _usesResponseFiles ->
+    "--enable-multi-repl" : "--keep-temp-files" : renderWithTestsAndBenchmarks withTestsAndBenchmarks ++ nubOrd (mainTarget:targets)
+

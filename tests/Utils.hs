@@ -41,6 +41,7 @@ module Utils (
   step,
   normFile,
   relFile,
+  mainTarget,
   findCradleLoc,
   initCradle,
   initCradleWithConfig,
@@ -49,7 +50,9 @@ module Utils (
   loadRuntimeGhcLibDir,
   loadRuntimeGhcVersion,
   loadFileGhc,
-  isCabalMultipleCompSupported',
+  isCabalMultipleCompSupportedM,
+  single,
+  ctx,
 
   -- * Assertion helpers
   assertCradle,
@@ -68,7 +71,6 @@ module Utils (
   -- * High-level test helpers
   testDirectoryM,
   testImplicitDirectoryM,
-  testImplicitDirectoryWithContextM,
   findCradleForModuleM,
 ) where
 
@@ -271,6 +273,12 @@ askLoadMode = gets testLoadMode
 -- Test setup helpers
 -- ---------------------------------------------------------------------------
 
+single :: FilePath -> TargetWithContext
+single fp = TargetWithContext fp []
+
+ctx :: FilePath -> [FilePath] -> TargetWithContext
+ctx fp fps = TargetWithContext fp fps
+
 step :: String -> TestM ()
 step msg = do
   s <- askStep
@@ -278,6 +286,9 @@ step msg = do
 
 normFile :: FilePath -> TestM FilePath
 normFile fp = (</> fp) <$> gets testRootDir
+
+mainTarget :: TargetWithContext -> TestM FilePath
+mainTarget target = (</> targetFilePath target) <$> gets testRootDir
 
 relFile :: FilePath -> TestM FilePath
 relFile fp = (`makeRelative` fp) <$> gets testRootDir
@@ -312,8 +323,8 @@ initImplicitCradle fp = do
   crd <- liftIO $ loadImplicitCradle logger a_fp
   setCradle crd
 
-loadComponentOptions :: FilePath -> [FilePath] -> TestM ()
-loadComponentOptions fp extraFps = do
+loadComponentOptions :: TargetWithContext -> TestM ()
+loadComponentOptions (TargetWithContext fp extraFps) = do
   a_fp <- normFile fp
   a_fps <- traverse normFile extraFps
   crd <- askCradle
@@ -338,20 +349,20 @@ loadRuntimeGhcVersion = do
   ghcVersionRes <- liftIO $ getRuntimeGhcVersion crd
   setGhcVersionResult ghcVersionRes
 
-isCabalMultipleCompSupported' :: TestM Bool
-isCabalMultipleCompSupported' = do
+isCabalMultipleCompSupportedM :: TestM Bool
+isCabalMultipleCompSupportedM = do
   cr <- askCradle
   root <- askRoot
   versions <- liftIO $ makeVersions (cradleLogger cr) root ((runGhcCmd . cradleOptsProg) cr)
   liftIO $ isCabalMultipleCompSupported versions
 
-loadFileGhc :: FilePath -> [FilePath] -> TestM ()
-loadFileGhc fp extraFps = do
+loadFileGhc :: TargetWithContext -> TestM ()
+loadFileGhc target = do
   libdir <- askOrLoadLibDir
-  a_fp <- normFile fp
+  a_fp <- mainTarget target
   stepF <- askStep
   step "Cradle load"
-  loadComponentOptions fp extraFps
+  loadComponentOptions target
   opts <- assertLoadSuccess
   root <- askRoot
   -- Tests run in parallel, so isolate the interface-file cache per test root.
@@ -442,28 +453,25 @@ assertCradleLoadError = \case
 -- High-level, re-usable assertions
 -- ---------------------------------------------------------------------------
 
-testDirectoryM :: (Cradle Void -> Bool) -> FilePath -> TestM ()
-testDirectoryM cradlePred file = do
-  initCradle file
+testDirectoryM :: (Cradle Void -> Bool) -> TargetWithContext -> TestM ()
+testDirectoryM cradlePred target = do
+  initCradle $ targetFilePath target
   assertCradle cradlePred
   loadRuntimeGhcLibDir
   assertLibDirVersion
   loadRuntimeGhcVersion
   assertGhcVersion
-  loadFileGhc file []
+  loadFileGhc target
 
-testImplicitDirectoryM :: (Cradle Void -> Bool) -> FilePath -> TestM ()
-testImplicitDirectoryM cradlePred file = testImplicitDirectoryWithContextM cradlePred file []
-
-testImplicitDirectoryWithContextM :: (Cradle Void -> Bool) -> FilePath -> [FilePath] -> TestM ()
-testImplicitDirectoryWithContextM cradlePred file ctxt = do
-  initImplicitCradle file
+testImplicitDirectoryM :: (Cradle Void -> Bool) -> TargetWithContext -> TestM ()
+testImplicitDirectoryM cradlePred target = do
+  initImplicitCradle $ targetFilePath target
   assertCradle cradlePred
   loadRuntimeGhcLibDir
   assertLibDirVersion
   loadRuntimeGhcVersion
   assertGhcVersion
-  loadFileGhc file ctxt
+  loadFileGhc target
 
 findCradleForModuleM :: FilePath -> Maybe FilePath -> TestM ()
 findCradleForModuleM fp expected' = do
