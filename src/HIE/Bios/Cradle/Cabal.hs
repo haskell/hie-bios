@@ -270,7 +270,7 @@ processCabalLoadMode l cradles projectFile workDir mc fpc loadStyle = do
           let allModPairs = nubOrd $ (fpModule, fp) : modPairs
               allModules  = nubOrd $ fmap fst allModPairs
               allFiles    = nubOrd $ fmap snd allModPairs
-          pure (["--enable-multi-repl"] ++ allModules, allFiles, mergedDeps)
+          pure (["--enable-multi-repl", "--keep-temp-files"] ++ allModules, allFiles, mergedDeps)
         LoadUnitsInferred    -> loadUnits Inferred
         LoadUnitsFromCradle  -> loadUnits FromCradle
 
@@ -355,7 +355,7 @@ processCabalLoadMode l cradles projectFile workDir mc fpc loadStyle = do
                     -> ["--enable-tests","--enable-benchmarks"]
                   _ -> []
             (FromCradle,units) -> units
-      pure (["--enable-multi-repl"] ++ compArgs ++ allModules, allFiles, mergedDeps)
+      pure (["--enable-multi-repl", "--keep-temp-files"] ++ compArgs ++ allModules, allFiles, mergedDeps)
 
 cabalLoadFilesWithRepl :: LogAction IO (WithSeverity Log) -> CradleProjectConfig -> FilePath -> [String] -> CradleLoadResultT IO CreateProcess
 cabalLoadFilesWithRepl l projectFile workDir args = do
@@ -367,7 +367,7 @@ cabalLoadFilesWithRepl l projectFile workDir args = do
     cabalArgs =
       -- Don't clobber the user's 'dist-newstyle': pass --builddir (#501)
         [ "--builddir=" <> buildDir
-        , cabalCommand, "--keep-temp-files", "--with-repl", wrapper_fp
+        , cabalCommand, "--with-repl", wrapper_fp
         ] <> projectFileProcessArgs projectFile <> args
   pure $
     (proc "cabal" cabalArgs)
@@ -448,13 +448,8 @@ processCabalWrapperArgs args =
 -- ----------------------------------------------------------------------------
 
 cabalLoadFilesBefore315 :: LogAction IO (WithSeverity Log) -> ProgramVersions -> CradleProjectConfig -> [Char] -> [String] -> CradleLoadResultT IO CreateProcess
-cabalLoadFilesBefore315 l progVersions projectFile workDir args' = do
+cabalLoadFilesBefore315 l progVersions projectFile workDir args = do
   let cabalCommand = "v2-repl"
-  cabal_version <- liftIO $ runCachedIO $ cabalVersion progVersions
-
-  let args = case cabal_version of
-        Just v | v < makeVersion [3,15] -> "--keep-temp-files" : args'
-        _ -> args'
   cabalProcess l progVersions projectFile workDir cabalCommand args `modCradleError` \err -> do
     deps <- cabalCradleDependencies projectFile workDir workDir
     pure $ err {cradleErrorDependencies = cradleErrorDependencies err ++ deps}
