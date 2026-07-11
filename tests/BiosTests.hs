@@ -4,6 +4,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE NumericUnderscores #-}
 module Main (main) where
 
 import Utils
@@ -18,6 +19,9 @@ import HIE.Bios
 import HIE.Bios.Cradle
 import HIE.Bios.Cradle.Cabal (cabalBuildDir)
 import HIE.Bios.Types (LoadMode(..))
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (replicateConcurrently)
+import Control.Exception (SomeException, evaluate, try)
 import Control.Monad (forM_, forM, unless, when)
 import Control.Monad.Extra (unlessM)
 import Control.Monad.IO.Class
@@ -29,9 +33,11 @@ import System.Directory
 import System.FilePath ((</>), makeRelative)
 import System.Info.Extra (isWindows)
 import System.IO (BufferMode (LineBuffering), hSetBuffering, stderr, stdout)
+import System.IO.Temp
 import qualified HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Cradle.Utils (expandGhcOptionResponseFile)
 import HIE.Bios.Environment (extractUnits)
+import HIE.Bios.Process (cacheFileIn)
 
 
 argDynamic :: [String]
@@ -81,6 +87,7 @@ main = do
     testGroup "Bios-tests"
       [ testGroup "Find cradle" findCradleTests
       , testGroup "Symlink" symbolicLinkTests
+      , testGroup "Cache files" cacheFileTests
       , testGroup "Loading tests"
         [ testGroup "bios" biosTestCases
         , testGroup "direct" directTestCases
@@ -134,6 +141,29 @@ symbolicLinkTests =
           assertFailure "Test invariant broken, this file must exist."
         loadComponentOptions "./c/A.hs" []
         assertLoadNone
+  ]
+
+-- | Concurrent 'cacheFileIn' calls can race on the same cache entry.
+cacheFileTests :: [TestTree]
+cacheFileTests =
+  [ testCase "cacheFile is atomic under concurrent calls" $ do
+      withSystemTempDirectory "hie-bios-cache-file-test" $ \testCacheDir -> do
+        let payloadPrefix = "#!/bin/sh\n"
+            payloadSuffix = concat (replicate 500 "echo 'cacheFile is atomic under concurrent calls'\n")
+            payload = payloadPrefix <> payloadSuffix
+            -- Pause mid-write so a non-atomic populate would expose a partial
+            -- file, and so all threads pile up on the entry concurrently.
+            populate fp = do
+              writeFile fp payloadPrefix
+              threadDelay 50_000 -- 50ms
+              appendFile fp payloadSuffix
+        results <- replicateConcurrently 16 $ try @SomeException $ do
+          fp <- cacheFileIn testCacheDir "ghc-pkg" "0123456789abcdef" populate
+          contents <- readFile fp
+          contents <$ evaluate (length contents)
+        forM_ results $ \case
+          Left err -> assertFailure $ "cacheFile threw: " <> show err
+          Right contents -> assertEqual "cached file contents" payload contents
   ]
 
 biosTestCases :: [TestTree]
