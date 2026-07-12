@@ -7,7 +7,11 @@
 module HIE.Bios.Cradle (
       findCradle
     , loadCradle
+    , loadCradleWithConfig
     , loadImplicitCradle
+    , loadImplicitCradleWithConfig
+    , CradleRunConfig(..)
+    , defaultCradleRunConfig
     , yamlConfig
     , defaultCradle
     , isCabalCradle
@@ -19,6 +23,7 @@ module HIE.Bios.Cradle (
     , isDefaultCradle
     , isOtherCradle
     , getCradle
+    , getCradleWithConfig
     , Process.readProcessWithOutputs
     , Process.readProcessWithCwd
     , makeCradleResult
@@ -49,6 +54,7 @@ import System.IO (hClose, hPutStr)
 import System.IO.Temp
 
 import HIE.Bios.Config
+import HIE.Bios.Environment (resolveCacheDir)
 import HIE.Bios.Types hiding (ActionName(..))
 import qualified HIE.Bios.Process as Process
 import qualified HIE.Bios.Types as Types
@@ -77,32 +83,45 @@ findCradle wfile = do
 
 -- | Given root\/hie.yaml load the Cradle.
 loadCradle :: LogAction IO (WithSeverity Log) -> FilePath -> IO (Cradle Void)
-loadCradle l = loadCradleWithOpts l absurd
+loadCradle l = loadCradleWithConfig l defaultCradleRunConfig
+
+-- | 'loadCradle' with an explicit 'CradleRunConfig'.
+loadCradleWithConfig :: LogAction IO (WithSeverity Log) -> CradleRunConfig -> FilePath -> IO (Cradle Void)
+loadCradleWithConfig l config = loadCradleWithOpts l config absurd
 
 -- | Given root\/foo\/bar.hs, load an implicit cradle
 loadImplicitCradle :: Show a => LogAction IO (WithSeverity Log) -> FilePath -> IO (Cradle a)
-loadImplicitCradle l wfile = do
+loadImplicitCradle l = loadImplicitCradleWithConfig l defaultCradleRunConfig
+
+-- | 'loadImplicitCradle' with an explicit 'CradleRunConfig'.
+loadImplicitCradleWithConfig :: Show a => LogAction IO (WithSeverity Log) -> CradleRunConfig -> FilePath -> IO (Cradle a)
+loadImplicitCradleWithConfig l config wfile = do
   let wdir = takeDirectory wfile
   cfg <- runMaybeT (implicitConfig wdir)
   case cfg of
-    Just bc -> getCradle l absurd bc
+    Just bc -> getCradleWithConfig l config absurd bc
     Nothing -> return $ defaultCradle l wdir
 
 -- | Finding 'Cradle'.
 --   Find a cabal file by tracing ancestor directories.
 --   Find a sandbox according to a cabal sandbox config
 --   in a cabal directory.
-loadCradleWithOpts :: (Yaml.FromJSON b, Show a) => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> IO (Cradle a)
-loadCradleWithOpts l buildCustomCradle wfile = do
+loadCradleWithOpts :: (Yaml.FromJSON b, Show a) => LogAction IO (WithSeverity Log) -> CradleRunConfig -> (b -> CradleAction a) -> FilePath -> IO (Cradle a)
+loadCradleWithOpts l config buildCustomCradle wfile = do
     cradleConfig <- readCradleConfig wfile
     l <& WithSeverity (LogAny $ T.pack $ "Cradle Config: " ++ show cradleConfig) Debug
-    getCradle l buildCustomCradle (cradleConfig, takeDirectory wfile)
+    getCradleWithConfig l config buildCustomCradle (cradleConfig, takeDirectory wfile)
 
 getCradle :: Show a => LogAction IO (WithSeverity Log) ->  (b -> CradleAction a) -> (CradleConfig b, FilePath) -> IO (Cradle a)
-getCradle l buildCustomCradle (cc, wdir) = do
+getCradle l = getCradleWithConfig l defaultCradleRunConfig
+
+-- | 'getCradle' with an explicit 'CradleRunConfig'.
+getCradleWithConfig :: Show a => LogAction IO (WithSeverity Log) -> CradleRunConfig -> (b -> CradleAction a) -> (CradleConfig b, FilePath) -> IO (Cradle a)
+getCradleWithConfig l config buildCustomCradle (cc, wdir) = do
     rcs <- canonicalizeResolvedCradles wdir cs
     liftIO $ l <& WithSeverity (LogAny . T.pack $ "Resolved Cradles " ++ show ((fmap . fmap) (const ()) rcs)) Debug
-    resolvedCradlesToCradle l buildCustomCradle wdir rcs
+    cacheDir <- resolveCacheDir "" (cradleCacheDir config)
+    resolvedCradlesToCradle l buildCustomCradle wdir cacheDir rcs
   where
     cs = resolveCradleTree wdir cc
 
@@ -114,8 +133,8 @@ addActionDeps deps =
       (\(ComponentOptions os' dir ds) -> CradleSuccess (ComponentOptions os' dir (ds `union` deps)))
 
 
-resolvedCradlesToCradle :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> [ResolvedCradle b] -> IO (Cradle a)
-resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
+resolvedCradlesToCradle :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> FilePath -> [ResolvedCradle b] -> IO (Cradle a)
+resolvedCradlesToCradle logger buildCustomCradle root cacheDir cs = mdo
   let run_ghc_cmd args =
         -- We're being lazy here and just returning the ghc path for the
         -- first non-none cradle. This shouldn't matter in practice: all
@@ -127,7 +146,7 @@ resolvedCradlesToCradle logger buildCustomCradle root cs = mdo
               act
               args
   versions <- makeVersions logger root run_ghc_cmd
-  let rcs = ResolvedCradles root cs versions
+  let rcs = ResolvedCradles root cs versions cacheDir
       cradleActions = [ (c, resolveCradleAction logger buildCustomCradle rcs root c) | c <- cs ]
       err_msg (TargetWithContext fp fps)
         = ["Multi Cradle: No prefixes matched"
@@ -563,7 +582,7 @@ stackAction workDir mc syaml l cs fpc loadStyle = do
   logCradleHasNoSupportForLoadFileWithContext l loadStyle "stack"
   let ghcProc args = proc "stack" (stackYamlProcessArgs syaml <> ["exec", "ghc", "--"] <> args)
   -- Same wrapper works as with cabal
-  wrapper_fp <- withGhcWrapperTool l ghcProc workDir
+  wrapper_fp <- withGhcWrapperTool l (cradleCacheDirResolved cs) ghcProc workDir
   let
     fallback = [ comp | Just comp <- [mc] ]
     componentsToLoad = nubOrd <$> mconcat

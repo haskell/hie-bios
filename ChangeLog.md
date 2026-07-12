@@ -1,5 +1,7 @@
 # ChangeLog hie-bios
 
+## Unreleased
+
 ## 2026-06-30 - 0.20.0
 
 * Hide LoadMode in TestM ([#516](https://github.com/haskell/hie-bios/pull/516))

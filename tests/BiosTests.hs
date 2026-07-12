@@ -36,7 +36,7 @@ import System.IO (BufferMode (LineBuffering), hSetBuffering, stderr, stdout)
 import System.IO.Temp
 import qualified HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Cradle.Utils (expandGhcOptionResponseFile)
-import HIE.Bios.Environment (extractUnits)
+import HIE.Bios.Environment (extractUnits, getCacheDir)
 import HIE.Bios.Process (cacheFileIn)
 
 
@@ -241,7 +241,9 @@ cabalTestCases extraGhcDep =
       initCradle "B.hs"
       assertCradle isCabalCradle
       root <- askRoot
-      buildDir <- liftIO $ cabalBuildDir root
+      buildDir <- liftIO $ do
+        cacheDir <- makeAbsolute =<< getCacheDir ""
+        cabalBuildDir cacheDir root
       -- use --multi-repl, as that was the codepath with the bug
       loadFileGhc "B.hs" []
       liftIO $ do
@@ -251,6 +253,16 @@ cabalTestCases extraGhcDep =
         -- Check we are using the correct build directory
         buildDirExists <- doesDirectoryExist buildDir
         assertBool "build dir does not exist" buildDirExists
+  , biosTestCase "custom cache dir" $ runTestEnv "./simple-cabal" $
+      withSystemTempDirectory "hie-bios-custom-cache-dir" $ \cacheRoot -> do
+        initCradleWithConfig defaultCradleRunConfig { cradleCacheDir = Just cacheRoot } "B.hs"
+        assertCradle isCabalCradle
+        loadComponentOptions "B.hs" []
+        _ <- assertLoadSuccess
+        liftIO $ do
+          entries <- listDirectory cacheRoot
+          assertBool ("cache entries under the configured dir: " <> show entries)
+            (any (\e -> "wrapper" `isInfixOf` e || "dist-" `isPrefixOf` e) entries)
   , biosTestCaseAll "nested-cabal" $ runTestEnv "./nested-cabal" $ do
       attemptCabalSingleTargetLoad "sub-comp/Lib.hs"
       mode <- askLoadMode

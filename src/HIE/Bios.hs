@@ -14,7 +14,11 @@ module HIE.Bios (
   , CradleError(..)
   , findCradle
   , loadCradle
+  , loadCradleWithConfig
   , loadImplicitCradle
+  , loadImplicitCradleWithConfig
+  , CradleRunConfig(..)
+  , defaultCradleRunConfig
   , defaultCradle
   -- * Compiler Options
   , ComponentOptions(..)

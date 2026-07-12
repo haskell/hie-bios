@@ -43,6 +43,7 @@ module Utils (
   relFile,
   findCradleLoc,
   initCradle,
+  initCradleWithConfig,
   initImplicitCradle,
   loadComponentOptions,
   loadRuntimeGhcLibDir,
@@ -287,7 +288,10 @@ findCradleLoc fp = do
   liftIO $ findCradle a_fp
 
 initCradle :: FilePath -> TestM ()
-initCradle fp = do
+initCradle = initCradleWithConfig defaultCradleRunConfig
+
+initCradleWithConfig :: CradleRunConfig -> FilePath -> TestM ()
+initCradleWithConfig config fp = do
   a_fp <- normFile fp
   step $ "Finding Cradle for: " <> fp
   mcfg <- findCradleLoc a_fp
@@ -295,8 +299,8 @@ initCradle fp = do
   step $ "Loading Cradle: " <> show relMcfg
   logger <- askLogger
   crd <- case mcfg of
-    Just cfg -> liftIO $ loadCradle logger cfg
-    Nothing -> liftIO $ loadImplicitCradle logger a_fp
+    Just cfg -> liftIO $ loadCradleWithConfig logger config cfg
+    Nothing -> liftIO $ loadImplicitCradleWithConfig logger config a_fp
   step $ "Cradle: " ++ show crd
   setCradle crd
 

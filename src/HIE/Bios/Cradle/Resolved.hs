@@ -14,6 +14,7 @@ data ResolvedCradles a = ResolvedCradles
  { cradleRoot :: FilePath
  , resolvedCradles :: [ResolvedCradle a] -- ^ In order of decreasing specificity
  , cradleProgramVersions :: ProgramVersions
+ , cradleCacheDirResolved :: FilePath
  }
 
 -- | 'ConcreteCradle' augmented with information on which file the
