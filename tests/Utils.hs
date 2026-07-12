@@ -353,9 +353,12 @@ loadFileGhc fp extraFps = do
   step "Cradle load"
   loadComponentOptions fp extraFps
   opts <- assertLoadSuccess
+  root <- askRoot
+  -- Tests run in parallel, so isolate the interface-file cache per test root.
+  let ifaceCacheRoot = root </> "ghc-iface-cache"
   liftIO $
     G.runGhc (Just libdir) $ do
-      let (ini, _) = initSessionWithMessage' True (Just G.batchMsg) opts
+      let (ini, _) = initSessionWithMessage' (Just ifaceCacheRoot) (Just G.batchMsg) opts
       sf <- ini
       case sf of
         -- Test resetting the targets

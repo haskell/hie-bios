@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards, CPP #-}
 {-# LANGUAGE TupleSections #-}
-module HIE.Bios.Environment (initSession, initSession', getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, getCacheDir, addCmdOpts, extractUnits) where
+module HIE.Bios.Environment (initSession, initSession', getRuntimeGhcLibDir, getRuntimeGhcVersion, makeDynFlagsAbsolute, makeTargetsAbsolute, getCacheDir, resolveCacheDir, addCmdOpts, extractUnits) where
 
 import GHC (GhcMonad)
 import qualified GHC as G
@@ -37,21 +37,20 @@ import Data.Maybe (fromMaybe)
 initSession :: (GhcMonad m)
     => ComponentOptions
     -> m [G.Target]
-initSession = initSession' False
+initSession = initSession' Nothing
 
+-- | 'initSession' with caches placed under the given root instead of resolved
+-- from the environment.
 initSession' :: (GhcMonad m)
-    => Bool
+    => Maybe FilePath
     -> ComponentOptions
     -> m [G.Target]
-initSession' workAroundThreadUnsafety ComponentOptions {..} = do
+initSession' mCacheRoot ComponentOptions {..} = do
     -- Create a unique folder per set of different GHC options, assuming that each different set of
     -- GHC options will create incompatible interface files.
-    let
-      -- There seems to be a race condition when writing interface files
-      hash_args = (if workAroundThreadUnsafety then (componentRoot :) else id) componentOptions
-      opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init $ map B.pack hash_args
+    let opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init $ map B.pack componentOptions
 
-    cache_dir <- liftIO $ makeAbsolute =<< getCacheDir opts_hash
+    cache_dir <- liftIO $ resolveCacheDir opts_hash mCacheRoot
 
     -- Plan:
     -- - Extract `-unit @resp_file` options if present
@@ -173,6 +172,12 @@ getCacheDir fp = do
   cacheBaseDir <- maybe (getXdgDirectory XdgCache cacheDir) return
                          mbEnvCacheDirectory
   return (cacheBaseDir </> fp)
+
+-- | Resolve a cache directory root, appending @suffix@ and making it absolute.
+-- An explicit path is used as given. 'Nothing' falls back to 'getCacheDir'.
+resolveCacheDir :: FilePath -> Maybe FilePath -> IO FilePath
+resolveCacheDir suffix mCacheRoot =
+  makeAbsolute =<< maybe (getCacheDir suffix) (pure . (</> suffix)) mCacheRoot
 
 ----------------------------------------------------------------
 
