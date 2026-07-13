@@ -18,7 +18,7 @@ import HIE.Bios
 import HIE.Bios.Cradle
 import HIE.Bios.Cradle.Cabal (cabalBuildDir)
 import HIE.Bios.Types (LoadMode(..))
-import Control.Monad (forM_, forM, unless)
+import Control.Monad (forM_, forM, unless, when)
 import Control.Monad.Extra (unlessM)
 import Control.Monad.IO.Class
 import Data.Foldable (for_)
@@ -69,6 +69,10 @@ main = do
   cabalDep <- checkToolIsAvailable "cabal"
   extraGhcDep <- checkToolIsAvailable extraGhc
 
+  -- Pre-create the shared extraGhc cabal store. The parallel tests otherwise
+  -- race to initialise it and can fail with "package.db already exists".
+  when (toolExists cabalDep && toolExists extraGhcDep) warmupExtraGhcStore
+
   defaultMainWithIngredients (ignoreToolTests:verboseLogging:defaultIngredients) $
     -- Run tests sequentially on Windows, to avoid issues with locking of the
     -- package database, e.g. errors of the form:
@@ -84,6 +88,16 @@ main = do
         , ignoreOnUnsupportedGhc $ testGroupWithDependency stackDep stackTestCases
         ]
       ]
+
+-- | Load a cabal-with-ghc cradle once to create the extraGhc store. The result
+-- is ignored; only the store-creation side effect matters. See 'main'.
+warmupExtraGhcStore :: IO ()
+warmupExtraGhcStore =
+  runTestEnv "./cabal-with-ghc"
+    (do
+      initCradle "src/MyLib.hs"
+      loadComponentOptions "src/MyLib.hs" [])
+    defConfig
 
 symbolicLinkTests :: [TestTree]
 symbolicLinkTests =
