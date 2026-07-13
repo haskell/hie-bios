@@ -94,9 +94,7 @@ main = do
 warmupExtraGhcStore :: IO ()
 warmupExtraGhcStore =
   runTestEnv "./cabal-with-ghc"
-    (do
-      initCradle "src/MyLib.hs"
-      loadComponentOptions "src/MyLib.hs" [])
+    (initCradle "src/MyLib.hs" *> loadComponentOptions "src/MyLib.hs" [])
     defConfig
 
 symbolicLinkTests :: [TestTree]
