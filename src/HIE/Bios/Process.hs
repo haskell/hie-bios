@@ -162,8 +162,8 @@ cacheFile fpName srcHash populate = do
 
 -- | 'cacheFile' with the cache directory given explicitly instead of resolved
 -- from the environment.
-cacheFileIn :: FilePath -> FilePath -> String -> (FilePath -> IO ()) -> IO FilePath
-cacheFileIn cacheDir fpName srcHash populate = do
+cacheFileIn :: CacheDir -> FilePath -> String -> (FilePath -> IO ()) -> IO FilePath
+cacheFileIn (CacheDir cacheDir) fpName srcHash populate = do
   createDirectoryIfMissing True cacheDir
   let newFpName = cacheDir </> (dropExtensions fpName <> "-" <> srcHash) <.> takeExtensions fpName
   -- Concurrent loads race to create the same cache entry, so serialize them on

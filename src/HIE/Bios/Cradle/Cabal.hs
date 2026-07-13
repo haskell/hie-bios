@@ -357,7 +357,7 @@ processCabalLoadMode l cradles projectFile workDir mc fpc loadStyle = do
             (FromCradle,units) -> units
       pure (["--enable-multi-repl"] ++ compArgs ++ allModules, allFiles, mergedDeps)
 
-cabalLoadFilesWithRepl :: LogAction IO (WithSeverity Log) -> FilePath -> CradleProjectConfig -> FilePath -> [String] -> CradleLoadResultT IO CreateProcess
+cabalLoadFilesWithRepl :: LogAction IO (WithSeverity Log) -> CacheDir -> CradleProjectConfig -> FilePath -> [String] -> CradleLoadResultT IO CreateProcess
 cabalLoadFilesWithRepl l cacheDir projectFile workDir args = do
   buildDir <- liftIO $ cabalBuildDir cacheDir workDir
   newEnvironment <- liftIO Process.getCleanEnvironment
@@ -447,7 +447,7 @@ processCabalWrapperArgs args =
 -- them.
 -- ----------------------------------------------------------------------------
 
-cabalLoadFilesBefore315 :: LogAction IO (WithSeverity Log) -> FilePath -> ProgramVersions -> CradleProjectConfig -> [Char] -> [String] -> CradleLoadResultT IO CreateProcess
+cabalLoadFilesBefore315 :: LogAction IO (WithSeverity Log) -> CacheDir -> ProgramVersions -> CradleProjectConfig -> [Char] -> [String] -> CradleLoadResultT IO CreateProcess
 cabalLoadFilesBefore315 l cacheDir progVersions projectFile workDir args' = do
   let cabalCommand = "v2-repl"
   cabal_version <- liftIO $ runCachedIO $ cabalVersion progVersions
@@ -468,7 +468,7 @@ cabalLoadFilesBefore315 l cacheDir progVersions projectFile workDir args' = do
 -- to the custom ghc wrapper via 'hie_bios_ghc' environment variable which
 -- the custom ghc wrapper may use as a fallback if it can not respond to certain
 -- queries, such as ghc version or location of the libdir.
-cabalProcess :: LogAction IO (WithSeverity Log) -> FilePath -> ProgramVersions -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
+cabalProcess :: LogAction IO (WithSeverity Log) -> CacheDir -> ProgramVersions -> CradleProjectConfig -> FilePath -> String -> [String] -> CradleLoadResultT IO CreateProcess
 cabalProcess l cacheDir vs cabalProject workDir command args = do
   ghcDirs@(ghcBin, libdir) <- callCabalPathForCompilerPath l cacheDir vs workDir cabalProject >>= \case
     Just p -> do
@@ -555,7 +555,7 @@ cabalGhcDirs l cabalProject workDir = do
 --
 -- Here, we restore the wrapper-shims, if necessary, thus the returned filepath
 -- can be passed to 'cabal' without further modifications.
-withGhcPkgTool :: FilePath -> FilePath -> FilePath -> IO FilePath
+withGhcPkgTool :: CacheDir -> FilePath -> FilePath -> IO FilePath
 withGhcPkgTool cacheDir ghcPathAbs libdir = do
   let ghcName = takeFileName ghcPathAbs
       -- TODO: check for existence
@@ -607,7 +607,7 @@ type GhcProc = [String] -> CreateProcess
 -- | Generate a fake GHC that can be passed to cabal or stack
 -- when run with --interactive, it will print out its
 -- command-line arguments and exit
-withGhcWrapperTool :: LogAction IO (WithSeverity Log) -> FilePath -> GhcProc -> FilePath -> IO FilePath
+withGhcWrapperTool :: LogAction IO (WithSeverity Log) -> CacheDir -> GhcProc -> FilePath -> IO FilePath
 withGhcWrapperTool l cacheDir mkGhcCall wdir = do
   withWrapperTool l cacheDir mkGhcCall wdir "wrapper" cabalWrapperHs cabalWrapper
 
@@ -617,11 +617,11 @@ withGhcWrapperTool l cacheDir mkGhcCall wdir = do
 --
 -- 'GhcProc' is unused on other platforms.
 --
-withReplWrapperTool :: LogAction IO (WithSeverity Log) -> FilePath -> GhcProc -> FilePath -> IO FilePath
+withReplWrapperTool :: LogAction IO (WithSeverity Log) -> CacheDir -> GhcProc -> FilePath -> IO FilePath
 withReplWrapperTool l cacheDir mkGhcCall wdir =
   withWrapperTool l cacheDir mkGhcCall wdir "repl-wrapper" cabalWithReplWrapperHs cabalWithReplWrapper
 
-withWrapperTool :: LogAction IO (WithSeverity Log) -> FilePath -> GhcProc -> String -> FilePath -> String -> String -> IO FilePath
+withWrapperTool :: LogAction IO (WithSeverity Log) -> CacheDir -> GhcProc -> String -> FilePath -> String -> String -> IO FilePath
 withWrapperTool l cacheDir mkGhcCall wdir baseName windowsWrapper unixWrapper = do
   let wrapperContents = if isWindows then windowsWrapper else unixWrapper
       withExtension fp = if isWindows then fp <.> "exe" else fp
@@ -659,8 +659,8 @@ projectLocationOrDefault = \case
 
 -- | Given the cache root and the work directory, get the build dir we are
 -- using for cabal.
-cabalBuildDir :: FilePath -> FilePath -> IO FilePath
-cabalBuildDir cacheDir workDir = do
+cabalBuildDir :: CacheDir -> FilePath -> IO FilePath
+cabalBuildDir (CacheDir cacheDir) workDir = do
   abs_work_dir <- makeAbsolute workDir
   let dirHash = show (fingerprintString abs_work_dir)
   pure $ cacheDir </> ("dist-" <> filter (not . isSpace) (takeBaseName abs_work_dir)<>"-"<>dirHash)
@@ -678,11 +678,11 @@ findCabalFiles wdir = do
 -- cabal process wrappers and helpers
 -- ----------------------------------------------------------------------------
 
-cabalExecGhc :: LogAction IO (WithSeverity Log) -> FilePath -> ProgramVersions -> CradleProjectConfig -> FilePath -> [String] -> CradleLoadResultT IO CreateProcess
+cabalExecGhc :: LogAction IO (WithSeverity Log) -> CacheDir -> ProgramVersions -> CradleProjectConfig -> FilePath -> [String] -> CradleLoadResultT IO CreateProcess
 cabalExecGhc l cacheDir vs projectFile wdir args = do
   cabalProcess l cacheDir vs projectFile wdir "v2-exec" $ ["ghc", "-v0", "--"] ++ args
 
-callCabalPathForCompilerPath :: LogAction IO (WithSeverity Log) -> FilePath -> ProgramVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
+callCabalPathForCompilerPath :: LogAction IO (WithSeverity Log) -> CacheDir -> ProgramVersions -> FilePath -> CradleProjectConfig -> CradleLoadResultT IO (Maybe FilePath)
 callCabalPathForCompilerPath l cacheDir vs workDir projectFile = do
   isCabalPathSupported vs >>= \case
     False -> pure Nothing

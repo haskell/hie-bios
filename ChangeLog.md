@@ -5,7 +5,7 @@
 * Make cacheFile thread-safe using file locks ([#520](https://github.com/haskell/hie-bios/pull/520)).
 * Make functions take the used cache directory explicitly ([#520](https://github.com/haskell/hie-bios/pull/520)).
   * Add *WithConfig functions.
-  * Adjust existing functions to take the cache directory.
+  * Adjust existing functions to take a cache directory.
   * Replace thread-unsafety workaround of initSession' and
     initSessionWithMessage' with the cache directory argument.
 

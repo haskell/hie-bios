@@ -54,7 +54,7 @@ initSessionWithMessage = initSessionWithMessage' Nothing
 -- | 'initSessionWithMessage' with the interface-file cache placed under the
 -- given root, see 'initSession''.
 initSessionWithMessage' :: (GhcMonad m)
-            => Maybe FilePath
+            => Maybe CacheDir
             -> Maybe G.Messager
             -> ComponentOptions
             -> (m G.SuccessFlag, ComponentOptions)

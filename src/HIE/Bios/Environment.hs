@@ -42,7 +42,7 @@ initSession = initSession' Nothing
 -- | 'initSession' with caches placed under the given root instead of resolved
 -- from the environment.
 initSession' :: (GhcMonad m)
-    => Maybe FilePath
+    => Maybe CacheDir
     -> ComponentOptions
     -> m [G.Target]
 initSession' mCacheRoot ComponentOptions {..} = do
@@ -166,18 +166,21 @@ however, it's not really necessary as
 -- | Prepends the cache directory used by the library to the supplied file path.
 -- It tries to use the path under the environment variable `$HIE_BIOS_CACHE_DIR`
 -- and falls back to the standard `$XDG_CACHE_HOME/hie-bios` if the former is not set
-getCacheDir :: FilePath -> IO FilePath
+getCacheDir :: FilePath -> IO CacheDir
 getCacheDir fp = do
   mbEnvCacheDirectory <- lookupEnv "HIE_BIOS_CACHE_DIR"
   cacheBaseDir <- maybe (getXdgDirectory XdgCache cacheDir) return
                          mbEnvCacheDirectory
-  return (cacheBaseDir </> fp)
+  return (CacheDir (cacheBaseDir </> fp))
 
 -- | Resolve a cache directory root, appending @suffix@ and making it absolute.
 -- An explicit path is used as given. 'Nothing' falls back to 'getCacheDir'.
-resolveCacheDir :: FilePath -> Maybe FilePath -> IO FilePath
-resolveCacheDir suffix mCacheRoot =
-  makeAbsolute =<< maybe (getCacheDir suffix) (pure . (</> suffix)) mCacheRoot
+resolveCacheDir :: FilePath -> Maybe CacheDir -> IO CacheDir
+resolveCacheDir suffix mCacheRoot = do
+  resolved <- case mCacheRoot of
+    Nothing -> fmap unCacheDir (getCacheDir suffix)
+    Just cacheRoot -> pure ((</> suffix) (unCacheDir cacheRoot))
+  fmap CacheDir (makeAbsolute resolved)
 
 ----------------------------------------------------------------
 
@@ -196,9 +199,9 @@ setIgnoreInterfacePragmas df = Gap.gopt_set df G.Opt_IgnoreInterfacePragmas
 setVerbosity :: Int -> G.DynFlags -> G.DynFlags
 setVerbosity n df = df { G.verbosity = n }
 
-writeInterfaceFiles :: Maybe FilePath -> G.DynFlags -> G.DynFlags
+writeInterfaceFiles :: Maybe CacheDir -> G.DynFlags -> G.DynFlags
 writeInterfaceFiles Nothing df = df
-writeInterfaceFiles (Just hi_dir) df = setHiDir hi_dir (Gap.gopt_set df G.Opt_WriteInterface)
+writeInterfaceFiles (Just (CacheDir hi_dir)) df = setHiDir hi_dir (Gap.gopt_set df G.Opt_WriteInterface)
 
 setHiDir :: FilePath -> G.DynFlags -> G.DynFlags
 setHiDir f d = d { G.hiDir      = Just f}

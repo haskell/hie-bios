@@ -18,7 +18,7 @@ import qualified Test.Tasty.Runners     as Tasty
 import HIE.Bios
 import HIE.Bios.Cradle
 import HIE.Bios.Cradle.Cabal (cabalBuildDir)
-import HIE.Bios.Types (LoadMode(..))
+import HIE.Bios.Types (LoadMode(..), CacheDir (..))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (replicateConcurrently)
 import Control.Exception (SomeException, evaluate, try)
@@ -158,7 +158,7 @@ cacheFileTests =
               threadDelay 50_000 -- 50ms
               appendFile fp payloadSuffix
         results <- replicateConcurrently 16 $ try @SomeException $ do
-          fp <- cacheFileIn testCacheDir "ghc-pkg" "0123456789abcdef" populate
+          fp <- cacheFileIn (CacheDir testCacheDir) "ghc-pkg" "0123456789abcdef" populate
           contents <- readFile fp
           contents <$ evaluate (length contents)
         forM_ results $ \case
@@ -242,7 +242,7 @@ cabalTestCases extraGhcDep =
       assertCradle isCabalCradle
       root <- askRoot
       buildDir <- liftIO $ do
-        cacheDir <- makeAbsolute =<< getCacheDir ""
+        cacheDir <- (fmap CacheDir . makeAbsolute . unCacheDir) =<< getCacheDir ""
         cabalBuildDir cacheDir root
       -- use --multi-repl, as that was the codepath with the bug
       loadFileGhc "B.hs" []
@@ -255,7 +255,7 @@ cabalTestCases extraGhcDep =
         assertBool "build dir does not exist" buildDirExists
   , biosTestCase "custom cache dir" $ runTestEnv "./simple-cabal" $
       withSystemTempDirectory "hie-bios-custom-cache-dir" $ \cacheRoot -> do
-        initCradleWithConfig defaultCradleRunConfig { cradleCacheDir = Just cacheRoot } "B.hs"
+        initCradleWithConfig defaultCradleRunConfig { cradleCacheDir = Just (CacheDir cacheRoot) } "B.hs"
         assertCradle isCabalCradle
         loadComponentOptions "B.hs" []
         _ <- assertLoadSuccess

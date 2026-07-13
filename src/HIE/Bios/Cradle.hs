@@ -133,7 +133,7 @@ addActionDeps deps =
       (\(ComponentOptions os' dir ds) -> CradleSuccess (ComponentOptions os' dir (ds `union` deps)))
 
 
-resolvedCradlesToCradle :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> FilePath -> [ResolvedCradle b] -> IO (Cradle a)
+resolvedCradlesToCradle :: Show a => LogAction IO (WithSeverity Log) -> (b -> CradleAction a) -> FilePath -> CacheDir -> [ResolvedCradle b] -> IO (Cradle a)
 resolvedCradlesToCradle logger buildCustomCradle root cacheDir cs = mdo
   let run_ghc_cmd args =
         -- We're being lazy here and just returning the ghc path for the
