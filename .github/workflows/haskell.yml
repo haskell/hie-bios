@@ -68,9 +68,11 @@ jobs:
     - name: Build
       run: cabal build
     - name: Test Parser
+      timeout-minutes: 15
       run: cabal test parser-tests --test-show-details=direct
     - name: Test Bios
       # Run all tests in the project
+      timeout-minutes: 60
       run: cabal test bios-tests --test-show-details=direct --test-options="--ignore-tool-deps --debug"
 
   sdist:
