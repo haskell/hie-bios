@@ -1,3 +1,5 @@
-packages: ./
+packages:
+    a-with-custom/
+    b/
 
 allow-newer: base, containers

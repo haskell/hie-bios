@@ -362,21 +362,12 @@ cabalTestCases extraGhcDep =
         -- an older lib:Cabal version that doesn't support '--with-repl'.
         -- This test doesn't hurt for other cases as well, so we enable it for
         -- all configurations.
-        testDirectoryM isCabalCradle "src/MyLib.hs"
-    , biosTestCaseMulti "force older Cabal version in custom setup with multi mode" $ runTestEnv "cabal-with-custom-setup" $ do
-        -- Specifically tests whether cabal 3.16 works as expected with
-        -- an older lib:Cabal version that doesn't support '--with-repl'.
-        -- This test doesn't hurt for other cases as well, so we enable it for
-        -- all configurations.
-        let target = "src/MyLib.hs"
-        initCradle target
-        assertCradle isCabalCradle
-        loadRuntimeGhcLibDir
-        assertLibDirVersion
-        loadRuntimeGhcVersion
-        assertGhcVersion
-        -- suffices to force loading cabal's `--enable-multi-repl` codepath
-        loadFileGhc target []
+        testDirectoryM isCabalCradle "a-with-custom/src/MyLib.hs"
+    , testGroup "custom package and simple package"
+        [ biosTestCase "LoadFileWithContext" $ multiProjectCustomSetupTest LoadFileWithContext
+        , expectFailBecause "Can't load custom package and simple package in parallel" $ biosTestCase "LoadUnitsFromCradle" $ multiProjectCustomSetupTest LoadUnitsFromCradle
+        , expectFailBecause "Can't load custom package and simple package in parallel" $ biosTestCase "LoadUnitsInferred" $ multiProjectCustomSetupTest LoadUnitsInferred
+        ]
     , biosTestCase "multi-cabal-with-load" $ runTestModeEnv "multi-cabal-with-load" LoadUnitsFromCradle $ do
         opts <- componentOptions <$> cabalLoadOptions  "appA/src/Lib.hs"
         liftIO $ do
@@ -552,6 +543,21 @@ findCradleTests =
     cradleFileTest testName dir fpTarget result = biosTestCase testName $ do
       runTestEnv dir $ do
         findCradleForModuleM fpTarget result
+
+multiProjectCustomSetupTest :: LoadMode -> TestConfig -> IO ()
+multiProjectCustomSetupTest mode = runTestModeEnv "cabal-with-custom-setup" mode $ do
+  -- Specifically tests whether cabal 3.16 works as expected with
+  -- an older lib:Cabal version that doesn't support '--with-repl'.
+  -- This test doesn't hurt for other cases as well, so we enable it for
+  -- all configurations.
+  let b = "b/src/B.hs"
+  initCradle b
+  assertCradle isCabalCradle
+  loadRuntimeGhcLibDir
+  assertLibDirVersion
+  loadRuntimeGhcVersion
+  assertGhcVersion
+  loadFileGhc b []
 
 -- ------------------------------------------------------------------
 -- Unit-test Helper functions
