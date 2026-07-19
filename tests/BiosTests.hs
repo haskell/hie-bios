@@ -36,7 +36,7 @@ import System.IO (BufferMode (LineBuffering), hSetBuffering, stderr, stdout)
 import System.IO.Temp
 import qualified HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Cradle.Utils (expandGhcOptionResponseFile)
-import HIE.Bios.Environment (extractUnits, getCacheDir)
+import HIE.Bios.Environment (extractUnits, resolveCacheDir)
 import HIE.Bios.Process (cacheFileIn)
 
 
@@ -242,7 +242,7 @@ cabalTestCases extraGhcDep =
       assertCradle isCabalCradle
       root <- askRoot
       buildDir <- liftIO $ do
-        cacheDir <- (fmap CacheDir . makeAbsolute . unCacheDir) =<< getCacheDir ""
+        cacheDir <- resolveCacheDir "" Nothing
         cabalBuildDir cacheDir root
       -- use --multi-repl, as that was the codepath with the bug
       loadFileGhc "B.hs" []
