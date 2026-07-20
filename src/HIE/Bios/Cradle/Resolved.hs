@@ -7,6 +7,7 @@ module HIE.Bios.Cradle.Resolved
 
 import HIE.Bios.Cradle.ProgramVersions
 import HIE.Bios.Config
+import HIE.Bios.Types
 
 -- | The final cradle config that specifies the cradle for
 -- each prefix we know how to handle
@@ -14,6 +15,7 @@ data ResolvedCradles a = ResolvedCradles
  { cradleRoot :: FilePath
  , resolvedCradles :: [ResolvedCradle a] -- ^ In order of decreasing specificity
  , cradleProgramVersions :: ProgramVersions
+ , cradleCacheDirResolved :: CacheDir
  }
 
 -- | 'ConcreteCradle' augmented with information on which file the

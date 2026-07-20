@@ -191,6 +191,7 @@ library
     exceptions ^>=0.10,
     extra >=1.6.14 && <1.9,
     file-embed >=0.0.11 && <1,
+    filelock >=0.1.1 && <0.2,
     filepath >=1.4.1 && <1.6,
     ghc >=9.2.1 && <10.2,
     prettyprinter ^>=1.6 || ^>=1.7.0,
@@ -242,6 +243,7 @@ test-suite bios-tests
   type: exitcode-stdio-1.0
   default-language: Haskell2010
   build-depends:
+    async,
     base,
     co-log-core,
     directory,

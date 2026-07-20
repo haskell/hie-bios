@@ -49,15 +49,17 @@ initSessionWithMessage :: (GhcMonad m)
             => Maybe G.Messager
             -> ComponentOptions
             -> (m G.SuccessFlag, ComponentOptions)
-initSessionWithMessage = initSessionWithMessage' False
+initSessionWithMessage = initSessionWithMessage' Nothing
 
+-- | 'initSessionWithMessage' with the interface-file cache placed under the
+-- given root, see 'initSession''.
 initSessionWithMessage' :: (GhcMonad m)
-            => Bool
+            => Maybe CacheDir
             -> Maybe G.Messager
             -> ComponentOptions
             -> (m G.SuccessFlag, ComponentOptions)
-initSessionWithMessage' workAroundThreadUnsafety msg compOpts = (do
-    targets <- initSession' workAroundThreadUnsafety compOpts
+initSessionWithMessage' mCacheRoot msg compOpts = (do
+    targets <- initSession' mCacheRoot compOpts
     G.setTargets targets
     -- Get the module graph using the function `getModuleGraph`
     mod_graph <- G.depanal [] True

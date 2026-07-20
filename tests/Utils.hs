@@ -43,6 +43,7 @@ module Utils (
   relFile,
   findCradleLoc,
   initCradle,
+  initCradleWithConfig,
   initImplicitCradle,
   loadComponentOptions,
   loadRuntimeGhcLibDir,
@@ -287,7 +288,10 @@ findCradleLoc fp = do
   liftIO $ findCradle a_fp
 
 initCradle :: FilePath -> TestM ()
-initCradle fp = do
+initCradle = initCradleWithConfig defaultCradleRunConfig
+
+initCradleWithConfig :: CradleRunConfig -> FilePath -> TestM ()
+initCradleWithConfig config fp = do
   a_fp <- normFile fp
   step $ "Finding Cradle for: " <> fp
   mcfg <- findCradleLoc a_fp
@@ -295,8 +299,8 @@ initCradle fp = do
   step $ "Loading Cradle: " <> show relMcfg
   logger <- askLogger
   crd <- case mcfg of
-    Just cfg -> liftIO $ loadCradle logger cfg
-    Nothing -> liftIO $ loadImplicitCradle logger a_fp
+    Just cfg -> liftIO $ loadCradleWithConfig logger config cfg
+    Nothing -> liftIO $ loadImplicitCradleWithConfig logger config a_fp
   step $ "Cradle: " ++ show crd
   setCradle crd
 
@@ -349,9 +353,12 @@ loadFileGhc fp extraFps = do
   step "Cradle load"
   loadComponentOptions fp extraFps
   opts <- assertLoadSuccess
+  root <- askRoot
+  -- Tests run in parallel, so isolate the interface-file cache per test root.
+  let ifaceCacheRoot = CacheDir (root </> "ghc-iface-cache")
   liftIO $
     G.runGhc (Just libdir) $ do
-      let (ini, _) = initSessionWithMessage' True (Just G.batchMsg) opts
+      let (ini, _) = initSessionWithMessage' (Just ifaceCacheRoot) (Just G.batchMsg) opts
       sf <- ini
       case sf of
         -- Test resetting the targets

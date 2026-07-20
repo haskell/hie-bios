@@ -11,6 +11,7 @@ module HIE.Bios.Process
   , getCleanEnvironment
   -- * File Caching
   , cacheFile
+  , cacheFileIn
   -- * Find file utilities
   , findFileUpwards
   , findFileUpwardsPredicate
@@ -36,6 +37,7 @@ import qualified Data.HashMap.Strict as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import System.Environment
+import System.FileLock
 import System.FilePath
 import System.IO (hClose, hGetContents, hSetBuffering, BufferMode(LineBuffering), withFile, IOMode(..))
 import System.IO.Error (isPermissionError)
@@ -156,14 +158,24 @@ readProcessWithOutputs outputNames l workDir cp = flip runContT return $ do
 cacheFile :: FilePath -> String -> (FilePath -> IO ()) -> IO FilePath
 cacheFile fpName srcHash populate = do
   cacheDir <- getCacheDir ""
+  cacheFileIn cacheDir fpName srcHash populate
+
+-- | 'cacheFile' with the cache directory given explicitly instead of resolved
+-- from the environment.
+cacheFileIn :: CacheDir -> FilePath -> String -> (FilePath -> IO ()) -> IO FilePath
+cacheFileIn (CacheDir cacheDir) fpName srcHash populate = do
   createDirectoryIfMissing True cacheDir
   let newFpName = cacheDir </> (dropExtensions fpName <> "-" <> srcHash) <.> takeExtensions fpName
-  unlessM (doesFileExist newFpName) $ do
-    populate newFpName
-    setMode newFpName
+  -- Concurrent loads race to create the same cache entry, so serialize them on
+  -- a lock. Populate into a temp file and rename to keep it atomic as well.
+  withFileLock (newFpName <.> "lock") Exclusive $ \_ ->
+    unlessM (doesFileExist newFpName) $
+      withTempFile cacheDir (takeFileName newFpName) $ \tmpFile tmpHandle -> do
+        hClose tmpHandle
+        populate tmpFile
+        setFileMode tmpFile accessModes
+        renamePath tmpFile newFpName
   pure newFpName
-  where
-    setMode wrapper_fp = setFileMode wrapper_fp accessModes
 
 ------------------------------------------------------------------------------
 -- Utilities
@@ -219,4 +231,3 @@ removeFileIfExists :: FilePath -> IO ()
 removeFileIfExists f = do
   yes <- doesFileExist f
   when yes (removeFile f)
-

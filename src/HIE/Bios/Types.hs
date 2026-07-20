@@ -3,6 +3,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module HIE.Bios.Types where
 
 import           System.Exit
@@ -14,6 +16,7 @@ import           Control.Monad.Trans.Class
 import qualified Control.Monad.Fail as Fail
 #endif
 import           Data.Maybe (fromMaybe)
+import           Data.String
 import qualified Data.Text as T
 import           Prettyprinter
 import           System.Process.Extra (CreateProcess (env, cmdspec), CmdSpec (..), showCommandForUser)
@@ -203,6 +206,21 @@ data LoadMode
   | LoadUnitsInferred
   | LoadUnitsFromCradle
   deriving (Eq,Ord,Enum,Bounded,Show)
+
+newtype CacheDir = CacheDir { unCacheDir :: FilePath }
+ deriving (Show, Eq)
+ deriving newtype (IsString)
+
+-- | Configuration for constructing and running a 'Cradle'.
+data CradleRunConfig = CradleRunConfig
+  { cradleCacheDir :: Maybe CacheDir
+  -- ^ Root directory for cache artefacts produced while running the cradle.
+  -- 'Nothing' falls back to @$HIE_BIOS_CACHE_DIR@, or the XDG cache
+  -- directory if that is unset. See 'resolveCacheDir'.
+  } deriving (Show, Eq)
+
+defaultCradleRunConfig :: CradleRunConfig
+defaultCradleRunConfig = CradleRunConfig { cradleCacheDir = Nothing }
 
 data CradleAction a = CradleAction {
                         actionName    :: ActionName a
