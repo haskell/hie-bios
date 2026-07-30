@@ -1,7 +1,9 @@
 # ChangeLog hie-bios
 
-## Unreleased
+## 2026-07-30 - 0.21.0
 
+* Add a CI timeout on tests ([#521](https://github.com/haskell/hie-bios/pull/521)).
+* Consistently pass '--keep-temp-files' ([#519](https://github.com/haskell/hie-bios/pull/519)).
 * Make cacheFile thread-safe using file locks ([#520](https://github.com/haskell/hie-bios/pull/520)).
 * Make functions take the used cache directory explicitly ([#520](https://github.com/haskell/hie-bios/pull/520)).
   * Add *WithConfig functions.
