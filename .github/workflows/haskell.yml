@@ -33,12 +33,12 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - id:   extra-ghc
-      uses: haskell-actions/setup@v2
+      uses: haskell-actions/setup@v2.11.0
       with:
         cabal-version: ${{ matrix.cabal }}
         ghc-version: '9.4.8' # This needs to be in-sync with 'extraGhcVersion'
 
-    - uses: haskell-actions/setup@v2
+    - uses: haskell-actions/setup@v2.11.0
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
@@ -79,7 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
-    - uses: haskell-actions/setup@v2
+    - uses: haskell-actions/setup@v2.11.0
     - name: Check
       run: cabal check
     - name: Generate sdist
@@ -101,7 +101,7 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v7
-    - uses: haskell-actions/setup@v2
+    - uses: haskell-actions/setup@v2.11.0
       with:
         ghc-version: ${{ matrix.ghc }}
     - name: Compile Windows wrapper
