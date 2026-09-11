@@ -13,6 +13,7 @@ build-type: Simple
 extra-doc-files:
   ChangeLog.md
   README.md
+
 extra-source-files:
   tests/configs/*.yaml
   tests/projects/cabal-with-custom-setup-old/a-with-custom/a-with-custom.cabal
@@ -161,9 +162,18 @@ extra-source-files:
 
 tested-with: ghc ==9.6.7 || ==9.8.4 || ==9.10.1 || ==9.12.2 || ==9.14.1
 
+common runopts
+  ghc-options:
+    -threaded
+    -rtsopts
+
+common compopts
+  ghc-options:
+    -Wall
+
 library
+  import: compopts
   default-language: Haskell2010
-  ghc-options: -Wall
   hs-source-dirs: src
   exposed-modules:
     HIE.Bios
@@ -219,11 +229,11 @@ library
     yaml >=0.10.0 && <0.12,
 
 executable hie-bios
+  import: compopts, runopts
   default-language: Haskell2010
   main-is: Main.hs
   other-modules: Paths_hie_bios
   autogen-modules: Paths_hie_bios
-  ghc-options: -Wall
   hs-source-dirs: exe
   build-depends:
     base >=4.16 && <5,
@@ -235,6 +245,7 @@ executable hie-bios
     prettyprinter,
 
 test-suite parser-tests
+  import: compopts, runopts
   type: exitcode-stdio-1.0
   default-language: Haskell2010
   build-depends:
@@ -247,13 +258,10 @@ test-suite parser-tests
     yaml,
 
   hs-source-dirs: tests/
-  ghc-options:
-    -threaded
-    -Wall
-
   main-is: ParserTests.hs
 
 test-suite bios-tests
+  import: compopts, runopts
   type: exitcode-stdio-1.0
   default-language: Haskell2010
   build-depends:
@@ -277,9 +285,6 @@ test-suite bios-tests
   hs-source-dirs: tests/
   main-is: BiosTests.hs
   other-modules: Utils
-  ghc-options:
-    -threaded
-    -Wall
 
   -- There seems to be a race condition on windows
   if !os(windows)
