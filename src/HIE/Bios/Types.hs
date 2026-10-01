@@ -332,7 +332,7 @@ data CradleError = CradleError
   { cradleErrorDependencies :: [FilePath]
   -- ^ Dependencies of the cradle that failed to load.
   -- Can be watched for changes to attempt a reload of the cradle.
-  , cradleErrorExitCode :: ExitCode
+  , cradleErrorExitCode :: Either IOError ExitCode
   -- ^ ExitCode of the cradle loading mechanism.
   , cradleErrorStderr :: [String]
   -- ^ Standard error output that can be shown to users to explain

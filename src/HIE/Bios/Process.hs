@@ -19,9 +19,8 @@ module HIE.Bios.Process
   )
   where
 
-import Control.Applicative (optional)
 import Control.DeepSeq
-import Control.Exception (handleJust)
+import Control.Exception (handleJust, try, Exception (displayException))
 import System.Exit
 import System.Directory hiding (findFile)
 import Colog.Core (LogAction (..), WithSeverity (..), Severity (..), (<&))
@@ -63,19 +62,20 @@ readProcessWithCwd_ l dir cmd args stdin = do
 -- a 'CradleLoadResult'. Provides better error messages than raw 'readCreateProcess'.
 readProcessWithCwd' :: LogAction IO (WithSeverity Log) -> CreateProcess -> String -> CradleLoadResultT IO String
 readProcessWithCwd' l createdProcess stdin = do
-  mResult <- liftIO $ optional $ readCreateProcessWithExitCode createdProcess stdin
+  eResult <- liftIO $ try $ readCreateProcessWithExitCode createdProcess stdin
   liftIO $ l <& LogCreateProcessRun createdProcess `WithSeverity` Debug
   let cmdString = prettyCmdSpec $ cmdspec createdProcess
-  case mResult of
-    Just (ExitSuccess, stdo, _) -> pure stdo
-    Just (exitCode, stdo, stde) -> throwCE $
-      CradleError [] exitCode
+  case eResult of
+    Right (ExitSuccess, stdo, _) -> pure stdo
+    Right (exitCode, stdo, stde) -> throwCE $
+      CradleError [] (Right exitCode)
         (["Error when calling " <> cmdString, stdo, stde] <> prettyProcessEnv createdProcess)
         []
-    Nothing -> throwCE $
-      CradleError [] ExitSuccess
-        (["Couldn't execute " <> cmdString] <> prettyProcessEnv createdProcess)
+    Left e -> throwCE $
+      CradleError [] (Left e)
+        (["Couldn't execute " <> cmdString] <> [displayException e] <> prettyProcessEnv createdProcess)
         []
+
 
 
 -- | Some environments (e.g. stack exec) include GHC_PACKAGE_PATH.

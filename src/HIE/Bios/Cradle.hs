@@ -165,7 +165,7 @@ resolvedCradlesToCradle logger buildCustomCradle root cacheDir cs = mdo
           case selectCradle (prefix . fst) absfp cradleActions of
             Just (rc, act) -> do
               addActionDeps (cradleDeps rc) <$> runCradle act fpc prev
-            Nothing -> return $ CradleFail $ CradleError [] ExitSuccess (err_msg fpc) (targetFilePath fpc: targetContext fpc)
+            Nothing -> return $ CradleFail $ CradleError [] (Right ExitSuccess) (err_msg fpc) (targetFilePath fpc: targetContext fpc)
       , runGhcCmd = run_ghc_cmd
       }
     }
@@ -621,7 +621,7 @@ stackAction workDir mc syaml l cs fpc loadStyle = do
         -- the root of the component, so we are right in trivial cases at least.
         deps <- stackCradleDependencies workDir workDir syaml
         pure $ CradleFail
-                  (CradleError deps ex1
+                  (CradleError deps (Right ex1)
                     ([ "Failed to parse result of calling stack" ]
                     ++ stde
                     ++ args)
@@ -731,7 +731,7 @@ obeliskAction workDir _fp = do
 makeCradleResult :: (ExitCode, [String], FilePath, [String]) -> [FilePath] -> [FilePath] -> CradleLoadResult ComponentOptions
 makeCradleResult (ex, err, componentDir, gopts) deps loadingFiles =
   case ex of
-    ExitFailure _ -> CradleFail (CradleError deps ex err loadingFiles)
+    ExitFailure _ -> CradleFail (CradleError deps (Right ex) err loadingFiles)
     _ ->
         let compOpts = ComponentOptions gopts componentDir deps
         in CradleSuccess compOpts
