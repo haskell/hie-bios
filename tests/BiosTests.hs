@@ -15,8 +15,9 @@ import Control.Exception (SomeException, evaluate, try)
 import Control.Monad (forM, forM_, unless, when)
 import Control.Monad.Extra (unlessM)
 import Control.Monad.IO.Class
+import Data.Bifunctor
 import Data.Foldable (for_)
-import Data.List (isInfixOf, isPrefixOf, sort, tails, last)
+import Data.List (isInfixOf, isPrefixOf, sort, tails)
 import Data.Maybe (isJust)
 import Data.Typeable
 import Data.Version
@@ -29,9 +30,10 @@ import qualified HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Process (cacheFileIn)
 import HIE.Bios.Types (CacheDir (..), LoadMode (..), TargetWithContext (..))
 import System.Directory
-import System.Exit (ExitCode (ExitFailure, ExitSuccess))
+import System.Exit (ExitCode (ExitFailure))
 import System.FilePath (makeRelative, (</>))
 import System.IO (BufferMode (LineBuffering), hSetBuffering, stderr, stdout)
+import System.IO.Error (doesNotExistErrorType, ioeGetErrorType)
 import System.IO.Temp
 import System.Info.Extra (isWindows)
 import System.Process
@@ -177,7 +179,7 @@ biosTestCases =
       assertCradle isBiosCradle
       loadComponentOptions $ TargetWithContext "B.hs" []
       assertCradleError $ \CradleError {..} -> do
-        cradleErrorExitCode @?= ExitFailure 1
+        cradleErrorExitCode @?= Right (ExitFailure 1)
         cradleErrorDependencies `shouldMatchList` ["hie.yaml"]
   , biosTestCase "failing-bios-ghc" $ runTestEnv "./failing-bios-ghc" $ do
       initCradle "B.hs"
@@ -185,14 +187,16 @@ biosTestCases =
       loadRuntimeGhcVersion
       ghcVersionLR <- askGhcVersionResult
       assertCradleLoadError ghcVersionLR >>= \CradleError {..} -> liftIO $ do
-        cradleErrorExitCode @?= ExitSuccess
+        -- on macOS, ghc 9.6.7 we get OtherError that prints as "failed" and doesn't have an exported name.
+        bimap ((`elem` ["failed","does not exist"]) . show . ioeGetErrorType) id cradleErrorExitCode @?= Left True
         cradleErrorDependencies `shouldMatchList` []
-        length cradleErrorStderr @?= 1
-        forM_ cradleErrorStderr $ \errorCtx ->
-          -- On windows, this error message contains '"' around the executable name
-          if isWindows
-            then "Couldn't execute \"myGhc\"" `isPrefixOf` errorCtx @? "Error message should contain error information"
-            else "Couldn't execute myGhc"     `isPrefixOf` errorCtx @? "Error message should contain error information"
+        length cradleErrorStderr @?= 2
+        let errorCtx = unlines cradleErrorStderr
+        -- On windows, this error message contains '"' around the executable name
+        if isWindows
+            then "Couldn't execute \"myGhc\"" `isPrefixOf` errorCtx @? ("Error message should contain error information:\n" ++ errorCtx)
+            else "Couldn't execute myGhc"     `isPrefixOf` errorCtx @? ("Error message should contain error information:\n" ++ errorCtx)
+        either show show cradleErrorExitCode `isInfixOf` errorCtx @? ("Error message should display the exception:\n" ++ errorCtx)
   , biosTestCase "simple-bios-shell" $ runTestEnv "./simple-bios-shell" $ do
       testDirectoryM isBiosCradle $ single "B.hs"
   , biosTestCase "simple-bios-shell-deps" $ runTestEnv "./simple-bios-shell" $ do
@@ -224,7 +228,7 @@ cabalTestCases cabalDep extraGhcDep =
     biosTestCaseAll "failing-cabal" $ runTestEnv "./failing-cabal" $ do
       attemptCabalSingleTargetLoad "MyLib.hs"
       assertCradleError (\CradleError {..} -> do
-        cradleErrorExitCode @?= ExitFailure 1
+        cradleErrorExitCode @?= Right (ExitFailure 1)
         cradleErrorDependencies `shouldMatchList` ["failing-cabal.cabal", "cabal.project", "cabal.project.local"])
   , biosTestCaseMulti "failing-cabal-multi-repl-with-shrink-error-files" $ runTestEnv "./failing-multi-repl-cabal-project" $ do
       attemptCabalLoad "multi-repl-cabal-fail/app/Main.hs" ["multi-repl-cabal-fail/src/Lib.hs", "multi-repl-cabal-fail/src/Fail.hs", "NotInPath.hs"]
@@ -233,7 +237,7 @@ cabalTestCases cabalDep extraGhcDep =
       if multiSupported
         then
           assertCradleError (\CradleError {..} -> do
-            cradleErrorExitCode @?= ExitFailure 1
+            cradleErrorExitCode @?= Right (ExitFailure 1)
             cradleErrorDependencies `shouldMatchList` ["cabal.project","cabal.project.local","multi-repl-cabal-fail.cabal"]
             -- NotInPath.hs does not match the cradle for `app/Main.hs`, so it should not be tried.
             (makeRelative root <$> cradleErrorLoadingFiles) `shouldMatchList` ["multi-repl-cabal-fail/app/Main.hs","multi-repl-cabal-fail/src/Fail.hs","multi-repl-cabal-fail/src/Lib.hs"])
@@ -502,7 +506,7 @@ stackTestCases =
       biosTestCase "failing-stack" $ runTestEnv "./failing-stack" $ do
         stackAttemptLoad "src/Lib.hs"
         assertCradleError $ \CradleError {..} -> do
-            cradleErrorExitCode @?= ExitFailure 1
+            cradleErrorExitCode @?= Right (ExitFailure 1)
             cradleErrorDependencies `shouldMatchList` ["failing-stack.cabal", "stack.yaml", "package.yaml"]
   , biosTestCase "simple-stack" $ runTestEnv "./simple-stack" $ do
       testDirectoryM isStackCradle $ single "B.hs"

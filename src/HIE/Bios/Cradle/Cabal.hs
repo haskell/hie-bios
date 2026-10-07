@@ -170,7 +170,7 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
       let errorMsg = "Failed to run " <> cmd <> " in directory \"" <> workDir <> "\". Consult the logs for full command and error."
       throwCE CradleError
         { cradleErrorDependencies = nubOrd (deps <> extraDeps)
-        , cradleErrorExitCode = ExitFailure code
+        , cradleErrorExitCode = Right $ ExitFailure code
         , cradleErrorStderr = [errorMsg] <> prettyProcessErrorDetails errorDetails
         , cradleErrorLoadingFiles = loadingFiles
         }
@@ -183,7 +183,7 @@ cabalAction cradles workDir mc l projectFile fp loadStyle = do
           deps <- liftIO $ cabalCradleDependencies projectFile workDir workDir
           throwCE CradleError
             { cradleErrorDependencies = nubOrd (deps <> extraDeps)
-            , cradleErrorExitCode = ExitSuccess
+            , cradleErrorExitCode = Right ExitSuccess
             , cradleErrorStderr = ["Failed to parse result of calling cabal"] <> prettyProcessErrorDetails errorDetails
             , cradleErrorLoadingFiles = loadingFiles
             }
