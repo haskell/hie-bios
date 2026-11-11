@@ -4,32 +4,31 @@ module HIE.Bios.Environment (initSession, initSession', getRuntimeGhcLibDir, get
 
 import GHC (GhcMonad)
 import qualified GHC as G
+import GHC.Driver.Env (HscEnv (hsc_unit_env))
+import qualified GHC.Driver.Monad as G
+
+import qualified GHC.Plugins as G
+import qualified GHC.Unit.Env as G
+import qualified HIE.Bios.Ghc.Gap as Gap
+import HIE.Bios.Types
 
 import Control.Applicative
 import Control.Monad (void)
 import Control.Monad.IO.Class
-
-import System.Directory
-import System.FilePath
-import System.Environment (lookupEnv)
-
 import qualified Crypto.Hash.SHA1 as H
-import qualified Data.ByteString.Char8 as B
 import Data.ByteString.Base16
-import Data.List
 import Data.Char (isSpace)
-import Text.ParserCombinators.ReadP hiding (optional)
-
-import HIE.Bios.Types
-import qualified HIE.Bios.Ghc.Gap as Gap
-import qualified System.OsPath as OsPath
-import qualified GHC.Plugins as G
-import qualified Data.List.NonEmpty as NE
-import qualified GHC.Driver.Monad as G
 import Data.IORef (newIORef, readIORef)
-import qualified GHC.Unit.Env as G
-import GHC.Driver.Env (HscEnv(hsc_unit_env))
+import Data.List
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text.Encoding
+import System.Directory
+import System.Environment (lookupEnv)
+import System.FilePath
+import qualified System.OsPath as OsPath
+import Text.ParserCombinators.ReadP hiding (optional)
 
 -- | Start a GHC session and set some sensible options for tooling to use.
 -- Creates a folder in the cache directory to cache interface files to make
@@ -48,7 +47,7 @@ initSession' :: (GhcMonad m)
 initSession' mCacheRoot ComponentOptions {..} = do
     -- Create a unique folder per set of different GHC options, assuming that each different set of
     -- GHC options will create incompatible interface files.
-    let opts_hash = B.unpack $ encode $ H.finalize $ H.updates H.init $ map B.pack componentOptions
+    let opts_hash = Text.unpack $ Text.Encoding.decodeUtf8 $ encode $ H.finalize $ H.updates H.init $ map (Text.Encoding.encodeUtf8 . Text.pack) componentOptions
 
     cache_dir <- liftIO $ resolveCacheDir opts_hash mCacheRoot
 

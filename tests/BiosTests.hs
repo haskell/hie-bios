@@ -25,7 +25,7 @@ import HIE.Bios
 import HIE.Bios.Cradle
 import HIE.Bios.Cradle.Cabal (cabalBuildDir)
 import HIE.Bios.Cradle.Utils (expandGhcOptionResponseFile)
-import HIE.Bios.Environment (extractUnits, resolveCacheDir)
+import HIE.Bios.Environment (extractUnits)
 import qualified HIE.Bios.Ghc.Gap as Gap
 import HIE.Bios.Process (cacheFileIn)
 import HIE.Bios.Types (CacheDir (..), LoadMode (..), TargetWithContext (..))
@@ -33,7 +33,7 @@ import System.Directory
 import System.Exit (ExitCode (ExitFailure))
 import System.FilePath (makeRelative, (</>))
 import System.IO (BufferMode (LineBuffering), hSetBuffering, stderr, stdout)
-import System.IO.Error (doesNotExistErrorType, ioeGetErrorType)
+import System.IO.Error (ioeGetErrorType)
 import System.IO.Temp
 import System.Info.Extra (isWindows)
 import System.Process
@@ -44,7 +44,6 @@ import qualified Test.Tasty.Ingredients as Tasty
 import qualified Test.Tasty.Options as Tasty
 import qualified Test.Tasty.Runners as Tasty
 import Text.ParserCombinators.ReadP (readP_to_S)
-import Debug.Trace (traceShowId)
 
 argDynamic :: [String]
 argDynamic = ["-dynamic" | Gap.hostIsDynamic]
@@ -245,12 +244,15 @@ cabalTestCases cabalDep extraGhcDep =
           return ()
   , biosTestCaseAll "simple-cabal" $ runTestEnv "./simple-cabal" $ do
       testDirectoryM isCabalCradle $ single "B.hs"
+  , ignoreOnWindows $
+      biosTestCaseAll "simple-cabal with UTF-8 文档" $ runTestEnv "./cabal-with-utf-8-文档" $ do
+        testDirectoryM isCabalCradle $ single "src/B.hs"
   , biosTestCaseMulti "build-dir" $ runTestEnv "./simple-cabal" $ do
       initCradle "B.hs"
       assertCradle isCabalCradle
       root <- askRoot
+      cacheDir <- askBuildDir
       buildDir <- liftIO $ do
-        cacheDir <- resolveCacheDir "" Nothing
         cabalBuildDir cacheDir root
       -- use --multi-repl, as that was the codepath with the bug
       loadFileGhc $ TargetWithContext "B.hs" []
@@ -765,9 +767,15 @@ ignoreOnUnsupportedGhc tt =
 #endif
   tt
 
+ignoreOnWindows :: TestTree -> TestTree
+ignoreOnWindows tt =
+  if isWindows
+    then ignoreTestBecause "Not supported on GHC 9.14" tt
+    else tt
+
 expectBrokenOnCabal318 :: ToolDependency -> TestTree -> TestTree
 expectBrokenOnCabal318 td tt =
-  if traceShowId (traceShowId (toolVersion td) >= Just (makeVersion [3,17,0,0]))
+  if toolVersion td >= Just (makeVersion [3,17,0,0])
     then expectFailBecause
             ("cabal 3.18 passes all options using response files. \
             If old lib:Cabal versions are used, we can't pass '--keep-temp-files' because the configure step rejects it. \
