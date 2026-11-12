@@ -36,6 +36,7 @@ module Utils (
   askLibDirResult,
   askGhcVersion,
   askGhcVersionResult,
+  askBuildDir,
 
   -- * Test setup helpers
   step,
@@ -121,6 +122,7 @@ data TestEnv ext = TestEnv
   , testLibDirResult :: Maybe (CradleLoadResult FilePath)
   , testGhcVersionResult :: Maybe (CradleLoadResult String)
   , testRootDir :: FilePath
+  , testCacheDir :: CacheDir
   , testLogger :: L.LogAction IO (L.WithSeverity HIE.Log)
   , testLoadMode :: LoadMode
   }
@@ -145,30 +147,36 @@ runTestEnvLocal :: FilePath -> TestM a -> TestConfig -> IO a
 runTestEnvLocal fp act testConf = runTestEnv' testConf{useTemporaryDirectory = False} fp act
 
 runTestEnv' :: TestConfig -> FilePath -> TestM a -> IO a
-runTestEnv' config root act = do
+runTestEnv' config localDir act = do
+  mkeep <- lookupEnv "KEEP_TEMP_DIRS"
+  let keepTempDirs = mkeep == Just "true"
   -- We need to copy over the directory to somewhere outside the source tree
   -- when we test, since the cabal.project/stack.yaml/hie.yaml file in the root
   -- of this repository interferes with the test cradles!
   let wrapper r cont =
         if useTemporaryDirectory config
-          then do
-            mkeep <- lookupEnv "KEEP_TEMP_DIRS"
-            withTempCopy (mkeep == Just "true") r cont
-          else cont r
-      mkEnv root' =
+          then
+            withTempCopy keepTempDirs r cont
+          else
+            cont r
+
+      mkEnv root' cacheDir =
         TestEnv
           { testCradleType = Nothing
           , testLoadResult = Nothing
           , testLibDirResult = Nothing
           , testGhcVersionResult = Nothing
           , testRootDir = root'
+          , testCacheDir = cacheDir
           , testLogger = init_logger
           , testLoadMode = testLoadModeConfig config
           }
-  realRoot <- makeAbsolute $ testProjectRoots config </> root
-  wrapper realRoot $ \root' -> flip evalStateT (mkEnv root') $ do
-    step $ "Run test in: " <> root'
-    act
+  localDirAbs <- makeAbsolute $ testProjectRoots config </> localDir
+  withTempCacheRoot keepTempDirs localDirAbs $ \ cacheDir@(CacheDir buildDir) -> do
+    wrapper localDirAbs $ \root -> flip evalStateT (mkEnv root cacheDir)  $ do
+      step $ "Run test in: " <> root
+      step $ "Cache dir:   " <> buildDir
+      act
   where
     init_logger = LogAction (testStepFunction config)
       & L.cmap printLog
@@ -269,6 +277,9 @@ askLogger = gets testLogger
 askLoadMode :: TestM LoadMode
 askLoadMode = gets testLoadMode
 
+askBuildDir :: TestM CacheDir
+askBuildDir = gets testCacheDir
+
 -- ---------------------------------------------------------------------------
 -- Test setup helpers
 -- ---------------------------------------------------------------------------
@@ -299,7 +310,14 @@ findCradleLoc fp = do
   liftIO $ findCradle a_fp
 
 initCradle :: FilePath -> TestM ()
-initCradle = initCradleWithConfig defaultCradleRunConfig
+initCradle fp = do
+  cacheLoc <- gets testCacheDir
+  let
+    conf =
+      CradleRunConfig
+        { cradleCacheDir = Just cacheLoc
+        }
+  initCradleWithConfig conf fp
 
 initCradleWithConfig :: CradleRunConfig -> FilePath -> TestM ()
 initCradleWithConfig config fp = do
@@ -485,20 +503,47 @@ findCradleForModuleM fp expected' = do
 -- ---------------------------------------------------------------------------
 
 withTempCopy :: Bool -> FilePath -> (FilePath -> IO a) -> IO a
-withTempCopy keep srcDir f = getCanonicalTemporaryDirectory >>= \targetDir -> do
+withTempCopy keep srcDir f = getCanonicalTemporaryDirectory >>= \mainTmpDir -> do
   C.bracket
-    (liftIO (createTempDirectory targetDir template))
-    cleanup $ \newDir -> do
+    (do
+      let
+        hieBiosMainTestDir = mainTmpDir </> hIE_BIOS_TEMP_DIR_ROOT
+      createDirectoryIfMissing True hieBiosMainTestDir
+      createTempDirectory hieBiosMainTestDir template
+    )
+    cleanup $ \ newDir -> do
       exists <- doesDirectoryExist srcDir
       when exists $ do
         copyDir srcDir newDir
       f newDir
   where
-    template = "hie-bios-test"
-    cleanup dir | keep = return ()
-       | otherwise = (liftIO . ignoringIOErrors . removeDirectoryRecursive) dir
+    template = takeFileName $ dropTrailingPathSeparator srcDir
+    cleanup dir
+      | keep = return ()
+      | otherwise = ignoringIOErrors $ removeDirectoryRecursive dir
     ignoringIOErrors ioe = ioe `C.catch` (\e -> const (return ()) (e :: IOError))
 
+withTempCacheRoot :: Bool -> FilePath -> (CacheDir -> IO a) -> IO a
+withTempCacheRoot keep srcDir f = getCanonicalTemporaryDirectory >>= \mainTmpDir -> do
+  C.bracket
+    (do
+      let
+        hieBiosMainTestDir = mainTmpDir </> hIE_BIOS_TEMP_DIR_ROOT
+      createDirectoryIfMissing True hieBiosMainTestDir
+      cacheDir <- createTempDirectory hieBiosMainTestDir template
+      pure $ CacheDir cacheDir
+    )
+    cleanup
+    f
+  where
+    template = "dist-" ++ takeFileName (dropTrailingPathSeparator srcDir)
+    cleanup (CacheDir dir)
+      | keep = return ()
+      | otherwise = ignoringIOErrors $ removeDirectoryRecursive dir
+    ignoringIOErrors ioe = ioe `C.catch` (\e -> const (return ()) (e :: IOError))
+
+hIE_BIOS_TEMP_DIR_ROOT :: String
+hIE_BIOS_TEMP_DIR_ROOT = "hie-bios"
 
 copyDir :: FilePath -> FilePath -> IO ()
 copyDir src dst = do
