@@ -1,10 +1,10 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
-function out(){
-  echo "$1" >> "$HIE_BIOS_OUTPUT"
+out(){
+  printf "%s\n" "$1" >> "$HIE_BIOS_OUTPUT"
 }
 
-if [ "$1" == "--interactive" ]; then
+if [ "$1" = "--interactive" ]; then
   out "$(pwd)"
   for arg in "$@"; do
     out "$arg"
