@@ -5,6 +5,8 @@
 -- | Logic and datatypes for parsing @hie.yaml@ files.
 module HIE.Bios.Config(
     readConfig,
+    readConfigWithWarnings,
+    ConfigWarning(..),
     Config(..),
     CradleConfig(..),
     CabalType,
@@ -28,7 +30,7 @@ import           Data.Aeson (JSONPath)
 import           Data.Yaml
 import           Data.Yaml.Internal (Warning(..))
 
-import           HIE.Bios.Config.YAML (CradleConfigYAML)
+import           HIE.Bios.Config.YAML (CradleConfigYAML, ConfigWarning(..))
 import qualified HIE.Bios.Config.YAML as YAML
 
 
@@ -150,12 +152,21 @@ instance Show (CradleTree a) where
     show (Multi a) = "Multi " ++ show a
     show (Other _ val) = "Other {originalYamlValue = " ++ show val ++ "}"
 
+-- | Read a @hie.yaml@ file. Keys that hie-bios doesn't know about are
+-- ignored; use 'readConfigWithWarnings' to find out about them.
 readConfig :: FromJSON a => FilePath -> IO (Config a)
-readConfig fp = do
+readConfig fp = snd <$> readConfigWithWarnings fp
+
+-- | Like 'readConfig', but also returns warnings about the parts of the file
+-- that were ignored, such as keys hie-bios doesn't know about.
+readConfigWithWarnings :: FromJSON a => FilePath -> IO ([ConfigWarning], Config a)
+readConfigWithWarnings fp = do
   result <- decodeFileWithWarnings fp
-  fmap fromYAMLConfig $ either throwIO failOnAnyDuplicate result
+  value <- either throwIO failOnAnyDuplicate result
+  config <- either (throwIO . AesonException) pure (parseEither parseJSON value)
+  pure (YAML.configWarnings value, fromYAMLConfig config)
   where
-    failOnAnyDuplicate :: ([Warning], CradleConfigYAML a) -> IO (CradleConfigYAML a)
+    failOnAnyDuplicate :: ([Warning], Value) -> IO Value
     failOnAnyDuplicate (warnings, config) = do
         _ <- case mapMaybe failOnDuplicate warnings of
                 dups@(_:_) -> throwIO $ InvalidYaml $ Just $ YamlException

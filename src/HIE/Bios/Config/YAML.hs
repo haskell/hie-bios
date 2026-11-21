@@ -19,12 +19,16 @@ module HIE.Bios.Config.YAML
   , OtherConfig(..)
   , OneOrManyComponents(..)
   , Callable(..)
+  , ConfigWarning(..)
+  , configWarnings
   ) where
 
 import           Control.Applicative ((<|>))
 import           Data.Aeson
 #if MIN_VERSION_aeson(2,0,0)
-import           Data.Aeson.KeyMap   (keys,lookup)
+import qualified Data.Aeson.Key      as K
+import           Data.Aeson.KeyMap   (lookup)
+import qualified Data.Aeson.KeyMap   as KM
 #else
 import           Data.HashMap.Strict (lookup)
 import qualified Data.HashMap.Strict as Map
@@ -32,34 +36,83 @@ import qualified Data.Text           as T
 #endif
 import           Data.Aeson.Types    (Parser, typeMismatch)
 import qualified Data.Char           as C (toLower)
+import qualified Data.Foldable       as F
 import           Data.List           ((\\))
 import           GHC.Generics        (Generic)
 import           Prelude             hiding (lookup)
 
-#if !MIN_VERSION_aeson(2,0,0)
--- | Backwards compatible type-def for Key
--- This used to be just a Text, but since aeson >= 2
--- this is an opaque datatype.
-type Key = T.Text
--- | Backwards compatible type-def for KeyMap
--- This used to be just a HashMap, but since aeson >= 2
--- this is an opaque datatype.
-type KeyMap v = Map.HashMap T.Text v
-
-keys :: KeyMap v -> [Key]
-keys = Map.keys
+-- | The fields of an object, with the keys as 'String's.
+objectFields :: Object -> [(String, Value)]
+#if MIN_VERSION_aeson(2,0,0)
+objectFields = map (\(k, v) -> (K.toString k, v)) . KM.toList
+#else
+objectFields = map (\(k, v) -> (T.unpack k, v)) . Map.toList
 #endif
 
-checkObjectKeys :: [Key] -> Object -> Parser ()
-checkObjectKeys allowedKeys obj =
-  let extraKeys = keys obj \\ allowedKeys
-   in case extraKeys of
-        []          -> pure ()
-        _           -> fail $ mconcat [ "Unexpected keys "
-                                      , show extraKeys
-                                      , ", keys allowed: "
-                                      , show allowedKeys
-                                      ]
+-- | Something in a @hie.yaml@ file that hie-bios doesn't recognise. It is
+-- ignored rather than rejected, so that a file written for a newer hie-bios
+-- can still be used by an older one.
+data ConfigWarning
+  = UnknownKeys
+      { unknownKeysIn :: [String]
+      -- ^ Where the keys were found, e.g. @["cradle", "cabal"]@.
+      , unknownKeys   :: [String]
+      , knownKeys     :: [String]
+      }
+  deriving (Show, Eq)
+
+-- The keys each part of the configuration accepts.
+cabalConfigKeys, cabalComponentKeys, stackConfigKeys, stackComponentKeys, biosConfigKeys :: [String]
+cabalConfigKeys    = ["cabalProject", "component", "components", "componentsToLoad"]
+cabalComponentKeys = ["path", "component", "cabalProject"]
+stackConfigKeys    = ["component", "components", "stackYaml", "componentsToLoad"]
+stackComponentKeys = ["path", "component", "stackYaml"]
+biosConfigKeys     = ["program", "shell", "dependency-program", "dependency-shell", "with-ghc"]
+
+-- | Find the keys in the @cradle@ section of a @hie.yaml@ file, given as an
+-- unparsed 'Value', that hie-bios doesn't know about.
+configWarnings :: Value -> [ConfigWarning]
+configWarnings = inConfig []
+  where
+    inConfig at (Object o) = maybe [] (inCradle (at ++ ["cradle"])) (lookup "cradle" o)
+    inConfig _ _ = []
+
+    inCradle at (Object o) = concat
+      [ case (key, value) of
+          ("cabal", _) -> inSection at' cabalConfigKeys cabalComponentKeys value
+          ("stack", _) -> inSection at' stackConfigKeys stackComponentKeys value
+          ("bios", Object bios) -> unknownIn at' biosConfigKeys bios
+          ("multi", Array subs) ->
+            concat [ inMulti (at' ++ [show i]) sub | (i, sub) <- zip [0 :: Int ..] (F.toList subs) ]
+          _ -> []
+      | (key, value) <- objectFields o
+      , let at' = at ++ [key]
+      ]
+    inCradle _ _ = []
+
+    -- cabal and stack sections are either an object, possibly with a list of
+    -- components, or just the list of components.
+    inSection at sectionKeys componentKeys value = case value of
+      Object o -> unknownIn at sectionKeys o
+                    ++ maybe [] (inComponents (at ++ ["components"]) componentKeys) (lookup "components" o)
+      Array _  -> inComponents at componentKeys value
+      _        -> []
+
+    inComponents at componentKeys (Array cs) = concat
+      [ case c of
+          Object o -> unknownIn (at ++ [show i]) componentKeys o
+          _        -> []
+      | (i, c) <- zip [0 :: Int ..] (F.toList cs)
+      ]
+    inComponents _ _ _ = []
+
+    -- each entry of a multi cradle has its own nested configuration
+    inMulti at (Object o) = maybe [] (inConfig (at ++ ["config"])) (lookup "config" o)
+    inMulti _ _ = []
+
+    unknownIn at allowed o = case map fst (objectFields o) \\ allowed of
+      []    -> []
+      extra -> [UnknownKeys at extra allowed]
 
 data CradleConfigYAML a
   = CradleConfigYAML { cradle       :: CradleComponent a
@@ -111,11 +164,10 @@ data CabalConfig
 
 instance FromJSON CabalConfig where
   parseJSON v@(Array _)     = CabalConfig Nothing Nothing . ManyComponents <$> parseJSON v
-  parseJSON v@(Object obj)  = (checkObjectKeys ["cabalProject", "component", "components", "componentsToLoad"] obj)
-                                *> (CabalConfig
+  parseJSON v@(Object obj)  = CabalConfig
                                   <$> obj .:? "cabalProject"
                                   <*> obj .:? "componentsToLoad"
-                                  <*> parseJSON v)
+                                  <*> parseJSON v
   parseJSON Null            = pure $ CabalConfig Nothing Nothing NoComponent
   parseJSON v               = typeMismatch "CabalConfig" v
 
@@ -127,12 +179,10 @@ data CabalComponent
 
 instance FromJSON CabalComponent where
   parseJSON =
-    let parseCabalComponent obj = checkObjectKeys ["path", "component", "cabalProject"] obj
-                                    *> (CabalComponent
-                                          <$> obj .: "path"
-                                          <*> obj .: "component"
-                                          <*> obj .:? "cabalProject"
-                                        )
+    let parseCabalComponent obj = CabalComponent
+                                    <$> obj .: "path"
+                                    <*> obj .: "component"
+                                    <*> obj .:? "cabalProject"
      in withObject "CabalComponent" parseCabalComponent
 
 data StackConfig
@@ -149,22 +199,19 @@ data StackComponent
 
 instance FromJSON StackConfig where
   parseJSON v@(Array _)     = StackConfig Nothing Nothing . ManyComponents <$> parseJSON v
-  parseJSON v@(Object obj)  = (checkObjectKeys ["component", "components", "stackYaml", "componentsToLoad"] obj)
-                                *> (StackConfig
-                                      <$> obj .:? "stackYaml"
-                                      <*> obj .:? "componentsToLoad"
-                                      <*> parseJSON v
-                                    )
+  parseJSON v@(Object obj)  = StackConfig
+                                  <$> obj .:? "stackYaml"
+                                  <*> obj .:? "componentsToLoad"
+                                  <*> parseJSON v
   parseJSON Null            = pure $ StackConfig Nothing Nothing NoComponent
   parseJSON v               = typeMismatch "StackConfig" v
 
 instance FromJSON StackComponent where
   parseJSON =
-    let parseStackComponent obj = (checkObjectKeys ["path", "component", "stackYaml"] obj)
-                                    *> (StackComponent
-                                          <$> obj .: "path"
-                                          <*> obj .: "component"
-                                          <*> obj .:? "stackYaml")
+    let parseStackComponent obj = StackComponent
+                                    <$> obj .: "path"
+                                    <*> obj .: "component"
+                                    <*> obj .:? "stackYaml"
      in withObject "StackComponent" parseStackComponent
 
 data OneOrManyComponents component
@@ -203,8 +250,6 @@ parseBiosConfig obj =
       parseDepsCallable o = (Just . Program <$> o .: "dependency-program")
                             <|> (Just . Shell <$> o .: "dependency-shell")
                             <|> (pure Nothing)
-      parse o = BiosConfig  <$> parseCallable o
-                            <*> parseDepsCallable o
-                            <*> (o .:? "with-ghc")
-      check = checkObjectKeys ["program", "shell", "dependency-program", "dependency-shell", "with-ghc"]
-   in check obj *> parse obj
+   in BiosConfig <$> parseCallable obj
+                 <*> parseDepsCallable obj
+                 <*> (obj .:? "with-ghc")

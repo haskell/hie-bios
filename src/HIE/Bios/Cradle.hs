@@ -108,7 +108,7 @@ loadImplicitCradleWithConfig l config wfile = do
 --   in a cabal directory.
 loadCradleWithOpts :: (Yaml.FromJSON b, Show a) => LogAction IO (WithSeverity Log) -> CradleRunConfig -> (b -> CradleAction a) -> FilePath -> IO (Cradle a)
 loadCradleWithOpts l config buildCustomCradle wfile = do
-    cradleConfig <- readCradleConfig wfile
+    cradleConfig <- readCradleConfig l wfile
     l <& WithSeverity (LogAny $ T.pack $ "Cradle Config: " ++ show cradleConfig) Debug
     getCradleWithConfig l config buildCustomCradle (cradleConfig, takeDirectory wfile)
 
@@ -276,9 +276,10 @@ yamlConfig fp = do
 yamlConfigDirectory :: FilePath -> MaybeT IO FilePath
 yamlConfigDirectory = Process.findFileUpwards configFileName
 
-readCradleConfig :: Yaml.FromJSON b => FilePath -> IO (CradleConfig b)
-readCradleConfig yamlHie = do
-  cfg  <- liftIO $ readConfig yamlHie
+readCradleConfig :: Yaml.FromJSON b => LogAction IO (WithSeverity Log) -> FilePath -> IO (CradleConfig b)
+readCradleConfig l yamlHie = do
+  (warnings, cfg) <- liftIO $ readConfigWithWarnings yamlHie
+  forM_ warnings $ \w -> l <& WithSeverity (LogConfigWarning yamlHie w) Warning
   return (cradle cfg)
 
 configFileName :: FilePath

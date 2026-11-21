@@ -105,7 +105,28 @@ main = defaultMain $
                           ,("./vendor", StackType (Just "parser-tests") Nothing Nothing)]))
     , assertParser "stack-with-load.yaml"
       (noDeps (Stack (StackType Nothing Nothing (Just ["lib:hie-bios","parser-tests","some-other"]))))
+    -- Unknown keys are ignored, with a warning, rather than rejected (#344)
+    , assertParser "cabal-unknown-key.yaml" (noDeps (Cabal $ CabalType (Just "lib:hie-bios") Nothing Nothing))
+    , assertWarnings "cabal-unknown-key.yaml"
+        [UnknownKeys ["cradle", "cabal"] ["futureOption"] ["cabalProject", "component", "components", "componentsToLoad"]]
+    , assertParser "multi-unknown-keys.yaml"
+      (noDeps (Multi [ ("./src", CradleConfig [] (CabalMulti (CabalType Nothing Nothing Nothing)
+                                                             [("./src", CabalType (Just "lib:hie-bios") Nothing Nothing)]))
+                     , ("./test", CradleConfig [] (Bios (Program "program") Nothing Nothing))
+                     ]))
+    , assertWarnings "multi-unknown-keys.yaml"
+        [ UnknownKeys ["cradle", "multi", "0", "config", "cradle", "cabal", "components", "0"] ["extra"]
+                      ["path", "component", "cabalProject"]
+        , UnknownKeys ["cradle", "multi", "1", "config", "cradle", "bios"] ["unknown"]
+                      ["program", "shell", "dependency-program", "dependency-shell", "with-ghc"]
+        ]
+    , assertWarnings "cabal-1.yaml" []
     ]
+
+assertWarnings :: FilePath -> [ConfigWarning] -> TestTree
+assertWarnings fp expected = testCase (fp ++ " (warnings)") $ do
+  (warnings, _ :: Config Void) <- readConfigWithWarnings (configDir </> fp)
+  warnings @?= expected
 
 assertParser :: FilePath -> Config Void -> TestTree
 assertParser fp cc = testCase fp $ do

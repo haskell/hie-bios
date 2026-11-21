@@ -1,0 +1,16 @@
+cradle:
+  multi:
+    - path: "./src"
+      config:
+        cradle:
+          cabal:
+            components:
+              - path: "./src"
+                component: "lib:hie-bios"
+                extra: 1
+    - path: "./test"
+      config:
+        cradle:
+          bios:
+            program: "program"
+            unknown: "x"
