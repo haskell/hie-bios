@@ -2,7 +2,6 @@
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE CPP                   #-}
 
 -- | Datatypes for parsing @hie.yaml@ files
 module HIE.Bios.Config.YAML
@@ -25,44 +24,29 @@ module HIE.Bios.Config.YAML
 
 import           Control.Applicative ((<|>))
 import           Data.Aeson
-#if MIN_VERSION_aeson(2,0,0)
-import qualified Data.Aeson.Key      as K
-import           Data.Aeson.KeyMap   (lookup)
+import           Data.Aeson.KeyMap   (keys, lookup)
 import qualified Data.Aeson.KeyMap   as KM
-#else
-import           Data.HashMap.Strict (lookup)
-import qualified Data.HashMap.Strict as Map
-import qualified Data.Text           as T
-#endif
-import           Data.Aeson.Types    (Parser, typeMismatch)
+import           Data.Aeson.Types    (JSONPathElement (..), Parser, typeMismatch)
 import qualified Data.Char           as C (toLower)
 import qualified Data.Foldable       as F
 import           Data.List           ((\\))
 import           GHC.Generics        (Generic)
 import           Prelude             hiding (lookup)
 
--- | The fields of an object, with the keys as 'String's.
-objectFields :: Object -> [(String, Value)]
-#if MIN_VERSION_aeson(2,0,0)
-objectFields = map (\(k, v) -> (K.toString k, v)) . KM.toList
-#else
-objectFields = map (\(k, v) -> (T.unpack k, v)) . Map.toList
-#endif
-
 -- | Something in a @hie.yaml@ file that hie-bios doesn't recognise. It is
 -- ignored rather than rejected, so that a file written for a newer hie-bios
 -- can still be used by an older one.
 data ConfigWarning
   = UnknownKeys
-      { unknownKeysIn :: [String]
-      -- ^ Where the keys were found, e.g. @["cradle", "cabal"]@.
-      , unknownKeys   :: [String]
-      , knownKeys     :: [String]
+      { unknownKeysIn :: JSONPath
+      -- ^ Where the keys were found, e.g. @$.cradle.cabal@.
+      , unknownKeys   :: [Key]
+      , knownKeys     :: [Key]
       }
   deriving (Show, Eq)
 
 -- The keys each part of the configuration accepts.
-cabalConfigKeys, cabalComponentKeys, stackConfigKeys, stackComponentKeys, biosConfigKeys :: [String]
+cabalConfigKeys, cabalComponentKeys, stackConfigKeys, stackComponentKeys, biosConfigKeys :: [Key]
 cabalConfigKeys    = ["cabalProject", "component", "components", "componentsToLoad"]
 cabalComponentKeys = ["path", "component", "cabalProject"]
 stackConfigKeys    = ["component", "components", "stackYaml", "componentsToLoad"]
@@ -74,7 +58,7 @@ biosConfigKeys     = ["program", "shell", "dependency-program", "dependency-shel
 configWarnings :: Value -> [ConfigWarning]
 configWarnings = inConfig []
   where
-    inConfig at (Object o) = maybe [] (inCradle (at ++ ["cradle"])) (lookup "cradle" o)
+    inConfig at (Object o) = maybe [] (inCradle (at ++ [Key "cradle"])) (lookup "cradle" o)
     inConfig _ _ = []
 
     inCradle at (Object o) = concat
@@ -83,10 +67,10 @@ configWarnings = inConfig []
           ("stack", _) -> inSection at' stackConfigKeys stackComponentKeys value
           ("bios", Object bios) -> unknownIn at' biosConfigKeys bios
           ("multi", Array subs) ->
-            concat [ inMulti (at' ++ [show i]) sub | (i, sub) <- zip [0 :: Int ..] (F.toList subs) ]
+            concat [ inMulti (at' ++ [Index i]) sub | (i, sub) <- zip [0 ..] (F.toList subs) ]
           _ -> []
-      | (key, value) <- objectFields o
-      , let at' = at ++ [key]
+      | (key, value) <- KM.toList o
+      , let at' = at ++ [Key key]
       ]
     inCradle _ _ = []
 
@@ -94,23 +78,23 @@ configWarnings = inConfig []
     -- components, or just the list of components.
     inSection at sectionKeys componentKeys value = case value of
       Object o -> unknownIn at sectionKeys o
-                    ++ maybe [] (inComponents (at ++ ["components"]) componentKeys) (lookup "components" o)
+                    ++ maybe [] (inComponents (at ++ [Key "components"]) componentKeys) (lookup "components" o)
       Array _  -> inComponents at componentKeys value
       _        -> []
 
     inComponents at componentKeys (Array cs) = concat
       [ case c of
-          Object o -> unknownIn (at ++ [show i]) componentKeys o
+          Object o -> unknownIn (at ++ [Index i]) componentKeys o
           _        -> []
-      | (i, c) <- zip [0 :: Int ..] (F.toList cs)
+      | (i, c) <- zip [0 ..] (F.toList cs)
       ]
     inComponents _ _ _ = []
 
     -- each entry of a multi cradle has its own nested configuration
-    inMulti at (Object o) = maybe [] (inConfig (at ++ ["config"])) (lookup "config" o)
+    inMulti at (Object o) = maybe [] (inConfig (at ++ [Key "config"])) (lookup "config" o)
     inMulti _ _ = []
 
-    unknownIn at allowed o = case map fst (objectFields o) \\ allowed of
+    unknownIn at allowed o = case keys o \\ allowed of
       []    -> []
       extra -> [UnknownKeys at extra allowed]
 

@@ -1,18 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
 import Test.Tasty
 import Test.Tasty.HUnit
 import HIE.Bios.Config
-#if MIN_VERSION_aeson(2,0,0)
 import           Data.Aeson.Key ( Key )
 import qualified Data.Aeson.KeyMap as Map
-#else
-import qualified Data.HashMap.Strict as Map
-import qualified Data.Text as T
-#endif
+import           Data.Aeson.Types ( JSONPathElement(..) )
 import Data.Void
 import Data.Yaml
 import System.FilePath
@@ -108,16 +103,18 @@ main = defaultMain $
     -- Unknown keys are ignored, with a warning, rather than rejected (#344)
     , assertParser "cabal-unknown-key.yaml" (noDeps (Cabal $ CabalType (Just "lib:hie-bios") Nothing Nothing))
     , assertWarnings "cabal-unknown-key.yaml"
-        [UnknownKeys ["cradle", "cabal"] ["futureOption"] ["cabalProject", "component", "components", "componentsToLoad"]]
+        [UnknownKeys [Key "cradle", Key "cabal"] ["futureOption"] ["cabalProject", "component", "components", "componentsToLoad"]]
     , assertParser "multi-unknown-keys.yaml"
       (noDeps (Multi [ ("./src", CradleConfig [] (CabalMulti (CabalType Nothing Nothing Nothing)
                                                              [("./src", CabalType (Just "lib:hie-bios") Nothing Nothing)]))
                      , ("./test", CradleConfig [] (Bios (Program "program") Nothing Nothing))
                      ]))
     , assertWarnings "multi-unknown-keys.yaml"
-        [ UnknownKeys ["cradle", "multi", "0", "config", "cradle", "cabal", "components", "0"] ["extra"]
+        [ UnknownKeys [ Key "cradle", Key "multi", Index 0, Key "config"
+                      , Key "cradle", Key "cabal", Key "components", Index 0 ]
+                      ["extra"]
                       ["path", "component", "cabalProject"]
-        , UnknownKeys ["cradle", "multi", "1", "config", "cradle", "bios"] ["unknown"]
+        , UnknownKeys [Key "cradle", Key "multi", Index 1, Key "config", Key "cradle", Key "bios"] ["unknown"]
                       ["program", "shell", "dependency-program", "dependency-shell", "with-ghc"]
         ]
     , assertWarnings "cabal-1.yaml" []
@@ -202,11 +199,3 @@ simpleCabalHelperYaml tool =
     ]
 
 type Selector a = a -> Bool
-
--- ------------------------------------------------------------------
--- Helper functions to support aeson < 2
--- ------------------------------------------------------------------
-
-#if !MIN_VERSION_aeson(2,0,0)
-type Key = T.Text
-#endif

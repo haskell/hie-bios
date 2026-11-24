@@ -15,7 +15,8 @@ import           Control.Monad.Trans.Class
 #if MIN_VERSION_base(4,9,0)
 import qualified Control.Monad.Fail as Fail
 #endif
-import           Data.List (intercalate)
+import qualified Data.Aeson.Key as Key
+import           Data.Aeson.Types (formatPath)
 import           Data.Maybe (fromMaybe)
 import           Data.String
 import qualified Data.Text as T
@@ -180,12 +181,12 @@ instance Pretty Log where
       <> line <> indent 4 (pretty err)
   pretty (LogConfigWarning file (UnknownKeys path unknown known)) =
     pretty file <> ":" <+> "ignoring unknown"
-      <+> (if length unknown == 1 then "key" else "keys")
+      <+> plural "key" "keys" (length unknown)
       <+> quotedList unknown
-      <+> "in" <+> pretty (intercalate "." path) <> "."
+      <+> "in" <+> pretty (formatPath path) <> "."
       <+> "The keys understood there are" <+> quotedList known <> "."
     where
-      quotedList = hsep . punctuate comma . map (dquotes . pretty)
+      quotedList = hsep . punctuate comma . map (dquotes . pretty . Key.toText)
 
 type Component = String
 
