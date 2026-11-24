@@ -201,7 +201,7 @@ library
   other-modules: Paths_hie_bios
   autogen-modules: Paths_hie_bios
   build-depends:
-    aeson >=1.4.4 && <2.4,
+    aeson >=2 && <2.4,
     base >=4.16 && <5,
     base16-bytestring >=0.1.1 && <1.1,
     bytestring >=0.10.8 && <0.13,

@@ -15,11 +15,15 @@ import           Control.Monad.Trans.Class
 #if MIN_VERSION_base(4,9,0)
 import qualified Control.Monad.Fail as Fail
 #endif
+import qualified Data.Aeson.Key as Key
+import           Data.Aeson.Types (formatPath)
 import           Data.Maybe (fromMaybe)
 import           Data.String
 import qualified Data.Text as T
 import           Prettyprinter
 import           System.Process.Extra (CreateProcess (env, cmdspec), CmdSpec (..), showCommandForUser)
+
+import           HIE.Bios.Config.YAML (ConfigWarning (..))
 
 ----------------------------------------------------------------
 -- Environment variables used by hie-bios.
@@ -112,6 +116,8 @@ data Log
   | LogWithReplNotSupported [String]
   | LogKeepTempFilesNotSupported [String]
   | LogCabalPath !T.Text
+  | LogConfigWarning FilePath ConfigWarning
+  -- ^ Something in a @hie.yaml@ file was ignored.
   deriving (Show)
 
 instance Pretty LoadMode where
@@ -173,6 +179,14 @@ instance Pretty Log where
   pretty (LogCabalPath err) =
     "Could not parse json output of 'cabal path': "
       <> line <> indent 4 (pretty err)
+  pretty (LogConfigWarning file (UnknownKeys path unknown known)) =
+    pretty file <> ":" <+> "ignoring unknown"
+      <+> plural "key" "keys" (length unknown)
+      <+> quotedList unknown
+      <+> "in" <+> pretty (formatPath path) <> "."
+      <+> "The keys understood there are" <+> quotedList known <> "."
+    where
+      quotedList = hsep . punctuate comma . map (dquotes . pretty . Key.toText)
 
 type Component = String
 
