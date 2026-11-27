@@ -2,18 +2,18 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
-import Test.Tasty
-import Test.Tasty.HUnit
-import HIE.Bios.Config
-import           Data.Aeson.Key ( Key )
+import Control.Applicative ((<|>))
+import Control.Exception
+import Data.Aeson.Key (Key)
 import qualified Data.Aeson.KeyMap as Map
-import           Data.Aeson.Types ( JSONPathElement(..) )
+import Data.Aeson.Types (JSONPathElement (..))
+import Data.Typeable
 import Data.Void
 import Data.Yaml
+import HIE.Bios.Config
 import System.FilePath
-import Control.Applicative ( (<|>) )
-import Control.Exception
-import Data.Typeable
+import Test.Tasty
+import Test.Tasty.HUnit
 
 configDir :: FilePath
 configDir = "tests/configs"
